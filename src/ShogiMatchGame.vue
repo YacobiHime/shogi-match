@@ -2825,7 +2825,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
 import TitleDaySheet, { type DayReviewView, type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
 import SealBreak from "./SealBreak.vue";
-import { proYearScene, proYearSealSceneId } from "./core/pro-year-story.mjs";
+import { proYearRival, proYearScene, proYearSealSceneId, sealSeriesText } from "./core/pro-year-story.mjs";
 import FormationThumb from "./FormationThumb.vue";
 import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
@@ -5361,22 +5361,32 @@ const sealBreakAdvice = computed(() => {
 });
 /**
  * 休憩の画面にはさむノベルの場面(docs/seal-break-design.mdの2-5)。いまは棋士の1年の二日制の番勝負だけ(星でリード・タイ・カド番)。
+ * 相手が羽音・善彦なら相手ごとの夜(docs/pro-year-design.mdの22-3の3。羽音は応援の電話をかけてこない)。
  * 竜王戦・名人戦の大会は、まだ出さない(同じ口で、あとで足せる)。
  */
 const sealBreakScene = computed(() => {
   const stage = matchStage.value;
   if (!sealBreakShown.value || !stage?.twoDay || tournamentEventOf(ryuoGame.value?.event) !== "pro-year") return null;
   const marks = stage.marks ?? [];
-  const sceneId = proYearSealSceneId({
+  const series = {
     winsUser: marks.filter((mark: string) => mark === "win").length,
     winsOpponent: marks.filter((mark: string) => mark === "loss").length,
     need: stage.need ?? 0,
+  };
+  const sceneId = proYearSealSceneId({
+    ...series,
     // 保持者として指す防衛戦は、受けて立つ側の夜(docs/pro-year-design.mdの20-3の3)。
     defense: Boolean(stage.sides?.some((side: { you: boolean; role: string }) => side.you && side.role !== "挑戦者")),
+    rival: proYearRival(ryuoOpponent.value),
   });
-  const title = stage.sides?.find((side: { you: boolean; role: string }) => !side.you && side.role !== "挑戦者")?.role
+  const role = stage.sides?.find((side: { you: boolean; role: string }) => !side.you && side.role !== "挑戦者")?.role
     ?? stage.sides?.find((side: { you: boolean; role: string }) => side.you)?.role ?? "";
-  return proYearScene(sceneId, { playerName: playerName.value, momokaCall: momokaCallName(playerProfile.value), vars: { title: title === "挑戦者" ? "" : title } });
+  const title = role === "挑戦者" ? "" : role;
+  return proYearScene(sceneId, {
+    playerName: playerName.value,
+    momokaCall: momokaCallName(playerProfile.value),
+    vars: { title, series: sealSeriesText({ ...series, title }) },
+  });
 });
 /** 休憩の画面の封じ手の札(封筒・控室の予想)。 */
 const sealBreakCard = computed(() => (sealBreakShown.value

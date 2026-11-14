@@ -118,6 +118,17 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-eternal', '棋士の1年', '棋士の1年で、永世称号の資格を得ると読めます。'),
   sub('pro-all-crowns', '棋士の1年', '棋士の1年で、八つのタイトルをすべて持つと読めます。'),
   sub('pro-title-lost', '棋士の1年', '棋士の1年で、タイトルを失うと読めます。'),
+  // 相手が羽音・善彦のときの場面(docs/pro-year-design.mdの22章)。
+  sub('pro-yoshihiko', '棋士の1年', '棋士の1年で、天鷺善彦と公式戦ではじめて当たると読めます。'),
+  sub('pro-hanane-big', '棋士の1年', '棋士の1年で、決勝などの大一番で羽音と当たると読めます。'),
+  sub('pro-title-eve-hanane', '棋士の1年', '棋士の1年で、羽音の持つタイトルに挑むと読めます。'),
+  sub('pro-defense-eve-hanane', '棋士の1年', '棋士の1年で、羽音の挑戦を受けると読めます。'),
+  sub('pro-title-eve-yoshihiko', '棋士の1年', '棋士の1年で、天鷺善彦の持つタイトルに挑むと読めます。'),
+  sub('pro-defense-eve-yoshihiko', '棋士の1年', '棋士の1年で、天鷺善彦の挑戦を受けると読めます。'),
+  sub('pro-beat-hanane', '棋士の1年', '棋士の1年で、羽音との番勝負に勝つと読めます。'),
+  sub('pro-lost-hanane', '棋士の1年', '棋士の1年で、羽音との番勝負に敗れると読めます。'),
+  sub('pro-beat-yoshihiko', '棋士の1年', '棋士の1年で、天鷺善彦との番勝負に勝つと読めます。'),
+  sub('pro-lost-yoshihiko', '棋士の1年', '棋士の1年で、天鷺善彦との番勝負に敗れると読めます。'),
   ...bondSubs(),
 ]);
 

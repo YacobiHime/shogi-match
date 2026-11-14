@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advanceToNextGame, createProYear, recordProGame } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
-import { HANANE } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { PRO_YEAR_SCENES, markProYearScene, proYearScene, proYearSceneDue, seenProYearScene } from './pro-year-story.mjs';
 
 const roster = createRoster({ seed: 3 });
@@ -48,7 +48,7 @@ describe('棋士の1年の場面(docs/pro-year-design.mdの12章)', () => {
         expect(due).toMatchObject({ key: 'pro-hanane' });
         hanane = due;
         state = markProYearScene(state, due.key);
-      } else if (due?.id === 'pro-title-eve' && !eve) {
+      } else if (due?.id.startsWith('pro-title-eve') && !eve) {
         expect(state.pending.kind).toBe('finals');
         expect(due.vars.title).toBe(state.pending.titleName);
         eve = due;
@@ -76,5 +76,51 @@ describe('封じ手の夜の場面(docs/seal-break-design.mdの2-5)', () => {
       // 羽音は敬語と「！」を使わない。
       for (const line of scene.lines.filter((entry) => entry.who === 'hanane')) expect(line.text).not.toMatch(/！|です|ます/);
     }
+  });
+});
+
+describe('羽音・善彦との公式戦の場面(docs/pro-year-design.mdの22-3の5)', () => {
+  /** 羽音・善彦と当たる公式戦(番勝負でない対局)で止まった状態。 */
+  function nextGameVs(state, story) {
+    let current = markProYearScene(state, 'pro-debut');
+    for (let step = 0; step < 300; step += 1) {
+      current = advanceToNextGame(current);
+      if (current.yearDone) return null;
+      if (current.pending.kind === 'game' && current.players[current.pending.opponentId]?.story === story) return current;
+      current = recordProGame(current, 'win').state;
+    }
+    return null;
+  }
+
+  it('羽音の初手合は、羽音との公式戦がもう終わっていれば出さない(分身に任せた対局も数える)', () => {
+    const state = nextGameVs(start(), HANANE);
+    expect(proYearSceneDue(state)).toMatchObject({ id: 'pro-hanane' });
+    const met = structuredClone(state);
+    met.games.gPast = { id: 'gPast', a: 'user', b: state.pending.opponentId, user: true, winner: 'b', auto: true };
+    expect(proYearSceneDue(met)).toBeNull();
+  });
+
+  it('羽音との大一番(決勝など)は、初手合のあとに棋戦ごとに1回', () => {
+    const state = nextGameVs(start(), HANANE);
+    const big = structuredClone(state);
+    big.scenes = [...(big.scenes ?? []), 'pro-hanane'];
+    big.pending.stakes = { ...big.pending.stakes, boss: true };
+    const due = proYearSceneDue(big);
+    const event = big.games[big.pending.gameId].event;
+    expect(due).toMatchObject({ key: `pro-hanane-big:${event}`, id: 'pro-hanane-big' });
+    expect(proYearSceneDue({ ...big, scenes: [...big.scenes, due.key] })).toBeNull();
+    big.pending.stakes.boss = false;
+    expect(proYearSceneDue(big)).toBeNull();
+  });
+
+  it('善彦とはじめて当たる公式戦の前に「天鷺善彦との初手合」。善彦は声だけで、名前の札が出る', () => {
+    const state = nextGameVs(start(), HANANE);
+    const vsFather = structuredClone(state);
+    vsFather.players[vsFather.pending.opponentId].story = YOSHIHIKO;
+    const due = proYearSceneDue(vsFather);
+    expect(due).toMatchObject({ key: 'pro-yoshihiko', id: 'pro-yoshihiko' });
+    const scene = proYearScene(due.id, { playerName: 'やこび', vars: due.vars });
+    expect(scene.lines.filter((entry) => entry.who === 'extra').map((entry) => entry.name)).toEqual(['天鷺善彦', '天鷺善彦']);
+    expect(proYearSceneDue({ ...vsFather, scenes: [...(vsFather.scenes ?? []), 'pro-yoshihiko'] })).toBeNull();
   });
 });

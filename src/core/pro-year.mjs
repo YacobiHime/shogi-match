@@ -31,7 +31,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { isStreakSceneMark, queueProYearScene } from './pro-year-story.mjs';
+import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -796,25 +796,41 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
     first: kind === 'take' && firstEver, eternal: eternalProgress(event.id, after),
     line: titleCoachLine({ kind, short: event.short, streak: after.streak, total: before.total ?? 0, first: kind === 'take' && firstEver }),
   });
+  // 相手が羽音・善彦なら、番勝負のあとの夜は相手ごとの場面1つ(docs/pro-year-design.mdの22-3の4)。永世称号・連覇はその場面の1行で言う。
+  const rival = proYearRival(opponentId ? state.players[opponentId] : null);
+  const eternalName = eternalNow ? ETERNAL_RULES[event.id]?.name ?? '' : '';
+  if (rival) {
+    const won = isTitleWin(kind);
+    const id = `pro-${won ? 'beat' : 'lost'}-${rival}`;
+    queueProYearScene(state, {
+      key: `${id}:${event.id}:${state.fy}`,
+      id,
+      vars: {
+        title: event.short,
+        result: rivalResultText({ rival, kind, title: event.short }),
+        record: won ? rivalRecordText({ eternal: eternalName, streak: kind === 'defend' ? after.streak : 0 }) : '',
+      },
+    });
+  }
   if (isTitleWin(kind)) {
     state.user.titleCounts = { ...counts, [event.id]: after.total };
     state.user.crowns = (state.user.crowns ?? 0) + 1;
     noteEvent(state, kind === 'defend' ? { kind: 'defend', short: event.short, streak: after.streak } : { kind: 'crown', short: event.short, retake: kind === 'retake' });
     if (eternalNow) {
-      const name = ETERNAL_RULES[event.id]?.name ?? '';
+      const name = eternalName;
       noteMilestone(state, { event: event.id, kind: 'advance', title: 'eternal', text: `${name}の資格を得た` });
       noteEvent(state, { kind: 'eternal', name });
       pushResult(state, { type: 'eternal', event: event.id, name, short: event.short, total: after.total, streak: after.streak, rule: eternalRuleText(event.id) });
       // 永世称号の夜(20-3の4)。届いた番勝負では、連覇の夜は出さない。
-      queueProYearScene(state, { key: `pro-eternal:${event.id}`, id: 'pro-eternal', vars: { title: event.short, eternal: name } });
-    } else if (kind === 'defend' && isStreakSceneMark(after.streak)) {
+      if (!rival) queueProYearScene(state, { key: `pro-eternal:${event.id}`, id: 'pro-eternal', vars: { title: event.short, eternal: name } });
+    } else if (kind === 'defend' && isStreakSceneMark(after.streak) && !rival) {
       queueProYearScene(state, { key: `pro-defense-streak:${event.id}:${after.streak}`, id: 'pro-defense-streak', vars: { title: event.short, streak: String(after.streak) } });
     }
   } else if (kind === 'lost') {
     noteEvent(state, { kind: 'lostTitle', short: event.short, winner: opponent });
     seedFormerHolder(state, cycle, event);
     // 失冠の夜(20-3の4)。棋戦と年度ごとに1回。
-    queueProYearScene(state, { key: `pro-title-lost:${event.id}:${state.fy}`, id: 'pro-title-lost', vars: { title: event.short, challenger: opponent } });
+    if (!rival) queueProYearScene(state, { key: `pro-title-lost:${event.id}:${state.fy}`, id: 'pro-title-lost', vars: { title: event.short, challenger: opponent } });
   }
 }
 

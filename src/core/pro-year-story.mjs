@@ -4,11 +4,14 @@
 // 遊びを止めない(D:8-2)ので、どの場面も12行まで。
 
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
-import { HANANE } from './ryuo-story.mjs';
+import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
+/** 立ち絵のない、声だけの人の台詞(善彦。novel-direction.mjsのEXTRA_WHO。docs/novel-authoring-guide.mdの4-1)。 */
+const voice = (name, text, fx = {}) => Object.freeze({ who: 'extra', face: 'neutral', name, text, ...fx });
+const YOSHIHIKO_NAME = '天鷺善彦';
 
 /**
  * 場面。{name}はプレイヤーの名前、{you}は百花の呼び方、{title}はタイトルの名前(棋王など)、{holder}はタイトル保持者の名前、
@@ -299,16 +302,315 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('narration', 'neutral', '窓の外は真っ暗だ。それでも、朝はちゃんと来る。', { tone: 'dim' }),
     ],
   }),
+  // 相手が羽音・善彦のときの場面(docs/pro-year-design.mdの22章)。羽音が相手なら、羽音は電話で応援しない。
+  // 善彦は立ち絵がないので声だけ。{record}は永世称号・連覇の1行(なければ行ごと出さない)、{series}は番勝負の星の1行、
+  // {result}は番勝負の結果の1行。
+  'pro-yoshihiko': Object.freeze({
+    id: 'pro-yoshihiko',
+    title: '天鷺善彦との初手合',
+    summary: '羽音の父、天鷺善彦と公式戦ではじめて当たる日。朝、羽音から短いメッセージが届く。対局室で、善彦は穏やかに一礼する。',
+    background: 'venue',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '{event} {round}。今日の相手は、天鷺善彦。羽音の父だ。'),
+      line('narration', 'neutral', '朝、羽音から短いメッセージが届いていた。'),
+      line('hanane', 'neutral', '今日、父さんとでしょ。'),
+      line('hanane', 'gentle', '父さんは、序盤で何もしないように見える。でも、中盤で全部決めてる。'),
+      line('hanane', 'neutral', '……これ、父さんには言わないで。', { exit: 'hanane' }),
+      line('narration', 'neutral', '対局室に入ると、上座で善彦が静かに目を閉じていた。'),
+      voice(YOSHIHIKO_NAME, 'よろしくお願いします。羽音から、よく話を聞いています。'),
+      voice(YOSHIHIKO_NAME, '今日は、楽しみにしてきました。いい将棋にしたいですね。'),
+      line('narration', 'neutral', '二人そろって一礼する。対局の始まりだ。', { sfx: 'koma' }),
+    ],
+  }),
+  'pro-hanane-big': Object.freeze({
+    id: 'pro-hanane-big',
+    title: '羽音との大一番',
+    summary: '勝てば先へ進める大一番の相手は、羽音だった。対局室で、羽音はいつもより少し早く座っていた。',
+    background: 'venue',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '{event} {round}。大一番の相手は、羽音だった。'),
+      line('narration', 'neutral', '対局室に入ると、羽音はもう座っていた。いつもより、少し早い。'),
+      line('hanane', 'neutral', 'ここで当たると思ってた。表を見たときから。'),
+      line('hanane', 'gentle', '研究会の君とは何十局も指した。でも、大一番の君は知らない。'),
+      line('hanane', 'neutral', '勝ったほうが、上に行く。分かりやすくて、いいね。'),
+      line('hanane', 'smile', 'どう、準備はできてる？'),
+      line('narration', 'neutral', '二人そろって一礼する。対局の始まりだ。', { act: { who: 'hanane', act: 'bow' }, sfx: 'koma' }),
+    ],
+  }),
+  'pro-title-eve-hanane': Object.freeze({
+    id: 'pro-title-eve-hanane',
+    title: '羽音とのタイトル戦の前夜',
+    summary: '羽音の持つ{title}に挑む番勝負の前夜。前夜祭の壇の上で、羽音は四段の朝の約束を口にする。部屋に戻ると、百花から電話。',
+    background: 'venue',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{title}戦の番勝負、第1局の前の夜。前夜祭の壇の上で、{name}は羽音と並んだ。'),
+      line('narration', 'neutral', '明日、{name}は羽音の持つ{title}に挑む。'),
+      line('hanane', 'neutral', '四段の朝に言ったこと、覚えてる？ 上の舞台で会おうって。'),
+      line('hanane', 'smile', '本当に来たね。……少し、うれしい。'),
+      line('hanane', 'neutral', '明日からは、全部見せる。君も、全部見せて。', { exit: 'hanane' }),
+      line('narration', 'neutral', '部屋に戻ると、百花から電話が鳴った。', { screen: 'blackout', bg: 'night' }),
+      line('momoka', 'wry', '{you}、羽音ちゃんと{title}戦なんて……私、どっちを応援すればいいの？', { enter: 'momoka' }),
+      line('momoka', 'neutral', '決めた！ 二人とも応援する！ いい将棋を見せてね！', { act: 'hop' }),
+      line('narration', 'neutral', '電話を切る。同じ宿のどこかで、羽音も明日の盤を考えている。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-defense-eve-hanane': Object.freeze({
+    id: 'pro-defense-eve-hanane',
+    title: '挑戦者は羽音',
+    summary: '{title}の防衛戦、挑戦者は羽音。前夜祭の壇の上で、羽音は「この1年、君の将棋ばかり見てた」と言う。部屋に戻ると、百花から電話。',
+    background: 'venue',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{title}戦の番勝負、第1局の前の夜。前夜祭の壇に、挑戦者の羽音が上がった。'),
+      line('narration', 'neutral', '{record}'),
+      line('hanane', 'neutral', '挑戦者として来たよ。この1年、君の将棋ばかり見てた。'),
+      line('hanane', 'gentle', '受けて立つ側の夜って、長いでしょ。私なら、きっと眠れない。'),
+      line('hanane', 'smile', '明日、それを取りに行く。手加減はしないよ。', { exit: 'hanane' }),
+      line('narration', 'neutral', '部屋に戻ると、百花から電話が鳴った。', { screen: 'blackout', bg: 'night' }),
+      line('momoka', 'neutral', '{you}、挑戦者が羽音ちゃんだなんて！ 私、二人とも応援するからね！', { enter: 'momoka', act: 'hop' }),
+      line('momoka', 'wry', 'それでね、終わったら3人でごはん行こうね。約束だよ！'),
+      line('narration', 'neutral', '電話を切る。明日、{title}の座をかけて、羽音と指す。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-title-eve-yoshihiko': Object.freeze({
+    id: 'pro-title-eve-yoshihiko',
+    title: '天鷺善彦に挑む前夜',
+    summary: '天鷺善彦の持つ{title}に挑む番勝負の前夜。羽音と百花から電話。羽音は、どっちの味方かは聞かないで、と言う。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{title}戦の番勝負、第1局の前の夜。明日、{name}は天鷺善彦の持つ{title}に挑む。'),
+      line('narration', 'neutral', '前夜祭の善彦は「いい将棋にしたいですね」とだけ言って、穏やかに笑っていた。'),
+      line('momoka', 'neutral', '{you}、明日から羽音ちゃんのお父さんとだね！ 私、手がふるえてきた……', { act: 'shiver' }),
+      line('hanane', 'neutral', '百花が緊張してどうするの。'),
+      line('hanane', 'gentle', '父さん、前の夜でもいつもどおり寝てるよ。そういう人だから。'),
+      line('hanane', 'neutral', 'どっちの味方かは、聞かないで。私にも分からないから。'),
+      line('hanane', 'smile', '……でも、君が父さんとどう指すのかは、いちばん見たい。'),
+      line('momoka', 'neutral', 'がんばって！ あったかくして寝てね！'),
+      line('narration', 'neutral', '電話を切る。明日、羽音の父と盤をはさむ。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-defense-eve-yoshihiko': Object.freeze({
+    id: 'pro-defense-eve-yoshihiko',
+    title: '挑戦者は善彦',
+    summary: '{title}の防衛戦、挑戦者は天鷺善彦。羽音と百花から電話。善彦が家で並べていたのは、ずっと{name}の棋譜だった。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{title}戦の番勝負、第1局の前の夜。今年の挑戦者は、天鷺善彦だ。'),
+      line('narration', 'neutral', '{record}'),
+      line('narration', 'neutral', '前夜祭の会場には、いつもの倍の記者が来ていた。'),
+      line('hanane', 'neutral', 'もしもし。……父さんが挑戦者って、変な感じ。'),
+      line('hanane', 'gentle', '家で並べてたの、この何か月か、ずっと君の棋譜だった。'),
+      line('hanane', 'neutral', '父さんが一人の将棋をあんなに並べるの、はじめて見たよ。'),
+      line('momoka', 'neutral', '{you}、それって、すごく認められてるってことだよ！', { act: 'hop' }),
+      line('hanane', 'smile', 'そういうこと。……明日、いい将棋にして。'),
+      line('narration', 'neutral', '電話を切る。明日、挑戦者の席にあの人が座る。', { tone: 'dim' }),
+    ],
+  }),
+  // 羽音・善彦との番勝負の封じ手の夜(22-3の3)。羽音とは同じ宿で少しだけ会う(封じ手の話はしない)。百花はメッセージ。
+  'pro-seal-hanane-lead': Object.freeze({
+    id: 'pro-seal-hanane-lead',
+    title: '封じ手の夜（羽音と・リード）',
+    summary: '羽音との番勝負をリードして迎えた封じ手の夜。宿の自販機の前で、羽音とばったり会う。封じ手の話はしない。',
+    background: 'night',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。封じ手の封筒は、立会人の手で金庫にしまわれた。'),
+      line('narration', 'neutral', '{title}戦は、{name}がリードしている。同じ宿のどこかに、羽音がいる。'),
+      line('narration', 'neutral', '夜、自販機の前で、羽音とばったり会った。', { enter: { who: 'hanane', from: 'right' } }),
+      line('hanane', 'neutral', '……あ。封じ手の話は、しないよ。'),
+      line('hanane', 'gentle', 'リードされてる側の夜って、思ったより静かなんだね。'),
+      line('hanane', 'smile', 'でも、まだ終わってない。明日の朝、盤の前で。', { exit: 'hanane' }),
+      line('narration', 'neutral', '部屋に戻ると、百花からメッセージ。「二人とも、早く寝ること！」'),
+      line('narration', 'neutral', '明かりを消す。明日の朝、封筒が開く。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-seal-hanane-tie': Object.freeze({
+    id: 'pro-seal-hanane-tie',
+    title: '封じ手の夜（羽音と）',
+    summary: '羽音との番勝負、星が並んだまま迎えた封じ手の夜。夕食のあと、宿の廊下で羽音とすれちがう。',
+    background: 'night',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。{name}の封じ手は、封筒に入って立会人に渡された。'),
+      line('narration', 'neutral', '{title}戦は、星が並んでいる。夕食のあと、宿の廊下で羽音とすれちがった。', { enter: 'hanane' }),
+      line('hanane', 'neutral', '今日の1日目、面白かった。……封じ手の話じゃないよ。'),
+      line('hanane', 'gentle', '五分の番勝負の夜って、いちばん長いね。'),
+      line('hanane', 'neutral', 'おやすみ。明日、続きを指そう。', { exit: 'hanane' }),
+      line('narration', 'neutral', '部屋に戻ると、百花からメッセージ。「どっちもがんばれ！」'),
+      line('narration', 'neutral', '布団に入っても、盤の局面が目の裏に浮かぶ。……明日の朝が来る。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-seal-hanane-kado': Object.freeze({
+    id: 'pro-seal-hanane-kado',
+    title: '封じ手の夜（羽音と・カド番）',
+    summary: 'あと1つ負けたら終わり、羽音との番勝負のカド番の夜。眠れずに宿の庭へ出ると、先に羽音がいた。',
+    background: 'night',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。この1局を落とせば、{title}戦はここで終わる。'),
+      line('narration', 'neutral', '眠れずに宿の庭へ出ると、先に羽音がいた。', { enter: 'hanane' }),
+      line('hanane', 'neutral', '……君も、眠れないんだ。'),
+      line('hanane', 'gentle', 'あと1つで決まる夜って、勝ってる側も長いんだね。知らなかった。'),
+      line('hanane', 'neutral', '慰めは言わない。明日、私は勝ちに行くから。'),
+      line('hanane', 'smile', 'だから君も、最後まで全部見せて。', { exit: 'hanane' }),
+      line('narration', 'neutral', '部屋に戻ると、百花からメッセージ。「最後まで、どっちもがんばれ！」'),
+      line('narration', 'neutral', '窓の外は真っ暗だ。それでも、朝はちゃんと来る。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-seal-yoshihiko': Object.freeze({
+    id: 'pro-seal-yoshihiko',
+    title: '封じ手の夜（善彦と）',
+    summary: '天鷺善彦との番勝負の封じ手の夜。羽音と百花から電話。父さんは封じ手の夜、いつも早く寝る、と羽音は言う。',
+    background: 'night',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '1日目が終わった。封じ手の封筒は、立会人の手で金庫にしまわれた。'),
+      line('narration', 'neutral', '{series}'),
+      line('hanane', 'neutral', 'もしもし。……父さん、たぶんもう寝てる。封じ手の夜は、いつも早いから。'),
+      line('hanane', 'gentle', '1日目の父さん、楽しそうだった。家では、あんな顔あんまりしない。'),
+      line('momoka', 'neutral', '{you}、おつかれさま！ 羽音ちゃん、中継ずっと見てたんだよ！'),
+      line('hanane', 'neutral', '百花、それは言わなくていい。'),
+      line('hanane', 'smile', '……君も早く寝て。2日目の父さんは、もっと強いから。'),
+      line('narration', 'neutral', '布団に入っても、盤の局面が目の裏に浮かぶ。……明日の朝が来る。', { tone: 'dim' }),
+    ],
+  }),
+  // 羽音・善彦との番勝負のあとの夜(22-3の4)。結果の札を見終えたあとに出す。
+  'pro-beat-hanane': Object.freeze({
+    id: 'pro-beat-hanane',
+    title: '羽音との番勝負のあと',
+    summary: '羽音との{title}戦の番勝負に勝った日。対局室で、羽音は「悔しい」と短く言う。その夜、百花から電話。',
+    background: 'venue',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{result}'),
+      line('narration', 'neutral', '{record}'),
+      line('narration', 'neutral', '感想戦が終わっても、羽音は盤の前から動かなかった。'),
+      line('hanane', 'neutral', '……悔しい。'),
+      line('hanane', 'gentle', 'でも、全部見せてもらった。君の将棋、また少し分かった。'),
+      line('hanane', 'neutral', '次は、私が勝つから。待ってて。', { exit: 'hanane' }),
+      line('narration', 'neutral', 'その夜、百花から電話がかかってきた。', { screen: 'blackout', bg: 'night' }),
+      line('momoka', 'neutral', '{you}、おめでとう！ ……羽音ちゃんにも、さっき電話したよ。', { enter: 'momoka' }),
+      line('momoka', 'wry', '「悔しい」って3回言ってた。でも、ちょっとうれしそうだった！'),
+      line('narration', 'neutral', '電話を切る。窓の外に、対局場の灯りがまだ点いている。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-lost-hanane': Object.freeze({
+    id: 'pro-lost-hanane',
+    title: '羽音に届かなかった夜',
+    summary: '羽音との{title}戦の番勝負に敗れた日。羽音は慰めを言わず、「上の舞台で、また会おう」と言う。その夜、百花から電話。',
+    background: 'venue',
+    cast: ['hanane', 'momoka'],
+    lines: [
+      line('narration', 'neutral', '{result}'),
+      line('narration', 'neutral', '感想戦のあと、羽音は少しだけ盤の前に残っていた。'),
+      line('hanane', 'neutral', '慰めは言わないよ。君も、言われたくないでしょ。'),
+      line('hanane', 'gentle', '君の将棋、何度もひやっとした。'),
+      line('hanane', 'smile', '次の期、待ってる。上の舞台で、また会おう。', { exit: 'hanane' }),
+      line('narration', 'neutral', 'その夜、百花から電話がかかってきた。', { screen: 'blackout', bg: 'night' }),
+      line('momoka', 'worried', '{you}……おつかれさま。中継、最後まで見てたよ。', { enter: 'momoka' }),
+      line('momoka', 'wry', '羽音ちゃんへのおめでとうは、明日にする。今日は、{you}と話したかったから。'),
+      line('narration', 'neutral', '電話を切る。また、挑戦する側から始まる。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-beat-yoshihiko': Object.freeze({
+    id: 'pro-beat-yoshihiko',
+    title: '善彦との番勝負のあと',
+    summary: '天鷺善彦との{title}戦の番勝負に勝った日。廊下で善彦に呼び止められる。その夜、羽音から電話。',
+    background: 'venue',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '{result}'),
+      line('narration', 'neutral', '{record}'),
+      line('narration', 'neutral', '記者会見のあと、廊下で善彦に呼び止められた。'),
+      voice(YOSHIHIKO_NAME, 'おめでとうございます。……いい番勝負でした。'),
+      voice(YOSHIHIKO_NAME, '途中から、あなたの手を予想するのをやめました。そのほうが面白かったので。'),
+      line('narration', 'neutral', 'その夜、羽音から電話がかかってきた。', { screen: 'blackout', bg: 'night' }),
+      line('hanane', 'neutral', '……父さんに、勝ったんだ。', { enter: 'hanane' }),
+      line('hanane', 'gentle', '家に帰ったら、父さんにどんな顔すればいいか分からない。'),
+      line('hanane', 'smile', 'でも、次は私の番。君から取るのは、父さんじゃなくて私だから。'),
+      line('narration', 'neutral', '電話を切る。手のひらに、まだ駒の感触が残っている。', { tone: 'dim' }),
+    ],
+  }),
+  'pro-lost-yoshihiko': Object.freeze({
+    id: 'pro-lost-yoshihiko',
+    title: '善彦に届かなかった夜',
+    summary: '天鷺善彦との{title}戦の番勝負に敗れた日。感想戦で善彦がひとこと。その夜、羽音から電話。',
+    background: 'venue',
+    cast: ['hanane'],
+    lines: [
+      line('narration', 'neutral', '{result}'),
+      line('narration', 'neutral', '感想戦で、善彦は{name}の指した手を、何度も並べ直していた。'),
+      voice(YOSHIHIKO_NAME, 'この手は、私には指せない手だったかなという気がします。また指しましょう。'),
+      line('narration', 'neutral', 'その夜、羽音から電話がかかってきた。', { screen: 'blackout', bg: 'night' }),
+      line('hanane', 'neutral', '……起きてる？ 父さん、帰りの車でずっと君の将棋の話してた。', { enter: 'hanane' }),
+      line('hanane', 'gentle', '慰めじゃないよ。父さんが、勝った将棋の話をするのは珍しいから。'),
+      line('hanane', 'neutral', '次は届くよ。私が言うんだから、たぶん当たる。'),
+      line('narration', 'neutral', '電話を切る。次の挑戦は、もう始まっている。', { tone: 'dim' }),
+    ],
+  }),
 });
+
+/**
+ * 対局の相手が羽音・善彦か(docs/pro-year-design.mdの22-3の1)。相手ごとに場面を変える。
+ * @param {{ story?: string | null } | null | undefined} opponent
+ * @returns {'hanane' | 'yoshihiko' | ''}
+ */
+export function proYearRival(opponent) {
+  if (opponent?.story === HANANE) return 'hanane';
+  if (opponent?.story === YOSHIHIKO) return 'yoshihiko';
+  return '';
+}
 
 /**
  * 封じ手の夜の場面(docs/seal-break-design.mdの2-5)。番勝負の星から、リード・タイ・カド番のどれかの場面のid。
  * defenseは保持者として指す防衛戦(防衛戦の3本。docs/pro-year-design.mdの20-3の3)。
- * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean }} series
+ * rivalは相手が羽音・善彦のとき(22-3の3)。羽音は挑戦でも防衛でも星で3本、善彦は1本(星は`sealSeriesText`の1行で言う)。
+ * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean, rival?: string }} series
  */
-export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false } = {}) {
+export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false, rival = '' } = {}) {
   const kind = need > 0 && winsOpponent >= need - 1 && winsOpponent > winsUser ? 'kado' : winsUser > winsOpponent ? 'lead' : 'tie';
+  if (rival === 'hanane') return `pro-seal-hanane-${kind}`;
+  if (rival === 'yoshihiko') return 'pro-seal-yoshihiko';
   return defense ? `pro-seal-defense-${kind}` : `pro-seal-${kind}`;
+}
+
+/**
+ * 封じ手の夜の、番勝負の星の1行(`{series}`。善彦との封じ手の夜)。{name}はあとで差し込む。
+ * @param {{ winsUser?: number, winsOpponent?: number, need?: number, title?: string }} series
+ */
+export function sealSeriesText({ winsUser = 0, winsOpponent = 0, need = 0, title = '' } = {}) {
+  const name = title ? `${title}戦` : '番勝負';
+  if (!winsUser && !winsOpponent) return `${name}の第1局。まだ、どちらにも星はない。`;
+  const score = `${name}は、ここまで{name}の${winsUser}勝${winsOpponent}敗。`;
+  return need > 0 && winsOpponent >= need - 1 && winsOpponent > winsUser ? `${score}この1局を落とせば、番勝負は終わる。` : score;
+}
+
+/**
+ * 羽音・善彦との番勝負の結果の1行(`{result}`。22-3の4)。kindは19章の結果(take・retake・defend・lost・miss)。
+ * @param {{ rival: string, kind: string, title: string }} input
+ */
+export function rivalResultText({ rival, kind, title }) {
+  const who = rival === 'hanane' ? '羽音' : YOSHIHIKO_NAME;
+  const head = `${title}戦の番勝負が終わった。`;
+  if (kind === 'defend') return `${head}{name}は挑戦者の${who}を退け、${title}を守った。`;
+  if (kind === 'take' || kind === 'retake') return `${head}{name}は${who}に勝ち、${title}を手にした。`;
+  if (kind === 'lost') return `${head}${title}の座は、${who}に移った。`;
+  return `${head}${who}は、${title}を守った。`;
+}
+
+/**
+ * 羽音・善彦との番勝負で届いた記録の1行(`{record}`。永世称号か連覇。なければ空で、行ごと出さない)。
+ * @param {{ eternal?: string, streak?: number }} input
+ */
+export function rivalRecordText({ eternal = '', streak = 0 } = {}) {
+  if (eternal) return `この番勝負で、{name}は${eternal}の資格を得た。`;
+  if (streak >= 2) return `これで、{name}は${streak}連覇になった。`;
+  return '';
 }
 
 /**
@@ -320,18 +622,26 @@ const DEFAULT_VARS = Object.freeze({
   date: 'デビューの日', kishi: '', mentor: '師匠', peers: '仲間', half: '',
   // 防衛戦の夜(20-3の5)。
   challenger: '若手の棋士', streak: '3', eternal: '永世称号',
+  // 相手が羽音・善彦のとき(22-3の6)。recordは空なら行ごと出さない。
+  series: '番勝負は、まだ続いている。', result: 'タイトル戦の番勝負が終わった。', record: '',
 });
 
 /**
  * 場面を画面に出す形にする(名前と、棋戦の言葉を差し込む)。
+ * 棋戦の言葉を先に入れ、名前をあとで入れる(言葉の中に{name}を書けるように。22-3の6)。中身が空になった行は出さない(`{record}`だけの行)。
+ * 声だけの人(善彦)の名前の札は、行の名前を使う。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
-  const fill = (text) => sceneText(text, playerName, momokaCall).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal)\}/g, (_, key) => words[key]);
+  const fill = (text) => sceneText(
+    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record)\}/g, (_, key) => words[key]),
+    playerName,
+    momokaCall,
+  );
   return {
     id: scene.id,
     title: scene.title,
@@ -339,11 +649,13 @@ export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} }
     background: scene.background,
     cast: [...scene.cast],
     // 演出の欄もそのまま渡す。
-    lines: scene.lines.map((entry) => ({
-      ...entry,
-      name: NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
-      text: fill(entry.text),
-    })),
+    lines: scene.lines
+      .map((entry) => ({
+        ...entry,
+        name: entry.who === 'extra' ? entry.name ?? '' : NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
+        text: fill(entry.text),
+      }))
+      .filter((entry) => entry.text.trim()),
   };
 }
 
@@ -356,9 +668,15 @@ export function markProYearScene(state, key) {
   return { ...state, scenes: [...(Array.isArray(state.scenes) ? state.scenes : []), key] };
 }
 
+/** 相手とプレイヤーの公式戦が、もう終わっているか(分身に任せた対局も数える。研究会の練習対局は数えない)。 */
+function metInOfficialGame(state, opponentId) {
+  return Object.values(state.games ?? {}).some((game) => game?.user && game.winner && (game.a === opponentId || game.b === opponentId));
+}
+
 /**
- * いま見せる場面(なければnull)。デビューの日は、まだ1局も指していない1年目に1回。羽音との場面は、公式戦ではじめて当たる対局の前に1回。
- * タイトル戦の前夜は、そのタイトルの番勝負の第1局の前に、タイトルごとに1回(相手が羽音のときは羽音の場面を先に)。
+ * いま見せる場面(なければnull)。デビューの日は、まだ1局も指していない1年目に1回。羽音との場面は、公式戦ではじめて当たる対局の前に1回
+ * (公式戦がもう終わっていたら出さない)。タイトル戦の前夜は、そのタイトルの番勝負の第1局の前に、タイトルごとに1回。
+ * 相手が羽音・善彦のときは、相手ごとの場面(docs/pro-year-design.mdの22章)。羽音・善彦の番勝負の前夜は、今までの前夜の代わりに出す。
  * 研究会・指導対局の前には出さない(公式戦の場面のため)。
  * @param {any} state
  * @returns {{ key: string, id: string, vars: Record<string, string> } | null}
@@ -375,10 +693,28 @@ export function proYearSceneDue(state) {
   const pending = state.pending;
   if (!pending || pending.kind === 'study' || pending.kind === 'shidou') return null;
   const opponent = state.players?.[pending.opponentId];
+  const rival = proYearRival(opponent);
   const vars = { title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '' };
-  if (opponent?.story === HANANE) return seenProYearScene(state, 'pro-hanane') ? null : { key: 'pro-hanane', id: 'pro-hanane', vars };
   const event = String(pending.gameId && state.games?.[pending.gameId]?.event || '');
   const firstGame = pending.kind === 'finals' && pending.series && (pending.series.games?.length ?? 0) === 0;
+  const due = (key, id, extra = {}) => (seenProYearScene(state, key) ? null : { key, id, vars: { ...vars, ...extra } });
+  if (rival) {
+    // 羽音・善彦との番勝負の前夜(22-3の2)。永世称号がかかる防衛戦は、見たことがあっても記録の1行をつけて出す。
+    if (firstGame) {
+      const id = `pro-${pending.defense ? 'defense' : 'title'}-eve-${rival}`;
+      const eternal = pending.defense ? pending.titleStakes?.eternal ?? null : null;
+      const record = eternal && !eternal.reached && eternal.left === 1 ? `この番勝負を勝てば、${eternal.name}の資格に届く。` : '';
+      return due(`${id}:${event}${record ? ':eternal' : ''}`, id, { holder: '', record });
+    }
+    // 公式戦ではじめて当たる対局(番勝負の途中でも、公式戦がもう終わっていれば出さない)。
+    if (!metInOfficialGame(state, pending.opponentId)) {
+      const met = due(rival === 'hanane' ? 'pro-hanane' : 'pro-yoshihiko', rival === 'hanane' ? 'pro-hanane' : 'pro-yoshihiko');
+      if (met) return met;
+    }
+    // 羽音との大一番(決勝・挑戦者決定戦など。番勝負の対局は封じ手の夜と前夜にまかせる)。棋戦ごとに1回。
+    if (rival === 'hanane' && pending.kind !== 'finals' && pending.stakes?.boss) return due(`pro-hanane-big:${event}`, 'pro-hanane-big');
+    return null;
+  }
   if (!firstGame) return null;
   // 防衛戦は受けて立つ側の前夜(20-3の1・2)。挑戦者向けの前夜は出さない(「保持者」に挑戦者の名前が入って逆さまになるため)。
   if (pending.defense) {
