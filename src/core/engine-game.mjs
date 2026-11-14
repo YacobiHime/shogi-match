@@ -6,6 +6,7 @@
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { createRng } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from './strength-settings.mjs';
+import { currentLevelFromV3 } from './level-ladder.mjs';
 import { applyCharacter, characterSituation } from './player-character.mjs';
 import { canBlunder, chooseCpuMove, isBlunderChoice } from './cpu-move-choice.mjs';
 import { humanBlunderAllowance, noteHumanBlunder } from './human-model.mjs';
@@ -67,13 +68,18 @@ export function engineStrength(player, { light = false } = {}) {
  * CPU同士の自己対局で測った、Lvごとの強さ(L14を0とするレーティング。docs/tournament-relay-design.mdの20-6・20-9)。
  * fullは対局用の読み、lightは観戦用の読み(L30以下はほぼ同じ読みなので、同じ値。L34から上は、L22・L26・L30で尺度を合わせた測定値)。
  * lightのL49は、測定でほかに全勝して値が決まらなかったので、対局用のL46とL49のあいだに置いた見積もり。測り直したら、ここを差し替える。
- * 2026-11-13にLv20〜47の強さの割り当て(source)を直した(1Lvの差をそろえた。docs/difficulty-calibration.md)。強さはsourceで決まるので、
- * 新しいLvのsourceを前の割り当てのLvに引き直し、前の測定の表から読んだ値にした(前の表: full 14:0 18:157 22:541 26:823 30:1043 34:1389
- * 38:1542 42:1782 46:1882 49:2220、light 34:1130 38:1205 42:1423 46:1593 49:2000)。
+ * 測定はLvの割り当てが2026-10-23の版(level-ladder.mjsのV3_SOURCES)のときのもの。強さはsourceで決まるので、
+ * 表の点のLvを、同じsourceの今のLvへ引き直して使う(currentLevelFromV3。2026-11-13・2026-11-14にLv20〜47のsourceを直した。
+ * docs/difficulty-calibration.md)。割り当てを直しても、この表は自動でついてくる。
  */
+const V3_LEVEL_STRENGTH = Object.freeze({
+  full: [[14, 0], [18, 157], [22, 541], [26, 823], [30, 1043], [34, 1389], [38, 1542], [42, 1782], [46, 1882], [49, 2220]],
+  light: [[14, 0], [18, 157], [22, 541], [26, 823], [30, 1043], [34, 1130], [38, 1205], [42, 1423], [46, 1593], [49, 2000]],
+});
+const toCurrentLevels = (table) => Object.freeze(table.map(([level, strength]) => Object.freeze([Math.round(currentLevelFromV3(level) * 100) / 100, strength])));
 export const LEVEL_STRENGTH = Object.freeze({
-  full: Object.freeze([[14, 0], [18, 157], [22, 390], [26, 575], [30, 722], [34, 969], [38, 1203], [42, 1538], [46, 1829], [49, 2220]]),
-  light: Object.freeze([[14, 0], [18, 157], [22, 390], [26, 575], [30, 722], [34, 969], [38, 1083], [42, 1203], [46, 1503], [49, 2000]]),
+  full: toCurrentLevels(V3_LEVEL_STRENGTH.full),
+  light: toCurrentLevels(V3_LEVEL_STRENGTH.light),
 });
 /** 表の外(L14より下)の、1Lvあたりの強さ(段級位の表の間隔)。 */
 const STRENGTH_PER_LEVEL_BELOW = 60;
