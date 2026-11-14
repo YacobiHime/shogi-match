@@ -127,6 +127,8 @@ const LEAF_MAX = 84;
 const COL_MIN = 168;
 const COL_MAX = 236;
 const COL_GAP = 22;
+/** 中継の印のはみ出し(margin-right: -0.6rem ≒ 10px)の分。 */
+const WATCH_EDGE = 10;
 
 const hasLive = computed(() => Object.keys(props.live).length > 0);
 const cardH = computed(() => (hasLive.value ? CARD_ROWS_H + LIVE_ROW_H : CARD_ROWS_H));
@@ -142,17 +144,19 @@ function markOf(match: Match, side: "top" | "bottom") {
 const frame = ref<HTMLElement | null>(null);
 const frameSize = ref({ width: 0, height: 0 });
 const roundCount = computed(() => Math.max(1, props.view.rounds.length));
+/** 中継の印(▶)は札の右端から少し出るので、表の右にその分をあける(最後の列の印で、表がわずかに横へ動かないように)。 */
+const edge = computed(() => (props.watchable ? WATCH_EDGE : 0));
 /** 列の幅。枠に収まれば枠いっぱいに広げ、収まらなければ下限で横にすべらせる。 */
-const colW = computed(() => Math.min(COL_MAX, Math.max(COL_MIN, Math.floor((frameSize.value.width + COL_GAP) / roundCount.value))));
+const colW = computed(() => Math.min(COL_MAX, Math.max(COL_MIN, Math.floor((frameSize.value.width - edge.value + COL_GAP) / roundCount.value))));
 const cardW = computed(() => colW.value - COL_GAP);
-const scrolls = computed(() => colW.value * roundCount.value - COL_GAP > frameSize.value.width + 1);
+const scrolls = computed(() => colW.value * roundCount.value - COL_GAP + edge.value > frameSize.value.width + 1);
 /** 葉の縦の間。枠の高さいっぱいに広げる(下を空けない)。入らなければ下限で縦に動かす。 */
 const leafGap = computed(() => {
   const leaves = Math.max(1, props.view.leafCount);
   const fit = (frameSize.value.height - HEAD - 8) / leaves;
   return Math.min(LEAF_MAX, Math.max(LEAF_MIN.value, fit));
 });
-const stageWidth = computed(() => colW.value * roundCount.value - COL_GAP);
+const stageWidth = computed(() => colW.value * roundCount.value - COL_GAP + edge.value);
 const stageHeight = computed(() => HEAD + props.view.leafCount * leafGap.value + 8);
 
 /** 前の試合の札から、次の試合の札の、その棋士の行へ引く線。自分が勝ち上がった線は琥珀。 */

@@ -1430,10 +1430,23 @@ function selectCycle(index: number) {
   cycleIndex.value = index;
   stageIndex.value = defaultStage(eventOpen.value?.cycles[index]);
   bracketIndex.value = 0;
+  revealSelectedTabs();
 }
 function selectStage(index: number) {
   stageIndex.value = index;
   bracketIndex.value = 0;
+  revealSelectedTabs();
+}
+/** 棋戦の画面のタブの列は、細い画面では1行で横に動く。選んだタブ(はじめは「いま」の段階)が見えるように送る。 */
+function revealSelectedTabs() {
+  void nextTick(() => {
+    const sheet = document.querySelector("[data-pro-event-sheet]");
+    sheet?.querySelectorAll<HTMLElement>('[role="tablist"]').forEach((list) => {
+      const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!tab || list.scrollWidth <= list.clientWidth) return;
+      list.scrollLeft = Math.max(0, tab.offsetLeft - list.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2);
+    });
+  });
 }
 function openEvent(id: string) {
   eventId.value = id;
@@ -1978,7 +1991,9 @@ defineExpose({ goBack });
 .shogi-game .pro-year__sheet { max-height: min(88vh, 46rem); overflow-y: auto; }
 /* 棋戦の画面(全画面) */
 .shogi-game .pro-year__event-screen {
-  position: fixed; inset: 0; z-index: 60; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 0.4rem;
+  /* 縦に積み、中身(event-body)が残りの高さを取る。期のタブがない棋戦もあるので、決まった行の格子にしない。
+     幅は画面まで(min-width: 0)。トーナメント表の幅に合わせて広がると、表が画面の右へはみ出して切れる(表は枠の中で横に動かす)。 */
+  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0;
   padding: 0.6rem; color: #fffcf4; background: #172632;
 }
 .shogi-game .pro-year__event-head { display: flex; align-items: center; gap: 0.6rem; min-width: 0; padding-left: 0.4rem; border-left: 0.4rem solid var(--event-color); }
@@ -1989,13 +2004,36 @@ defineExpose({ goBack });
 .shogi-game .pro-year__tabs--small button { min-height: 44px; padding: 0.15rem 0.7rem; font-size: 0.8rem; }
 .shogi-game .pro-year__stage-tabs button small { margin-left: 0.3rem; font-size: 0.66rem; opacity: 0.85; }
 .shogi-game .pro-year__stage-tab--you { box-shadow: inset 0 -0.18rem 0 var(--amber, #f1a54c); }
-.shogi-game .pro-year__event-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; align-content: start; gap: 0.4rem; min-height: 0; overflow-y: auto; }
+/* 中身は縦に積む。段階によって行の数が違う(ブロックのタブ・ほかのブロック・勝ち上がり)ので、決まった行の格子にしない(行がずれて文字が重なっていた)。
+   トーナメント表は残りの高さいっぱいに広げ、表の中で縦と横に動かす。ほかは中身の高さ。 */
+.shogi-game .pro-year__event-screen > * { flex: none; min-width: 0; }
+/* 細い縦画面: 期・段階・ブロックのタブは1行にして横に動かす(折り返すと、トーナメント表の高さが減る。U:7-5)。 */
+@media (max-width: 600px) and (orientation: portrait) {
+  .shogi-game .pro-year__event-screen .pro-year__tabs--small { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+  .shogi-game .pro-year__event-screen .pro-year__tabs--small button { flex: none; white-space: nowrap; }
+}
+/* 背の低い横画面: 見出しとタブを左の列、中身(トーナメント表)を右の列に、高さいっぱいで(U:7-5の1)。 */
+@media (orientation: landscape) and (max-height: 600px) {
+  .shogi-game .pro-year__event-screen {
+    display: grid;
+    grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    align-content: start;
+    column-gap: 0.8rem;
+  }
+  .shogi-game .pro-year__event-screen > * { grid-column: 1; }
+  .shogi-game .pro-year__event-screen > .pro-year__event-body { grid-column: 2; grid-row: 1 / -1; }
+  .shogi-game .pro-year__event-screen .pro-year__event-heading small { white-space: normal; }
+}
+.shogi-game .pro-year__event-screen > .pro-year__event-body { flex: 1 1 0; }
+.shogi-game .pro-year__event-body { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; min-height: 0; overflow-y: auto; }
+.shogi-game .pro-year__event-body > * { flex: none; min-width: 0; }
 .shogi-game .pro-year__stage-info { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; margin: 0; color: #cfd8de; font-size: 0.8rem; }
 .shogi-game .pro-year__stage-info b { color: var(--amber, #f1a54c); }
 .shogi-game .pro-year__stage-info .pro-year__stage-you--out { color: #8a99a6; }
 .shogi-game .pro-year__event-body > .team-battle__table, .shogi-game .pro-year__event-body .pro-year__tables { max-width: 44rem; }
 .shogi-game .pro-year__stage-empty { margin: 1rem 0; color: #cfd8de; text-align: center; }
-.shogi-game .pro-year__bracket { min-height: min(60vh, 32rem); height: 100%; }
+.shogi-game .pro-year__event-body > .pro-year__bracket { flex: 1 1 0; min-width: 0; min-height: min(40vh, 16rem); }
 .shogi-game .pro-year__bracket .ryuo-bracket { height: 100%; }
 .shogi-game .pro-year__others { display: flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; margin: 0; color: #cfd8de; font-size: 0.75rem; }
 .shogi-game .pro-year__series-box { display: grid; align-content: start; gap: 0.5rem; }
