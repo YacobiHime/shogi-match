@@ -390,6 +390,35 @@ function challengerOf(state, previousStage, holder) {
   return row ? (row[0] === holder ? row[1] : row[0]) : null;
 }
 
+/**
+ * 年度の替わりに、終わった期を片づける(24章)。棋戦ごとに、いちばん新しい終わった期は残す
+ * (防衛戦・決勝のあとも、その期の表と番勝負の星を見返せるように)。残す期の対局は番勝負の局だけ
+ * (星と観戦のため。トーナメントの勝ち負けはブロックの歩みに残る)。それより前の終わった期は、前の年度の期のほかは消す。
+ * @param {any} state
+ */
+function pruneFinishedCycles(state) {
+  const latestDone = {};
+  for (const cycle of Object.values(state.cycles)) {
+    if (!cycle.done) continue;
+    const kept = latestDone[cycle.event];
+    if (!kept || cycle.base > kept.base) latestDone[cycle.event] = cycle;
+  }
+  const keep = new Set(Object.values(latestDone).map((cycle) => cycle.id));
+  for (const [id, cycle] of Object.entries(state.cycles)) {
+    if (cycle.done && cycle.base < state.fy - 1 && !keep.has(id)) delete state.cycles[id];
+  }
+  for (const [id, game] of Object.entries(state.games)) {
+    const cycle = state.cycles[game.cycle];
+    if (!cycle) {
+      delete state.games[id];
+      continue;
+    }
+    if (!cycle.done || game.date >= yearStart(state.fy)) continue;
+    const series = cycle.stages?.[game.stage]?.type === 'series';
+    if (!(keep.has(cycle.id) && series)) delete state.games[id];
+  }
+}
+
 /** 段階を始める(出場者と回戦の日を決め、最初の回戦の対局を作る)。 */
 function startStage(state, cycle, index, rng) {
   const event = proEvent(cycle.event);
@@ -425,7 +454,7 @@ function startStage(state, cycle, index, rng) {
     const size = Math.max(...stage.blocks.map((block) => block.alive.length));
     const count = Math.max(1, Math.ceil(Math.log2(Math.max(2, size))) - (stage.finalists ? 1 : 0));
     stage.dates = roundDates(window, count, { broadcast: Boolean(def.broadcast) });
-    // 対局の歩み([先, 後, 勝った人])。記録を作るブロックだけ。
+    // 対局の歩み([先, 後, 勝った人])。すべてのブロック(24章)。
     stage.blocks.forEach((block) => { block.history = []; });
     openKnockoutRound(state, cycle, stage, rng);
   } else if (def.type === 'league') {
@@ -589,9 +618,9 @@ function openKnockoutRound(state, cycle, stage, rng) {
   stage.blocks.forEach((block, blockIndex) => {
     // 対局の記録を作るのは、プレイヤーと羽音のいるブロックと、本戦(1つの表)だけ。ほかのブロックは、回戦を閉じるときに勝ち負けだけ決める。
     block.track ??= stage.type === 'knockout' || block.alive.some((id) => id === PRO_USER_ID || state.players[id]?.story === HANANE);
-    if (!block.track) return;
-    // トーナメント表(10-2の1)のために、最初の並びを残す(記録を作るブロックだけ)。
+    // トーナメント表(10-2の1)のために、最初の並びを残す。記録を作らないブロックも表は見せる(24章)。
     if (round === 0 && !block.slots) block.slots = [...block.alive];
+    if (!block.track) return;
     for (let index = 0; index < block.alive.length; index += 2) {
       const [a, b] = [block.alive[index], block.alive[index + 1]];
       if (a && b) addGame(state, { cycle, stage, round, a, b, date, block: blockIndex });
@@ -625,7 +654,8 @@ function closeKnockoutRound(state, cycle, stage, rng) {
           countRecord(state, winner, aWins ? b : a, feeOf(cycle, stage, block.group));
         }
         winners.push(winner);
-        if (block.track) block.history.push([a, b, winner]);
+        // 勝ち負けの歩みは、記録を作らないブロックも残す(表と、竜王戦の組の準優勝のため。24章)。
+        (block.history ??= []).push([a, b, winner]);
       } else winners.push(a ?? b ?? null);
     }
     block.alive = winners;
@@ -1926,13 +1956,7 @@ export function startNextYear(source) {
   state.year = emptyYear();
   state.yearDone = false;
   state.summary = null;
-  // 終わった期の対局は消す(表の要約は段階に残る)。
-  for (const [id, game] of Object.entries(state.games)) {
-    if (state.cycles[game.cycle]?.done && game.date < yearStart(state.fy)) delete state.games[id];
-  }
-  for (const [id, cycle] of Object.entries(state.cycles)) {
-    if (cycle.done && cycle.base < state.fy - 1) delete state.cycles[id];
-  }
+  pruneFinishedCycles(state);
   openYear(state, state.fy, rng);
   // 新しい年度の週と目標(目標は年度の始めに選び直す。13-3の7)。
   state.goals = null;
@@ -3372,7 +3396,8 @@ export function eventView(state, eventId) {
   const event = proEvent(eventId);
   if (!event) return null;
   const view = proYearView(state).events.find((entry) => entry.id === eventId);
-  const cycles = view.cycles.map((id) => state.cycles[id]);
+  // 今の年度にかかる期に、残してある終わった期も並べる(防衛戦・決勝のあとも見返せる。24章)。
+  const cycles = Object.values(state.cycles).filter((cycle) => cycle.event === eventId).sort((a, b) => a.base - b.base);
   return {
     id: event.id,
     name: event.name,
@@ -3392,7 +3417,9 @@ export function eventView(state, eventId) {
         const stage = cycle.stages[index];
         const window = stageWindow(cycle, def);
         // 今年度の外の時期は「前年度」「来年度」を添える(同じ4月が2つ並んでも分かるように)。
-        const when = window.start < yearStart(state.fy) ? '前年度 ' : window.start > yearEnd(state.fy) ? '来年度 ' : '';
+        // 2年度より前の期(残してある終わった期。24章)は年度の数で言う。
+        const startFy = Number(window.start.slice(0, 4)) - (window.start.slice(5) < '04-01' ? 1 : 0);
+        const when = startFy === state.fy ? '' : startFy === state.fy - 1 ? '前年度 ' : startFy === state.fy + 1 ? '来年度 ' : `${startFy}年度 `;
         const base = {
           label: def.label, type: def.type, title: Boolean(def.title),
           period: `${when}${dateLabel(window.start).replace(/日\(.\)$/, '日')}〜${dateLabel(window.end).replace(/日\(.\)$/, '日')}`,
@@ -3450,14 +3477,15 @@ function stageDetail(state, cycle, stage, def) {
       winners: stage.winners.map((id) => card(state, id)),
     };
   }
-  // トーナメント・ブロック: 竜王戦と同じトーナメント表(記録を作るブロックだけ。自分・羽音のブロックが先)。
+  // トーナメント・ブロック: 竜王戦と同じトーナメント表。すべてのブロック(24章。自分・羽音のブロックが先、あとは元の順)。
   const blocks = stage.blocks ?? [];
   const brackets = blocks
-    .filter((block) => block.track && block.slots)
-    .map((block) => ({ name: block.name, ...blockBracket(state, cycle, stage, def, block) }))
-    .sort((x, y) => Number(y.you) - Number(x.you) || Number(y.rival) - Number(x.rival));
-  // 記録を作らないブロックは、勝ち上がった人の名前だけ(決まったら)。
-  const advanced = blocks.filter((block) => !block.track).map((block) => {
+    .map((block, order) => ({ block, order }))
+    .filter(({ block }) => block.slots)
+    .map(({ block, order }) => ({ name: block.name, order, ...blockBracket(state, cycle, stage, def, block) }))
+    .sort((x, y) => Number(y.you) - Number(x.you) || Number(y.rival) - Number(x.rival) || x.order - y.order);
+  // 最初の並びを残していない前の保存のブロックは、勝ち上がった人の名前だけ(決まったら)。
+  const advanced = blocks.filter((block) => !block.slots).map((block) => {
     const alive = block.alive.filter(Boolean);
     return { name: block.name, winner: alive.length === 1 ? card(state, alive[0]) : null };
   });

@@ -254,8 +254,9 @@ describe('年度', () => {
     expect(next.cycles[`${seeded}-2027`].entry).toBeGreaterThan(0);
     // タイトル保持者はJT杯に招かれる。
     expect(next.cycles['jt-2027'].withUser).toBe(true);
-    // 終わった期の古い対局は消える。
-    expect(Object.values(next.games).every((game) => game.date >= yearStart(2027) || !next.cycles[game.cycle]?.done)).toBe(true);
+    // 終わった期の古い対局は消える(残すのは、棋戦ごとのいちばん新しい終わった期の番勝負の局だけ。24章)。
+    expect(Object.values(next.games).every((game) => game.date >= yearStart(2027) || !next.cycles[game.cycle]?.done
+      || next.cycles[game.cycle].stages[game.stage]?.type === 'series')).toBe(true);
     const later = advanceToNextGame(next);
     expect(later.pending).toBeTruthy();
     expect(later.date >= '2027-04-01').toBe(true);
@@ -349,8 +350,9 @@ describe('棋戦の表と観戦(10章)', () => {
     // 自分の勝った試合は、自分が勝者の札。
     const userMatch = mine.view.matches.find((match) => match.userIn && match.winner);
     expect(userMatch.userWon).toBe(true);
-    // 記録を作らないブロックは、名前の行だけ。
-    expect(stage.others.length).toBeGreaterThan(0);
+    // 記録を作らないブロックも、トーナメント表で見せる(24章)。
+    expect(stage.brackets.length).toBe(stage.blockCount);
+    expect(stage.others).toEqual([]);
   });
 
   it('決着した棋士どうしの対局は、中継の項目になる(自分の対局はならない)', () => {
