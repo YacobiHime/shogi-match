@@ -3382,7 +3382,7 @@ const props = defineProps({
   exhibit: { type: Boolean, default: false },
 });
 // Googleアカウントでの同期(docs/cloud-sync-design.md)。各画面が保存を書く前の記録で「この端末が変わったか」を決めるため、準備の最初に呼ぶ。
-const cloudSync = useCloudSync({ enabled: props.showHome, onChoose: () => openCloudChoice() });
+const cloudSync = useCloudSync({ enabled: props.showHome, onChoose: () => openCloudChoice(), canApply: () => canApplyCloudSave() });
 const { status: cloudSyncStatus, statusText: cloudSyncStatusText, toast: cloudSyncToast, signedIn: cloudSyncSignedIn } = cloudSync;
 
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
@@ -9515,21 +9515,26 @@ function closeSaveTransfer() {
 }
 /** どちらの記録を使うか聞く(docs/cloud-sync-design.mdの6章)。ホームならすぐ開き、対局中などはホームへ戻ったときに開く。 */
 let cloudChoicePending = false;
+function canApplyCloudSave() {
+  return homeOpen.value && !nameDialogOpen.value && !tournamentOpen.value && !tutorialOpen.value
+    && !problemSetOpen.value && !brainTrainingOpen.value && !storyOpen.value
+    && !yakobiNoteOpen.value && !dexOpen.value && !referenceDexKind.value && !exhibitResetOpen.value;
+}
 function openCloudChoice() {
-  if (homeOpen.value && !saveTransferOpen.value) openSaveTransfer();
+  if (canApplyCloudSave() && !saveTransferOpen.value) openSaveTransfer();
   else cloudChoicePending = true;
 }
-watch(homeOpen, (open) => {
-  if (open && cloudChoicePending && cloudSync.status.value === "choose") {
-    cloudChoicePending = false;
-    openSaveTransfer();
-  }
-});
 
 // ===== データリセット(展示モードの「最初から」と、種類を選んで消す。docs/data-reset-design.md) =====
 const exhibitResetOpen = ref(false);
 const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
 const resetConfirmCancel = ref<HTMLButtonElement | null>(null);
+watch(canApplyCloudSave, (open) => {
+  if (open && cloudChoicePending && cloudSync.status.value === "choose") {
+    cloudChoicePending = false;
+    openSaveTransfer();
+  }
+});
 /** 選んだ消す種類(確認の窓を出しているあいだ)。空なら種類を選ぶ札。 */
 const resetChoice = ref("");
 /** 「大会の進み具合」を押したときの、大会ごとの選ぶ札(6章)。 */

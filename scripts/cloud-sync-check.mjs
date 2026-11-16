@@ -10,7 +10,8 @@
 // 使い方(先に npm run build と、エミュレーターと静的サーバーを起動しておく):
 //   npx firebase-tools emulators:start --only auth,firestore --project shogi-64125   (ポートは9099と8080)
 //   node scripts/serve-static.mjs 8796
-//   node scripts/cloud-sync-check.mjs [--url http://127.0.0.1:8796] [--out <写真の置き場所>]
+//   node scripts/cloud-sync-check.mjs [--url http://127.0.0.1:8796] [--out <写真の置き場所>] [--rest-auth]
+// --rest-auth はGoogleの窓を省く。エミュレーターの正規の認証で同期とルールだけを検証する。
 // Playwrightはリポジトリの依存に入れない(browser-check.mjsと同じ)。
 
 import { createRequire } from 'node:module';
@@ -29,12 +30,14 @@ const BASE = args.url ?? 'http://127.0.0.1:8796';
 const OUT = args.out ?? null;
 const FIRESTORE = 'http://127.0.0.1:8080/v1/projects/shogi-64125/databases/(default)/documents';
 const AUTH = 'http://127.0.0.1:9099';
+const REST_AUTH = process.argv.includes('--rest-auth');
+if (REST_AUTH) console.log('REST認証で同期を検証（Googleのログイン画面の検証は含まない）');
 const Y = 'yacobihime:shogi-match:';
 const SIZES = [[390, 844], [820, 1180], [1366, 768], [844, 390]];
 if (OUT) mkdirSync(OUT, { recursive: true });
 
 const { chromium } = loadPlaywright();
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined });
 let failures = 0;
 function check(label, ok, detail = '') {
   console.log(`${ok ? 'OK ' : 'NG '} ${label}${detail ? `：${detail}` : ''}`);
@@ -70,6 +73,27 @@ async function openHome(page) {
 }
 
 async function signIn(page, email) {
+  if (REST_AUTH) {
+    // Googleの窓を使えないテスト環境用。認証エミュレーターが発行する正規の印でルールも検証する。
+    const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const token = `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ sub: `google:${email}`, email, email_verified: true, name: email.split('@')[0], iss: 'https://accounts.google.com', aud: 'emulator-test' })}.`;
+    const response = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=emulator-test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestUri: BASE, postBody: new URLSearchParams({ providerId: 'google.com', id_token: token }).toString(), returnSecureToken: true }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result.refreshToken) throw new Error(`エミュレーターの認証失敗: ${result.error?.message ?? response.status}`);
+    await page.goto(`${BASE}/auth.html`);
+    await page.evaluate(({ uid, refreshToken, email, auth }) => {
+      localStorage.setItem('yacobihime:shogi-match:cloud-sync:v1', JSON.stringify({
+        v: 1, uid, refreshToken, email, name: email.split('@')[0], device: crypto.randomUUID().replaceAll('-', '').slice(0, 10),
+        signedInAt: Date.now(), base: null, notice: 'signed-in', pulledAt: 0,
+        emulator: { auth, firestore: 'http://127.0.0.1:8080' },
+      }));
+    }, { uid: result.localId, refreshToken: result.refreshToken, email, auth: AUTH });
+    await openHome(page);
+    return;
+  }
   await page.goto(`${BASE}/auth.html?emulator=1&return=${encodeURIComponent('/game.html')}`);
   const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('[data-login-google]')]);
   await popup.waitForLoadState();
@@ -159,15 +183,29 @@ check('Bの名前が移る', (await stored(b.page, `${Y}player-name:v1`))?.inclu
 await shoot(b.page, 'b-home-820');
 
 // 3. 両方で変えてから開き直すと、どちらを使うか聞く。
+// 連続送信を抑える5秒の間隔が過ぎてから隠す（ログイン方法や描画速度に依存させない）。
+await waitFor(() => Date.now() - Date.parse(head1.fields.at.timestampValue) >= 5100);
 await a.page.evaluate((key) => localStorage.setItem(key, JSON.stringify({ marker: 'A-played' })), `${Y}research:v1`);
 await a.page.evaluate(() => {
   Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
   document.dispatchEvent(new Event('visibilitychange'));
 });
-check('Aが隠れたときに送る', await waitFor(async () => (await head(stateA.uid))?.fields?.rev?.integerValue === '2', 20000));
+const hiddenSaved = await waitFor(async () => (await head(stateA.uid))?.fields?.rev?.integerValue === '2', 20000);
+check('Aが隠れたときに送る', hiddenSaved);
+if (!hiddenSaved) console.log('同期状態', await a.page.locator('[data-sync-status-text]').textContent(), '見出しの版', (await head(stateA.uid))?.fields?.rev?.integerValue);
 await b.page.evaluate((key) => localStorage.setItem(key, JSON.stringify({ marker: 'B-played' })), `${Y}research:v1`);
+// クラウドの返事を待つ間にメニューを開く。後から判明した競合でも選択の段へ移ること。
+let releaseHead;
+const headGate = new Promise(resolve => { releaseHead = resolve; });
+const headUrl = `${FIRESTORE}/cloudSaves/${stateA.uid}`;
+await b.page.route(headUrl, async route => { await headGate; await route.continue(); });
 await openHome(b.page);
+await b.page.click('[data-save-transfer-open]');
+await b.page.waitForSelector('[data-sync-group]');
+check('クラウドの返事を待つ間に同期メニューを開ける', await b.page.locator('[data-sync-group]').count() > 0);
+releaseHead();
 check('Bに「どちらの記録を使う？」', await waitFor(async () => (await b.page.locator('[data-step="cloud-choice"]').count()) > 0, 20000));
+await b.page.unroute(headUrl);
 check('初期フォーカスは「あとで決める」', await b.page.evaluate(() => document.activeElement?.hasAttribute('data-sync-later')));
 for (const [width, height] of SIZES) {
   await b.page.setViewportSize({ width, height });
