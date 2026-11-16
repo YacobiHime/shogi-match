@@ -1,7 +1,7 @@
 <template>
   <!--
     竜王戦の試合の札の表(docs/ryuo-stages-design.mdの3章)。1試合を1枚の札にして上下に2人を置き、左から右へ回戦を並べる。
-    名前は横書き。自分は琥珀、次の相手と次の対局は朱、推しは薄紫の札、ライバルは「ライバル」の札。
+    名前は横書き。自分は琥珀、次の相手と次の対局は朱、推しは薄紫の札、ライバルは行の左の紫の帯と紫の名前（札にすると名前が見切れる）。
     広い枠では高さいっぱいに広げ(下を空けない)、狭い枠では回戦の列を横にすべらせる(列ごとに止まる)。
   -->
   <div ref="frame" class="ryuo-bracket" :class="{ 'ryuo-bracket--scroll': scrolls }" data-bracket>
@@ -40,8 +40,9 @@
             <span class="ryuo-bracket__mark" aria-hidden="true">{{ markOf(match, side) }}</span>
             <span class="ryuo-bracket__name">
               <i v-if="oshiId && match[side].pid === oshiId" class="ryuo-bracket__tag ryuo-bracket__tag--oshi">推し</i>
-              <i v-if="match[side].pid && match[side].pid === rivalId" class="ryuo-bracket__tag ryuo-bracket__tag--rival">ライバル</i>
-              <template v-if="match[side].pid || !match[side].placeholder">{{ match[side].name }}</template>
+              <!-- ライバルは文字の札にせず、行の左の紫の帯と名前の色で見せる(札で名前が見切れるため。読み上げには「ライバル」を残す)。 -->
+              <i v-if="isRival(match, side)" class="ryuo-bracket__sr">ライバル</i>
+              <span v-if="match[side].pid || !match[side].placeholder" class="ryuo-bracket__text">{{ match[side].name }}</span>
               <span v-else class="ryuo-bracket__wait">{{ match[side].placeholder }}</span>
             </span>
             <!-- 決勝トーナメントは、段位の代わりに組と順位(1組優勝など)を右に出す(名前の幅を残す)。 -->
@@ -179,6 +180,7 @@ const lines = computed(() => {
   return out;
 });
 
+const isRival = (match: Match, side: "top" | "bottom") => Boolean(match[side].pid && match[side].pid === props.rivalId);
 function rowClass(match: Match, side: "top" | "bottom") {
   const slot = match[side];
   return [
@@ -189,6 +191,7 @@ function rowClass(match: Match, side: "top" | "bottom") {
       "ryuo-bracket__row--you": slot.you || slot.hope,
       "ryuo-bracket__row--opponent": match.pending && !slot.you && Boolean(slot.pid),
       "ryuo-bracket__row--hope": slot.hope,
+      "ryuo-bracket__row--rival": isRival(match, side),
     },
   ];
 }
@@ -337,7 +340,12 @@ watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.p
 }
 .shogi-game .ryuo-bracket__label { color: #172632; background: #c9d6e6; }
 .shogi-game .ryuo-bracket__tag--oshi { color: #172632; background: #d8d0ff; }
-.shogi-game .ryuo-bracket__tag--rival { color: #fffcf4; background: #8a5ad1; }
+.shogi-game .ryuo-bracket__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* ライバル: 左の紫の帯と名前の色(札の文字で名前を削らない)。 */
+.shogi-game .ryuo-bracket__row--rival { box-shadow: inset 4px 0 0 #8a5ad1; }
+.shogi-game .ryuo-bracket__row--rival .ryuo-bracket__name { color: #d9c4ff; }
+.shogi-game .ryuo-bracket__row--rival.ryuo-bracket__row--lose .ryuo-bracket__name { color: #9d8bbd; }
+.shogi-game .ryuo-bracket__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* 中継を見られる試合。札全体を押せるようにし、右端に小さな印を出す。 */
 .shogi-game .ryuo-bracket__watch {
   position: absolute;
