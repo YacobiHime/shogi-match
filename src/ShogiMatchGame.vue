@@ -798,6 +798,15 @@
             @click="closeSettings(); suspendConfirmOpen = true"
           >対局を中断する</button>
         </template>
+        <button
+          v-if="matchStarted && !pregameOpen"
+          type="button"
+          role="menuitem"
+          class="shogi-game__menu-item"
+          data-kifu-export
+          @click="exportCurrentKifu"
+        >{{ KIFU_EXPORT_TEXT.button }}</button>
+        <p v-if="kifuExportNotice" class="shogi-game__menu-notice" role="status" data-kifu-export-notice>{{ kifuExportNotice }}</p>
         <!-- 盤の反転は操作列からも切り替えられる。見出しのメニューにも同じ状態を表示する。 -->
         <button
           type="button"
@@ -2814,6 +2823,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch, type Ref } from "vue";
 import { Color, Move, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
+import { currentKifuFile, KIFU_EXPORT_TEXT } from "./core/kifu-export.mjs";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import WazaCutin, { type WazaCutinView } from "./WazaCutin.vue";
 import { createWazaAudio } from "./waza-audio";
@@ -6393,12 +6403,39 @@ function normalizePlayerColor(value: string): "black" | "white" {
   return value === "white" ? "white" : "black";
 }
 
+const kifuExportNotice = ref("");
+
 function toggleSettings() {
+  kifuExportNotice.value = "";
   settingsOpen.value = !settingsOpen.value;
 }
 
 function closeSettings() {
   settingsOpen.value = false;
+}
+
+/** メニューを押した瞬間の確定済みの棋譜を保存する。対局や検討のカーソルは動かさない。 */
+function exportCurrentKifu() {
+  let url = "";
+  let link: HTMLAnchorElement | null = null;
+  try {
+    const file = currentKifuFile(record.value, {
+      blackName: effectiveBlackPlayerName.value,
+      whiteName: effectiveWhitePlayerName.value,
+    });
+    url = URL.createObjectURL(new Blob([file.text], { type: "text/plain;charset=utf-8" }));
+    link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    kifuExportNotice.value = KIFU_EXPORT_TEXT.exported(file.ply);
+  } catch {
+    kifuExportNotice.value = KIFU_EXPORT_TEXT.failed;
+  } finally {
+    link?.remove();
+    if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 const learningFormationResult = computed(() => {
