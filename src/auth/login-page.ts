@@ -8,7 +8,7 @@ import { initializeApp } from "firebase/app";
 import {
   GoogleAuthProvider, browserPopupRedirectResolver, connectAuthEmulator, inMemoryPersistence, initializeAuth, signInWithPopup,
 } from "firebase/auth";
-import { FIREBASE_EMULATORS, FIREBASE_WEB_CONFIG, isLocalHost } from "../core/firebase-config.mjs";
+import { FIREBASE_EMULATORS, firebaseLoginConfig, isLocalHost } from "../core/firebase-config.mjs";
 import { rememberLogin } from "./login-state.mjs";
 import { loginErrorText, safeReturnPath } from "./login-text.mjs";
 
@@ -27,7 +27,7 @@ function say(text: string, error = false) {
   message.classList.toggle("login__message--error", error);
 }
 
-const app = initializeApp(FIREBASE_WEB_CONFIG);
+const app = initializeApp(firebaseLoginConfig(location.hostname));
 const auth = initializeAuth(app, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver });
 if (emulator) connectAuthEmulator(auth, FIREBASE_EMULATORS.auth, { disableWarnings: true });
 

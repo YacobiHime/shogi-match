@@ -20,6 +20,9 @@ export function loginErrorText(code) {
     return "Googleログインの準備がまだできていないよ。いまは引き継ぎコードを使ってね。";
   }
   if (code === "auth/network-request-failed" || code === "auth/timeout") return "通信できなかったよ。インターネットにつないで、もう一度ためしてね。";
+  if (["auth/web-storage-unsupported", "auth/operation-not-supported-in-this-environment", "auth/invalid-auth-event"].includes(code)) {
+    return "ログインの状態を保てなかったよ。SafariやChromeなどのブラウザでサイトを開き直して、もう一度ログインしてね。";
+  }
   if (code === "app/storage") return "この端末に保存できなかったよ。ブラウザの設定で保存を許してね。";
   return "ログインできなかったよ。少し待って、もう一度ためしてね。";
 }

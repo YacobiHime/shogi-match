@@ -21,6 +21,13 @@ describe("ログインのページの小さな決まり(docs/cloud-sync-design.m
     expect(loginErrorText("auth/whatever")).toMatch(/ログインできなかった/);
   });
 
+  it("認証の状態を保存できないときはブラウザでのやり直しを案内する", () => {
+    for (const code of ["auth/web-storage-unsupported", "auth/operation-not-supported-in-this-environment", "auth/invalid-auth-event"]) {
+      expect(loginErrorText(code)).toMatch(/SafariやChrome/);
+      expect(loginErrorText(code)).toMatch(/もう一度ログイン/);
+    }
+  });
+
   it("ログインのページの道は、今のページを戻り先にする", () => {
     const url = loginPageUrl({ pathname: "/game.html", search: "?mode=cpu", href: "https://shogi-64125.web.app/game.html?mode=cpu" });
     expect(url).toBe("https://shogi-64125.web.app/auth.html?return=%2Fgame.html%3Fmode%3Dcpu");
