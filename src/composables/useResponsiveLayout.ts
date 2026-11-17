@@ -23,6 +23,12 @@ const SIDE_COLUMN_MIN_EM = 17;
 const WIDE_COLUMNS_MIN_EM = 33;
 const PHONE_ASPECT_RATIO = 1.5;
 const PHONE_PORTRAIT_TOLERANCE = 0.8;
+// 縦長の画面(高さ÷幅がこれ以上)は、盤の右に欄を並べず、いつも縦積みにする。iPadの縦画面のChromeで、
+// 解析を開くと縦積みの盤の見積もりがわずかに小さくなり、横並びに切り替わって欄が詰まったため(stable-board-layout-design.mdの11章)。
+export const PORTRAIT_STACK_RATIO = 1.15;
+// タブレットの縦積み(幅600px以上)では、解析のグラフを盤の下に大きく出す分、盤以外の高さを多めに見積もる。
+const STACK_ANALYSIS_WIDE_EXTRA_EM = 5;
+const STACK_WIDE_MIN_PX = 600;
 
 export function fitBoardFrame(
   names: BoardFrameName[],
@@ -45,6 +51,36 @@ export function stackPreferredFrame(width: number, height: number) {
   return height / width >= PHONE_ASPECT_RATIO
     ? { name: "portrait" as const, tolerance: PHONE_PORTRAIT_TOLERANCE }
     : { name: "compact" as const, tolerance: 0.9 };
+}
+
+/**
+ * 画面の大きさから、横並び(side・wide)と縦積み(stack)のどちらにするかと、それぞれの盤の大きさを決める。
+ * @param {number} width
+ * @param {number} height
+ * @param {boolean} analysis 解析の欄を出しているか
+ */
+export function layoutPlan(width: number, height: number, analysis: boolean) {
+  const sideFont = clampNumber(Math.min(height / 50, width / 70), 13, 20);
+  const sidePad = sideFont * 0.6;
+  const sideBoard = fitBoardFrame(
+    ["compact", "standard"],
+    width - sideFont * SIDE_COLUMN_MIN_EM - sidePad * 3,
+    height - sidePad * 2,
+  );
+  const stackFont = clampNumber(Math.min(width / 26, height / 46), 13, 18);
+  const stackPad = stackFont * 0.45;
+  const reserved = analysis
+    ? STACK_ANALYSIS_RESERVED_EM + (width >= STACK_WIDE_MIN_PX ? STACK_ANALYSIS_WIDE_EXTRA_EM : 0)
+    : STACK_RESERVED_EM;
+  const stackBoard = fitBoardFrame(
+    ["portrait", "compact", "standard"],
+    width - stackPad * 2,
+    height - stackPad * 2 - stackFont * reserved,
+    stackPreferredFrame(width, height),
+  );
+  const portrait = height / width >= PORTRAIT_STACK_RATIO;
+  const side = !portrait && sideBoard.scale > stackBoard.scale;
+  return { side, sideFont, sidePad, sideBoard, stackFont, stackPad, stackBoard };
 }
 
 export function clampNumber(value: number, min: number, max: number) {
@@ -93,26 +129,9 @@ export function useResponsiveLayout({ analysisVisible }: ResponsiveLayoutOptions
     const height = root.clientHeight;
     if (!width || !height) return;
 
-    const sideFont = clampNumber(Math.min(height / 50, width / 70), 13, 20);
-    const sidePad = sideFont * 0.6;
-    const sideBoard = fitBoardFrame(
-      ["compact", "standard"],
-      width - sideFont * SIDE_COLUMN_MIN_EM - sidePad * 3,
-      height - sidePad * 2,
-    );
+    const { side, sideFont, sidePad, sideBoard, stackFont, stackPad, stackBoard } = layoutPlan(width, height, analysisVisible.value);
 
-    const stackFont = clampNumber(Math.min(width / 26, height / 46), 13, 18);
-    const stackPad = stackFont * 0.45;
-    const stackBoard = fitBoardFrame(
-      ["portrait", "compact", "standard"],
-      width - stackPad * 2,
-      height - stackPad * 2 - stackFont * (
-        analysisVisible.value ? STACK_ANALYSIS_RESERVED_EM : STACK_RESERVED_EM
-      ),
-      stackPreferredFrame(width, height),
-    );
-
-    if (sideBoard.scale > stackBoard.scale) {
+    if (side) {
       const sideSpace = width - sideBoard.width - sidePad * 3;
       uiLayout.value = sideSpace >= sideFont * WIDE_COLUMNS_MIN_EM ? "wide" : "side";
       uiFontPx.value = Math.round(sideFont * 10) / 10;

@@ -2031,6 +2031,16 @@
   gap: 0.3em;
   overflow: hidden;
 }
+/* タブレットの縦積み(幅600px以上): グラフを盤の下に大きく出し、凡例も見せる(stable-board-layout-design.mdの11章)。 */
+.shogi-game--stack:not(.shogi-game--narrow) .shogi-game__analysis--compact {
+  grid-template-rows: auto auto minmax(7em, 9.5em) auto;
+}
+.shogi-game--stack:not(.shogi-game--narrow) .shogi-game__analysis--compact .evaluation-graph {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.shogi-game--stack:not(.shogi-game--narrow) .shogi-game__analysis--compact .evaluation-graph__legend {
+  display: flex;
+}
 .shogi-game__analysis--compact > .shogi-game__guided,
 .shogi-game__analysis--compact > .shogi-game__guided-start {
   grid-area: top;
