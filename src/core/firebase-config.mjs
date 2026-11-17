@@ -18,16 +18,3 @@ export const FIREBASE_EMULATORS = Object.freeze({
 
 /** エミュレーターを使ってよい場所か(公開先では使わない)。 */
 export const isLocalHost = (hostname) => hostname === "127.0.0.1" || hostname === "localhost";
-
-/**
- * 認証の枠・窓は公開ページと同じホストにする。別サイトの保存を制限するブラウザに対応する。
- * GoogleのOAuthクライアントには両方の /__/auth/handler を登録する（設計の12章）。
- * @param {string} hostname
- */
-export function firebaseLoginConfig(hostname) {
-  if (hostname === "shogi-64125.web.app" || hostname === FIREBASE_WEB_CONFIG.authDomain) {
-    return { ...FIREBASE_WEB_CONFIG, authDomain: hostname };
-  }
-  // ローカルのエミュレーターや埋め込み先をOAuthの戻り先にはしない。
-  return FIREBASE_WEB_CONFIG;
-}

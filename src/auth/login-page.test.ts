@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-const sdk = vi.hoisted(() => ({ popup: vi.fn(), app: vi.fn(), init: vi.fn(), emulator: vi.fn(), provider: { setCustomParameters: vi.fn() } }));
-vi.mock('firebase/app', () => ({ initializeApp: sdk.app }));
+const sdk = vi.hoisted(() => ({ popup: vi.fn(), init: vi.fn(), emulator: vi.fn(), provider: { setCustomParameters: vi.fn() } }));
+vi.mock('firebase/app', () => ({ initializeApp: vi.fn(() => ({})) }));
 vi.mock('firebase/auth', () => ({
   GoogleAuthProvider: class { setCustomParameters = sdk.provider.setCustomParameters; },
   browserPopupRedirectResolver: 'popup-resolver', inMemoryPersistence: 'memory-only',
@@ -15,7 +15,7 @@ let back: { href: string };
 let replace: ReturnType<typeof vi.fn>;
 const flush=async()=>{ for(let i=0;i<30;i++)await Promise.resolve(); };
 beforeEach(() => {
-  vi.resetModules();sdk.app.mockReset();sdk.app.mockReturnValue({});sdk.popup.mockReset();sdk.init.mockReset();sdk.emulator.mockReset();sdk.provider.setCustomParameters.mockReset();
+  vi.resetModules();sdk.popup.mockReset();sdk.init.mockReset();sdk.emulator.mockReset();sdk.provider.setCustomParameters.mockReset();
   sdk.init.mockReturnValue({});sdk.popup.mockResolvedValue({user:{uid:'new-user',email:'test@example.invalid',displayName:'test',refreshToken:'test-refresh'}});
   const values=new Map<string,string>();store={get length(){return values.size},key:i=>[...values.keys()][i]??null,getItem:k=>values.get(k)??null,setItem:(k,v)=>{values.set(k,v)},removeItem:k=>{values.delete(k)},clear:()=>values.clear()};
   click=undefined;button={disabled:true,addEventListener:(_event,fn)=>{click=fn}};message={textContent:'',classList:{toggle:vi.fn()}};back={href:''};replace=vi.fn();
@@ -26,7 +26,6 @@ afterEach(()=>vi.unstubAllGlobals());
 describe('Googleログインのページ',()=>{
   it('Googleのアカウントを選び、今回の状態を保存してから元のページへ戻る',async()=>{
     await import('./login-page');expect(button.disabled).toBe(false);click?.();await flush();
-    expect(sdk.app).toHaveBeenCalledWith(expect.objectContaining({authDomain:'shogi-64125.web.app'}));
     expect(sdk.provider.setCustomParameters).toHaveBeenCalledWith({prompt:'select_account'});
     expect(sdk.init).toHaveBeenCalledWith(expect.anything(),{persistence:'memory-only',popupRedirectResolver:'popup-resolver'});
     expect(JSON.parse(store.getItem(KEY)!)).toMatchObject({uid:'new-user',refreshToken:'test-refresh',base:null});expect(replace).toHaveBeenCalledWith('/game.html');
