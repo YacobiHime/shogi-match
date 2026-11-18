@@ -471,7 +471,10 @@ function startStage(state, cycle, index, rng) {
     openLeagueRound(state, cycle, stage);
   } else if (def.type === 'series') {
     // タイトル戦は保持者(a)と挑戦者(b)。挑戦者が保持者と同じなら、前の段階の決勝の相手を繰り上げる(19-3の2)。
-    const [a, b] = def.title ? [cycle.holder, challengerOf(state, previousStage, cycle.holder)] : previous.slice(0, 2);
+    // 王位戦の挑戦者決定戦など、番勝負からの直接シードも出場者へ加える（25章）。
+    const directSeed = !def.title && cycle.withUser && cycle.entry === index && !userHolds;
+    const finalists = directSeed ? [PRO_USER_ID, ...previous.filter((id) => id !== PRO_USER_ID)] : previous;
+    const [a, b] = def.title ? [cycle.holder, challengerOf(state, previousStage, cycle.holder)] : finalists.slice(0, 2);
     stage.series = { a, b, need: def.need, wins: { [a]: 0, [b]: 0 }, twoDay: Boolean(def.twoDay) };
     stage.entrants = [a, b].filter(Boolean);
     stage.user = stage.entrants.includes(PRO_USER_ID);
@@ -488,6 +491,40 @@ function startStage(state, cycle, index, rng) {
     openSeriesGame(state, cycle, stage);
   } else if (def.type === 'junni') {
     startJunni(state, cycle, stage, rng);
+  }
+}
+
+/**
+ * 直接シードが出場者から抜けた前の保存を直す（25章）。実施済みの結果には触らない。
+ * 未実施の1局目だけを修復し、ほかの対局と重ならない日へ移す。
+ */
+function restoreDirectSeriesSeeds(state) {
+  for (const cycle of Object.values(state.cycles ?? {})) {
+    if (cycle.done || !cycle.withUser) continue;
+    const event = proEvent(cycle.event);
+    const index = cycle.entry;
+    const def = event?.stages[index];
+    let stage = cycle.stages[index];
+    if (def?.type !== 'series' || def.title || !stage || stage.done || stage.user
+      || state.titles[event.id] === PRO_USER_ID) continue;
+    const games = stage.rounds.flat().map((id) => state.games[id]);
+    if (games.length !== 1 || !games[0] || games[0].round !== 0 || games[0].winner || games[0].user) continue;
+    const previous = cycle.stages[index - 1]?.winners ?? [];
+    const opponent = previous.find((id) => id && id !== PRO_USER_ID);
+    if (!opponent) continue;
+    // packProYearの戻り値を直接読む場合も、元の保存や年の状態へ変更を漏らさない。
+    stage = structuredClone(stage);
+    state.cycles = { ...state.cycles, [cycle.id]: { ...cycle, stages: cycle.stages.map((entry, i) => i === index ? stage : entry) } };
+    stage.series = { ...stage.series, a: PRO_USER_ID, b: opponent, wins: { [PRO_USER_ID]: 0, [opponent]: 0 } };
+    stage.entrants = [PRO_USER_ID, opponent];
+    stage.user = true;
+    const game = games[0];
+    game.a = PRO_USER_ID;
+    game.b = opponent;
+    // game.userを付ける前に日を決める（自分自身を予定の衝突と数えない）。
+    game.date = roundDate(state, stage, 0, { withUser: true, twoDay: Boolean(game.twoDay) });
+    game.user = true;
+    game.label = gameLabel(state, game);
   }
 }
 
@@ -3023,6 +3060,7 @@ function userStatus(state, cycle) {
     if (stage.type === 'junni') return { text: `${CLASS_NAMES[stage.cls]} ${stage.result?.place ?? ''}位`, alive: false };
     return { text: `${stage.label}で敗退`, alive: false };
   }
+  if (cycle.done) return { text: '今期の棋戦は終了', alive: false };
   const first = event.stages[cycle.entry ?? 0];
   const start = stageWindow(cycle, first).start;
   return { text: `${first.label}から ${Number(start.slice(5, 7))}/${Number(start.slice(8))}〜`, alive: true, waiting: true };
@@ -3719,6 +3757,7 @@ export function unpackProYear(packed, roster) {
   if (restored.work === undefined) restored.work = null;
   // 結果の札のない前の保存(19-3の7)。
   if (!Array.isArray(restored.results)) restored.results = [];
+  restoreDirectSeriesSeeds(restored);
   return restored;
 }
 
