@@ -237,7 +237,18 @@ function copyMember(member) {
     style: member.style ?? null,
     repertoire: member.repertoire ?? null,
     character: member.character ?? null,
+    career: careerFromRoster(member),
   };
+}
+
+/**
+ * 棋士の1年を始める前の、その棋士の通算(名簿の通算の勝ち負け・タイトルの期数。25章)。
+ * 年度が替わるたびに、その年度の勝ち負けを足す(startNextYear)。タイトル・棋戦優勝は期が終わったときに足す(closeCycle)。
+ */
+function careerFromRoster(member) {
+  const titles = Object.fromEntries(Object.entries(member?.titleCounts ?? {}).filter(([, count]) => Number(count) > 0).map(([id, count]) => [id, Number(count)]));
+  if (Number(member?.ryuo) > 0) titles.ryuo = Number(member.ryuo);
+  return { w: Number(member?.record?.total?.wins) || 0, l: Number(member?.record?.total?.losses) || 0, titles, cups: {} };
 }
 
 const pros = (state) => Object.values(state.players).filter((member) => member.kind === 'pro' && member.id !== PRO_USER_ID);
@@ -780,7 +791,7 @@ function finishStage(state, cycle, stage, rng) {
     const userHolder = series?.a === PRO_USER_ID;
     if (userHolder || series?.b === PRO_USER_ID) settleUserTitle(state, cycle, stage, event, winner === PRO_USER_ID, userHolder);
     state.titles[event.id] = winner;
-    closeCycle(cycle, winner);
+    closeCycle(state, cycle, winner);
     awardPrize(state, cycle);
     if (winner === PRO_USER_ID) {
       withdrawNewHolder(state, event.id);
@@ -789,7 +800,7 @@ function finishStage(state, cycle, stage, rng) {
     return;
   }
   if (stage.index === event.stages.length - 1) {
-    closeCycle(cycle, stage.winners[0] ?? null);
+    closeCycle(state, cycle, stage.winners[0] ?? null);
     awardPrize(state, cycle);
     if (cycle.champion === PRO_USER_ID) pushResult(state, { type: 'cup', event: event.id, name: event.name, short: event.short });
     return;
@@ -963,8 +974,15 @@ export function clearProYearResults(source) {
 }
 
 /** 期の終わり。出場者の一覧は、次の段階のシードを選ぶためだけのものなので消す(保存を小さく)。 */
-function closeCycle(cycle, champion) {
+function closeCycle(state, cycle, champion) {
   cycle.champion = champion;
+  // 棋士の通算に、タイトルの期数・棋戦優勝を足す(25章)。
+  const member = champion ? state.players[champion] : null;
+  if (member) {
+    member.career ??= { w: 0, l: 0, titles: {}, cups: {} };
+    const box = proEvent(cycle.event)?.kind === 'title' ? (member.career.titles ??= {}) : (member.career.cups ??= {});
+    box[cycle.event] = (box[cycle.event] ?? 0) + 1;
+  }
   cycle.done = true;
   for (const stage of cycle.stages) if (stage) delete stage.entrants;
 }
@@ -1100,6 +1118,13 @@ function countRecord(state, winner, loser, fee = 0) {
       record.streak = 0;
     }
     if (fee) earn(state, id, fee, 'fee');
+  }
+  // あなたとの対戦成績(棋士の1年のあいだの通算。25章)。
+  if (winner === PRO_USER_ID || loser === PRO_USER_ID) {
+    const other = winner === PRO_USER_ID ? loser : winner;
+    const vs = ((state.user.vs ??= {})[other] ??= { w: 0, l: 0 });
+    if (winner === PRO_USER_ID) vs.w += 1;
+    else vs.l += 1;
   }
 }
 
@@ -1951,6 +1976,14 @@ export function startNextYear(source) {
   if (state.user.ryuoResult) state.user.group = state.user.ryuoResult.next;
   state.user.ryuoResult = null;
   state.history = [...(state.history ?? []), state.summary].slice(-20);
+  // その年度の勝ち負けを、棋士の通算に足す(25章)。
+  for (const [id, record] of Object.entries(state.year.records ?? {})) {
+    const member = state.players[id];
+    if (!member) continue;
+    member.career ??= { w: 0, l: 0, titles: {}, cups: {} };
+    member.career.w += record.w ?? 0;
+    member.career.l += record.l ?? 0;
+  }
   state.fy += 1;
   state.date = yearStart(state.fy);
   state.year = emptyYear();
@@ -1988,11 +2021,14 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   const world = Number.isFinite(settings.world) ? settings.world : recommendedWorldLevel(userLevel);
   players[PRO_USER_ID] = {
     id: PRO_USER_ID, name: userName || 'あなた', kind: 'pro', dan: '四段', group: userGroup, rating: worldRating(userLevel, world), age: 18, story: null, you: true,
+    career: { w: 0, l: 0, titles: {}, cups: {} },
   };
   // 羽音は、プレイヤーと同じ年度の新四段(3章の13)。竜王戦の組と順位戦のクラスもプレイヤーと同じところから。
   const hanane = Object.values(players).find((member) => member.story === HANANE);
   if (hanane) {
     hanane.dan = '四段';
+    // デビューしたばかりなので、通算は0から(25章)。
+    hanane.career = { w: 0, l: 0, titles: {}, cups: {} };
     hanane.group = clamp(Math.round(userGroup), 1, 6);
   }
   const fresh = new Set([PRO_USER_ID, hanane?.id].filter(Boolean));
@@ -2000,6 +2036,11 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
   for (const event of TITLE_EVENTS) {
     const holder = event === 'ryuo' ? roster?.holder : roster?.titles?.[event];
     titles[event] = holder && !fresh.has(holder) && players[holder] ? holder : byRating(Object.values(players).filter((member) => !fresh.has(member.id)))[0]?.id ?? null;
+  }
+  // いまの保持者は、そのタイトルを少なくとも1期取ったことにする(名簿の外から選んだ保持者の通算が0期にならないように。25章)。
+  for (const [event, holder] of Object.entries(titles)) {
+    const member = holder ? players[holder] : null;
+    if (member && !(member.career.titles[event] > 0)) member.career.titles[event] = 1;
   }
   const junniWorld = junniClasses(roster);
   const userClass = Object.entries(junniWorld).find(([, ids]) => ids.includes(PRO_USER_ID))?.[0] ?? 'C2';
@@ -3585,6 +3626,98 @@ function blockBracket(state, cycle, stage, def, block) {
   };
 }
 
+// ---- 棋士の成績(25章)
+
+/** 成績の並べ方。 */
+export const PLAYER_SORTS = Object.freeze([
+  { id: 'year', label: '今年度', title: '今年度の勝ち数の順' },
+  { id: 'rate', label: '勝率', title: '今年度の勝率の順（5局以上）' },
+  { id: 'career', label: '通算', title: '通算の勝ち数の順' },
+  { id: 'titles', label: 'タイトル', title: 'いま持つタイトルと通算の期数の順' },
+]);
+/** 勝率で並べるときに数える、今年度の対局数の下限(少ない局数の10割を上に出さない)。 */
+export const RATE_MIN_GAMES = 5;
+
+const rateOf = (w, l) => (w + l ? w / (w + l) : 0);
+const rateLabel = (w, l) => (w + l ? `.${String(Math.round(rateOf(w, l) * 1000)).padStart(3, '0')}`.replace('.1000', '1.000') : '—');
+const sumValues = (box) => Object.values(box ?? {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+
+/** タイトルの期数・棋戦優勝の行(暦の順。0は出さない)。 */
+function honorRows(box) {
+  return PRO_EVENTS.filter((event) => Number(box?.[event.id]) > 0).map((event) => ({ id: event.id, name: event.kind === 'title' ? event.short : event.name, count: Number(box[event.id]) }));
+}
+
+/** 1人の棋士の成績の行(一覧とシートで共通)。通算は、前の年度までの通算に今年度を足したもの。 */
+function playerRow(state, id) {
+  const member = state.players[id];
+  const year = state.year.records[id] ?? { w: 0, l: 0, streak: 0, best: 0 };
+  const career = member.career ?? { w: 0, l: 0, titles: {}, cups: {} };
+  const held = TITLE_EVENTS.filter((event) => state.titles[event] === id).map((event) => proEvent(event).short);
+  const w = career.w + year.w;
+  const l = career.l + year.l;
+  return {
+    id,
+    name: nameOf(state, id),
+    dan: member.dan ?? '',
+    you: id === PRO_USER_ID,
+    story: member.story ?? null,
+    held,
+    year: { w: year.w, l: year.l, rate: rateLabel(year.w, year.l), streak: year.streak ?? 0, best: year.best ?? 0, games: year.w + year.l },
+    career: { w, l, rate: rateLabel(w, l), games: w + l },
+    titleTotal: sumValues(career.titles),
+    cupTotal: sumValues(career.cups),
+  };
+}
+
+/**
+ * 棋士の成績の一覧(25章)。あなたと、名簿のプロ棋士。
+ * @param {any} state
+ * @param {{ sort?: string }} [options]
+ */
+export function playersView(state, { sort = 'year' } = {}) {
+  if (!state) return { sort, rows: [] };
+  const ids = Object.keys(state.players).filter((id) => state.players[id]?.kind === 'pro' || id === PRO_USER_ID);
+  const rows = ids.map((id) => playerRow(state, id));
+  const byName = (a, b) => String(a.id).localeCompare(String(b.id));
+  const compare = {
+    year: (a, b) => b.year.w - a.year.w || a.year.l - b.year.l || byName(a, b),
+    rate: (a, b) => Number(b.year.games >= RATE_MIN_GAMES) - Number(a.year.games >= RATE_MIN_GAMES)
+      || rateOf(b.year.w, b.year.l) - rateOf(a.year.w, a.year.l) || b.year.w - a.year.w || byName(a, b),
+    career: (a, b) => b.career.w - a.career.w || a.career.l - b.career.l || byName(a, b),
+    titles: (a, b) => b.held.length - a.held.length || b.titleTotal - a.titleTotal || b.cupTotal - a.cupTotal || b.career.w - a.career.w || byName(a, b),
+  }[sort] ?? ((a, b) => b.year.w - a.year.w || byName(a, b));
+  rows.sort(compare);
+  return { sort, rows: rows.map((row, index) => ({ ...row, rank: index + 1 })) };
+}
+
+/**
+ * 1人の棋士のくわしい成績(25章): 段位・年齢・所属(竜王戦の組・順位戦のクラス)、今年度、通算、タイトル(保持・経験)、棋戦優勝、
+ * 今年度の獲得の順位、あなたとの対戦成績。
+ * @param {any} state
+ * @param {string} id
+ */
+export function playerCareerView(state, id) {
+  const member = state?.players?.[id];
+  if (!member) return null;
+  const row = playerRow(state, id);
+  const career = member.career ?? { titles: {}, cups: {} };
+  const cls = id === PRO_USER_ID ? state.user.cls : Object.entries(state.junni ?? {}).find(([, ids]) => (ids ?? []).includes(id))?.[0] ?? null;
+  const earn = state.year.earn ?? {};
+  const amount = earn[id] ?? 0;
+  const earnRank = amount > 0 ? 1 + Object.keys(state.players).filter((other) => (state.players[other]?.kind === 'pro' || other === PRO_USER_ID) && (earn[other] ?? 0) > amount).length : null;
+  const vs = id === PRO_USER_ID ? null : state.user.vs?.[id] ?? null;
+  return {
+    ...row,
+    age: member.age ?? null,
+    group: id === PRO_USER_ID ? state.user.group : member.group ?? null,
+    cls: cls ? CLASS_NAMES[cls] ?? cls : '',
+    titles: honorRows(career.titles).map((entry) => ({ ...entry, held: row.held.includes(entry.name) })),
+    cups: honorRows(career.cups),
+    earn: { amount, rank: earnRank },
+    vs: vs ? { w: vs.w, l: vs.l } : null,
+  };
+}
+
 /**
  * 観戦(10-2の2)の中継の項目(`relay-games.mjs`の項目と同じ形)。決着した、自分の出ない、まねの記録のある対局だけ。
  * @param {any} state
@@ -3653,6 +3786,8 @@ export function packProYear(state) {
   if (!state) return null;
   const players = Object.fromEntries(Object.values(state.players).map((member) => [member.id, {
     n: member.name, r: member.rating, d: member.dan, g: member.group, a: member.age, s: member.story ?? null, k: member.kind, ...(member.you ? { y: 1 } : {}),
+    // 通算(25章): [勝, 負]・タイトルの期数・棋戦優勝(0の棋戦は書かない)。
+    ...(member.career ? { c: [member.career.w, member.career.l], ...(Object.keys(member.career.titles ?? {}).length ? { h: member.career.titles } : {}), ...(Object.keys(member.career.cups ?? {}).length ? { u: member.career.cups } : {}) } : {}),
   }]));
   // 対局は[番号, 期, 段階, 回戦, 先, 後, 日, 勝ち(0まだ・1先・2後), 印(1自分・2二日制・4分身), 組, 名前の札(自分の対局だけ)]。
   const games = Object.values(state.games).map((game) => {
@@ -3679,6 +3814,10 @@ export function unpackProYear(packed, roster) {
     players[id] = { id, name: entry.n, rating: entry.r, dan: entry.d, group: entry.g, age: entry.a, story: entry.s, kind: entry.k ?? 'pro' };
     if (entry.y) players[id].you = true;
     else Object.assign(players[id], { style: source?.style ?? null, repertoire: source?.repertoire ?? null, character: source?.character ?? null });
+    // 通算のない前の保存(25章)は、名簿の通算から始める。
+    players[id].career = Array.isArray(entry.c)
+      ? { w: Number(entry.c[0]) || 0, l: Number(entry.c[1]) || 0, titles: { ...(entry.h ?? {}) }, cups: { ...(entry.u ?? {}) } }
+      : entry.y ? { w: 0, l: 0, titles: {}, cups: {} } : careerFromRoster(source);
   }
   const games = {};
   for (const row of Array.isArray(packed.games) ? packed.games : []) {

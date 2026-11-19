@@ -295,6 +295,27 @@
             </li>
           </ul>
 
+          <!-- 棋士の成績(25章)。並べ方を選び、行を押すとくわしい成績のシート。一覧は枠の中で動かす(U:7-5)。 -->
+          <div v-show="sideTab === 'players'" class="pro-year__players" data-pro-players>
+            <div class="pro-year__chips pro-year__players-sort" role="radiogroup" aria-label="並べ方">
+              <button v-for="item in PLAYER_SORTS" :key="item.id" type="button" role="radio" class="pro-year__chip" :aria-checked="playerSort === item.id" :aria-label="item.title" :data-pro-player-sort="item.id" @click="playerSort = item.id">{{ item.label }}</button>
+            </div>
+            <p class="pro-year__players-head" aria-hidden="true"><span>棋士</span><span>今年度</span><span>通算</span></p>
+            <ol class="pro-year__players-list">
+              <li v-for="row in playerRows" :key="row.id">
+                <button type="button" class="pro-year__player" :class="{ 'pro-year__player--you': row.you, 'pro-year__player--rival': row.story === 'hanane' }" :data-pro-player="row.id" @click="openPlayer(row.id)">
+                  <span class="pro-year__player-rank">{{ row.rank }}</span>
+                  <span class="pro-year__player-name">
+                    <b>{{ row.you ? playerName : row.name }}</b>
+                    <small>{{ row.dan }}<template v-if="row.held.length">・{{ row.held.join("・") }}</template><template v-else-if="row.titleTotal">・タイトル{{ row.titleTotal }}期</template></small>
+                  </span>
+                  <span class="pro-year__player-num">{{ row.year.w }}-{{ row.year.l }}<small>{{ row.year.rate }}</small></span>
+                  <span class="pro-year__player-num">{{ row.career.w }}-{{ row.career.l }}<small>{{ row.career.rate }}</small></span>
+                </button>
+              </li>
+            </ol>
+          </div>
+
           <!-- 成績 -->
           <div v-show="sideTab === 'record'" class="pro-year__record" data-pro-record>
             <div class="pro-year__stats">
@@ -643,6 +664,39 @@
         </div>
       </div>
 
+      <!-- 棋士のくわしい成績(25章)。所属・今年度・通算・タイトル・棋戦優勝・あなたとの対戦と、能力のチャート。 -->
+      <div v-if="playerDetail" class="shogi-tournament__sheet" role="dialog" aria-modal="true" :aria-label="`${playerDetail.you ? playerName : playerDetail.name}の成績`" data-pro-player-sheet @click.self="playerId = ''">
+        <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet pro-year__player-sheet">
+          <h2>{{ playerDetail.you ? playerName : playerDetail.name }}<small>{{ playerDetail.dan }}<template v-if="playerDetail.age && !playerDetail.you">・{{ playerDetail.age }}歳</template></small></h2>
+          <p class="pro-year__player-belong">
+            <span v-if="playerDetail.group">竜王戦 {{ playerDetail.group }}組</span>
+            <span v-if="playerDetail.cls">順位戦 {{ playerDetail.cls }}</span>
+            <span v-if="playerDetail.held.length" class="pro-year__player-held">{{ playerDetail.held.join("・") }}</span>
+          </p>
+          <dl class="pro-year__player-stats">
+            <div><dt>今年度</dt><dd>{{ playerDetail.year.w }}勝{{ playerDetail.year.l }}敗<small>勝率 {{ playerDetail.year.rate }}・最多連勝 {{ playerDetail.year.best }}</small></dd></div>
+            <div><dt>通算</dt><dd>{{ playerDetail.career.w }}勝{{ playerDetail.career.l }}敗<small>勝率 {{ playerDetail.career.rate }}</small></dd></div>
+            <div><dt>獲得</dt><dd>{{ moneyText(playerDetail.earn.amount) }}<small v-if="playerDetail.earn.rank">今年度 {{ playerDetail.earn.rank }}位</small></dd></div>
+            <div v-if="playerDetail.vs"><dt>あなたと</dt><dd>あなたの{{ playerDetail.vs.w }}勝{{ playerDetail.vs.l }}敗</dd></div>
+          </dl>
+          <h3 class="pro-year__subhead">タイトル<small>（{{ playerDetail.titleTotal ? `通算${playerDetail.titleTotal}期` : "経験なし" }}）</small></h3>
+          <ul v-if="playerDetail.titles.length" class="pro-year__player-honors" data-pro-player-titles>
+            <li v-for="item in playerDetail.titles" :key="item.id" :class="{ 'pro-year__player-honor--held': item.held }">{{ item.name }}<b>{{ item.count }}期</b><small v-if="item.held">保持</small></li>
+          </ul>
+          <template v-if="playerDetail.cups.length">
+            <h3 class="pro-year__subhead">棋戦優勝<small>（{{ playerDetail.cupTotal }}回）</small></h3>
+            <ul class="pro-year__player-honors" data-pro-player-cups>
+              <li v-for="item in playerDetail.cups" :key="item.id">{{ item.name }}<b>{{ item.count }}回</b></li>
+            </ul>
+          </template>
+          <template v-if="playerAbility">
+            <h3 class="pro-year__subhead">能力</h3>
+            <PlayerAbilityPanel :view="playerAbility" :compare="avatarCompare" :own-label="playerDetail.name" />
+          </template>
+          <button type="button" class="shogi-tournament__sub shogi-tournament__sheet-close" data-pro-player-close @click="playerId = ''">閉じる</button>
+        </div>
+      </div>
+
       <!-- 人のシート(15-3の1・3)。段の棒・次の場面まで・段5の効き目。 -->
       <div v-if="peopleOpen && week" class="shogi-tournament__sheet" role="dialog" aria-modal="true" aria-label="人" data-pro-people-sheet @click.self="peopleOpen = false">
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
@@ -926,7 +980,7 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, seriesRivalIds, weekView,
+  CLASS_NAMES, PLAYER_SORTS, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, playerCareerView, playersView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, seriesRivalIds, weekView,
   yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
@@ -1214,6 +1268,18 @@ const opponentAbility = computed<any>(() => {
   return id && props.state?.pending?.gameId ? memberAbilityView(props.state.players?.[id]) : null;
 });
 const opponentCompareOn = ref(true);
+// ---- 棋士の成績(25章)
+const playerSort = ref("year");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const playerRows = computed<any[]>(() => (tab.value === "players" ? playersView(props.state, { sort: playerSort.value }).rows : []));
+const playerId = ref("");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const playerDetail = computed<any>(() => (playerId.value && props.state ? playerCareerView(props.state, playerId.value) : null));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const playerAbility = computed<any>(() => (playerDetail.value && !playerDetail.value.you ? memberAbilityView(props.state?.players?.[playerId.value]) : null));
+function openPlayer(id: string) {
+  playerId.value = id;
+}
 const opponentOpen = ref(false);
 function openOpponent() {
   if (wide.value) tab.value = "opponent";
@@ -1325,13 +1391,14 @@ const tabs = [
   { id: "calendar", label: "カレンダー" },
   { id: "events", label: "棋戦" },
   { id: "record", label: "成績" },
+  { id: "players", label: "棋士" },
 ] as const;
 // 広い画面の右の列は、対局の日に「相手」のタブ(相手の能力。16-3の5)を先頭に足し、開いておく。
 const sideTabs = computed(() => [
   ...(opponentAbility.value ? [{ id: "opponent" as const, label: "相手" }] : []),
   ...tabs.filter((item) => item.id !== "week"),
 ]);
-const tab = ref<"week" | "calendar" | "events" | "record" | "opponent">("week");
+const tab = ref<"week" | "calendar" | "events" | "record" | "players" | "opponent">("week");
 const sideTab = computed(() => (tab.value === "week" || (tab.value === "opponent" && !opponentAbility.value) ? "calendar" : tab.value));
 watch(() => (opponentAbility.value ? props.state?.pending?.gameId : null), (gameId) => {
   if (gameId && wide.value) tab.value = "opponent";
@@ -1585,6 +1652,7 @@ function goBack() {
   else if (peopleOpen.value) peopleOpen.value = false;
   else if (closeConfirm.value) closeConfirm.value = false;
   else if (opponentOpen.value) opponentOpen.value = false;
+  else if (playerId.value) playerId.value = "";
   else if (meetOpen.value) meetOpen.value = false;
   else if (eventId.value) eventId.value = "";
   else if (dayDate.value) dayDate.value = "";
@@ -1852,6 +1920,10 @@ defineExpose({ goBack });
   color: #fffcf4; background: transparent; font: inherit; font-size: 0.85rem; font-weight: 800; cursor: pointer;
 }
 .shogi-game .pro-year__tabs button[aria-selected="true"] { color: #172632; background: var(--amber, #f1a54c); border-color: var(--amber, #f1a54c); }
+/* 狭い画面(タブ5つ。25章で「棋士」を足した): 文字を折り返さず、余白を詰めて1行に収める。 */
+@media (max-width: 420px) {
+  .shogi-game .pro-year__tabs button { flex: 1 1 auto; padding-inline: 0.35rem; font-size: 0.8rem; white-space: nowrap; }
+}
 /* カレンダー */
 .shogi-game .pro-year__calendar { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0.3rem; min-height: 0; }
 .shogi-game .pro-year__month-bar { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; }
@@ -1915,6 +1987,41 @@ defineExpose({ goBack });
 .shogi-game .pro-year__rival span { display: grid; }
 .shogi-game .pro-year__rival small { color: #cfd8de; font-size: 0.72rem; }
 .shogi-game .pro-year__rival-face { width: 2.2rem; height: 2.2rem; flex: none; border-radius: 50%; background: #2b465b; }
+/* 棋士の成績(25章)。並べ方の札・見出し・一覧(枠の中で動かす)。数は右寄せで桁をそろえる。 */
+.shogi-game .pro-year__players { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 0.35rem; min-height: 0; color: #fffcf4; }
+.shogi-game .pro-year__players-sort { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.shogi-game .pro-year__players-sort .pro-year__chip { min-height: 44px; padding-inline: 0.3rem; }
+.shogi-game .pro-year__players-head,
+.shogi-game .pro-year__player { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) 4.6em 5.4em; align-items: center; gap: 0.4rem; }
+.shogi-game .pro-year__players-head { margin: 0; padding: 0 0.5rem; color: #9fb3c8; font-size: 0.72rem; }
+.shogi-game .pro-year__players-head span:first-child { grid-column: 1 / 3; }
+.shogi-game .pro-year__players-head span:not(:first-child) { text-align: right; }
+.shogi-game .pro-year__players-list { display: grid; align-content: start; gap: 0.2rem; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.shogi-game .pro-year__player {
+  width: 100%; min-height: 44px; padding: 0.3rem 0.5rem; border: 1px solid rgba(255, 252, 244, 0.14); border-radius: 0.5rem;
+  color: #fffcf4; background: rgba(43, 70, 91, 0.45); box-shadow: none; text-align: left; font: inherit;
+}
+.shogi-game .pro-year__player:hover { background: rgba(43, 70, 91, 0.75); transform: none; }
+.shogi-game .pro-year__player--you { border-color: var(--amber, #f1a54c); background: rgba(241, 165, 76, 0.18); }
+.shogi-game .pro-year__player--rival { box-shadow: inset 4px 0 0 #8a5ad1; }
+.shogi-game .pro-year__player-rank { color: #9fb3c8; font-size: 0.78rem; font-weight: 800; text-align: right; }
+.shogi-game .pro-year__player-name { display: grid; min-width: 0; }
+.shogi-game .pro-year__player-name b, .shogi-game .pro-year__player-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .pro-year__player-name small { color: #cfd8de; font-size: 0.72rem; }
+.shogi-game .pro-year__player-num { display: grid; justify-items: end; font-weight: 800; font-variant-numeric: tabular-nums; }
+.shogi-game .pro-year__player-num small { color: #9fb3c8; font-size: 0.7rem; font-weight: 600; }
+.shogi-game .pro-year__player-sheet h2 small { margin-left: 0.4rem; color: #9fb3c8; font-size: 0.8rem; }
+.shogi-game .pro-year__player-belong { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; margin: 0; font-size: 0.85rem; }
+.shogi-game .pro-year__player-held { color: #3a2405; padding: 0 0.5rem; border-radius: 999px; background: #f6d55c; font-weight: 900; }
+.shogi-game .pro-year__player-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.35rem; margin: 0; }
+.shogi-game .pro-year__player-stats div { padding: 0.35rem 0.5rem; border-radius: 0.5rem; background: rgba(43, 70, 91, 0.55); }
+.shogi-game .pro-year__player-stats dt { color: #9fb3c8; font-size: 0.72rem; }
+.shogi-game .pro-year__player-stats dd { display: grid; margin: 0; font-weight: 900; }
+.shogi-game .pro-year__player-stats dd small { color: #cfd8de; font-size: 0.72rem; font-weight: 600; }
+.shogi-game .pro-year__player-honors { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__player-honors li { display: flex; align-items: baseline; gap: 0.3rem; padding: 0.15rem 0.6rem; border-radius: 999px; background: rgba(255, 252, 244, 0.1); font-size: 0.85rem; }
+.shogi-game .pro-year__player-honors .pro-year__player-honor--held { color: #3a2405; background: #f6d55c; }
+.shogi-game .pro-year__player-honors small { font-size: 0.7rem; }
 .shogi-game .pro-year__subhead { margin: 0.2rem 0 0; color: var(--amber, #f1a54c); font-size: 0.85rem; }
 .shogi-game .pro-year__log { display: grid; gap: 0.2rem; margin: 0; padding: 0; list-style: none; font-size: 0.82rem; }
 .shogi-game .pro-year__log li { display: grid; grid-template-columns: 3.6rem minmax(0, 1fr); gap: 0.4rem; }
@@ -2118,6 +2225,7 @@ defineExpose({ goBack });
 .shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__calendar,
 .shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__events,
 .shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__record,
+.shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__players,
 .shogi-game .pro-year__stage--wide .pro-year__side > .pro-year__opponent { min-height: 0; overflow: auto; }
 /* 決めるボタンは主役なので大きく(UD:4、U:7-4)。 */
 .shogi-game .pro-year__stage .pro-year__advance button,
