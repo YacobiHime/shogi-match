@@ -1008,19 +1008,125 @@ function startJunni(state, cycle, stage, rng) {
   stage.wins = Object.fromEntries(members.map((id) => [id, 0]));
   stage.losses = Object.fromEntries(members.map((id) => [id, 0]));
   stage.met = { [PRO_USER_ID]: [] };
-  const rounds = cls ? CLASS_RULES[cls]?.rounds ?? 10 : 0;
+  // プレイヤーのいない期(デビュー前・名人のとき)も、ほかのクラスと同じように回戦ごとに進める(26章)。
+  const rounds = cls ? CLASS_RULES[cls]?.rounds ?? 10 : JUNNI_ROUNDS_NO_USER;
   stage.dates = roundDates({ start: stage.start, end: stage.end }, Math.max(1, rounds));
-  if (!cls) {
-    // プレイヤーがいない期(デビュー前・名人のとき): A級の1位だけ決める(名人の年度は、A級の対局を年間成績に数える)。
-    stage.winners = [junniAWinner(state, rng, { count: cycle.withUser })];
-    finishStage(state, cycle, stage, rng);
-    return;
-  }
+  openOtherLeagues(state, stage, cls);
   openJunniRound(state, cycle, stage, rng);
+}
+
+/** プレイヤーのいない期の順位戦の回戦の数(ほかのクラスの対局は、この回戦の日に割り振る)。 */
+const JUNNI_ROUNDS_NO_USER = 10;
+const JUNNI_CLASS_ORDER = Object.freeze(['A', 'B1', 'B2', 'C1', 'C2']);
+const PREV_CLASS = Object.freeze({ A: 'B1', B1: 'B2', B2: 'C1', C1: 'C2', C2: 'C2' });
+
+/**
+ * プレイヤーのクラスのほかの4つ(プレイヤーがいなければ5つ)のクラスのリーグを作る(26章)。
+ * 名人はA級を指さない。総当たりのクラス(A級・B級1組)は総当たりの組み合わせ、ほかは回戦ごとにまだ当たっていない相手と組む。
+ */
+function openOtherLeagues(state, stage, skipCls) {
+  stage.leagues = {};
+  for (const cls of JUNNI_CLASS_ORDER) {
+    if (cls === skipCls) continue;
+    const members = (state.junni[cls] ?? []).filter((id) => state.players[id] && id !== PRO_USER_ID && !(cls === 'A' && id === state.titles.meijin));
+    if (members.length < 2) continue;
+    const rule = CLASS_RULES[cls] ?? { rounds: 10 };
+    const schedule = rule.roundRobin ? roundRobin(members) : null;
+    const rounds = Math.min(rule.rounds, schedule ? schedule.length : rule.rounds);
+    stage.leagues[cls] = {
+      members,
+      wins: Object.fromEntries(members.map((id) => [id, 0])),
+      losses: Object.fromEntries(members.map((id) => [id, 0])),
+      played: 0,
+      rounds,
+      ...(schedule ? { schedule: schedule.slice(0, rounds) } : { met: Object.fromEntries(members.map((id) => [id, []])) }),
+    };
+  }
+}
+
+/** まだ当たっていない相手と組む(当たれる相手がいなければ、残りのだれかと)。 */
+function pairUnmet(rng, members, met) {
+  const left = shuffle(rng, members);
+  const pairs = [];
+  while (left.length > 1) {
+    const a = left.shift();
+    const index = left.findIndex((id) => !met[a]?.includes(id));
+    const [b] = left.splice(index >= 0 ? index : 0, 1);
+    pairs.push([a, b]);
+  }
+  return pairs;
+}
+
+/** 順位戦の回戦の日に、ほかのクラスの対局を進める(クラスの対局数を、期の回戦の日に割り振る)。count: 年間成績に数えるか。 */
+function playOtherLeagues(state, cycle, stage, rng, round) {
+  const total = Math.max(1, stage.dates.length);
+  for (const [cls, league] of Object.entries(stage.leagues ?? {})) {
+    const due = Math.round(((round + 1) * league.rounds) / total);
+    while (league.played < Math.min(due, league.rounds)) {
+      const pairs = league.schedule ? league.schedule[league.played] ?? [] : pairUnmet(rng, league.members, league.met);
+      for (const [a, b] of pairs) {
+        const aWins = simulateMemberGame(rng, state.players[a], state.players[b]).aWins;
+        const [winner, loser] = aWins ? [a, b] : [b, a];
+        league.wins[winner] += 1;
+        league.losses[loser] += 1;
+        if (league.met) {
+          league.met[a].push(b);
+          league.met[b].push(a);
+        }
+        if (cycle.withUser) countRecord(state, winner, loser, gameFee({ type: 'junni', cls }));
+      }
+      league.played += 1;
+    }
+  }
+}
+
+/** クラスの順位の行(勝ち数、同じなら前の期の順位=並びの順)。 */
+function junniLeagueRows(league) {
+  return league.members
+    .map((id, order) => ({ id, order, wins: league.wins[id] ?? 0, losses: league.losses[id] ?? 0 }))
+    .sort((a, b) => b.wins - a.wins || a.order - b.order);
+}
+
+/**
+ * 期の終わり(26章): ほかのクラスの組み合わせの控えを消し(保存を小さく)、プレイヤーのいる年度なら、昇級・降級を順位戦の世界に写す。
+ * 上がるのは各クラスの上位(昇級の人数)、下がるのはA級・B級1組の下位(降級の人数)。B級2組から下の降級点は数えない。
+ */
+function finishOtherLeagues(state, cycle, stage) {
+  const moves = [];
+  const tables = Object.entries(stage.leagues ?? {}).map(([cls, league]) => [cls, junniLeagueRows(league)]);
+  if (stage.cls) tables.push([stage.cls, junniRows(state, stage)]);
+  for (const [cls, rows] of tables) {
+    const rule = CLASS_RULES[cls] ?? {};
+    const ids = rows.map((row) => row.id).filter((id) => id !== PRO_USER_ID);
+    if (cls !== 'A') for (const id of ids.slice(0, rule.promote ?? 0)) moves.push([id, cls, NEXT_CLASS[cls]]);
+    if (rule.relegate) for (const id of ids.slice(-rule.relegate)) moves.push([id, cls, PREV_CLASS[cls]]);
+  }
+  for (const league of Object.values(stage.leagues ?? {})) {
+    delete league.schedule;
+    delete league.met;
+  }
+  if (!cycle.withUser) return;
+  for (const [id, from, to] of moves) {
+    if (!to || to === from) continue;
+    state.junni[from] = (state.junni[from] ?? []).filter((entry) => entry !== id);
+    state.junni[to] = [...(state.junni[to] ?? []), id];
+  }
+}
+
+/** A級の1位(名人戦の挑戦者)。A級のリーグがなければ、前の決め方。 */
+function junniChallenger(state, stage, rng) {
+  if (stage.cls === 'A') return junniRows(state, stage)[0]?.id ?? null;
+  const league = stage.leagues?.A;
+  return league ? junniLeagueRows(league)[0]?.id ?? null : junniAWinner(state, rng, { count: false });
 }
 
 function openJunniRound(state, cycle, stage, rng) {
   const round = stage.rounds.length;
+  // プレイヤーのいない期は、回戦の日だけ置く(ほかのクラスは閉じるときに進める。26章)。
+  if (!stage.cls) {
+    stage.rounds[round] ??= [];
+    return;
+  }
   // プレイヤーの相手(まだ当たっていない、同じクラスの棋士)。ほかの棋士どうしは結果だけ(閉じるときに数える)。
   const met = stage.met[PRO_USER_ID];
   const choices = stage.members.filter((id) => id !== PRO_USER_ID && !met.includes(id));
@@ -1040,6 +1146,17 @@ function openJunniRound(state, cycle, stage, rng) {
 
 function closeJunniRound(state, cycle, stage, rng) {
   const round = stage.rounds.length - 1;
+  if (!stage.cls) {
+    playOtherLeagues(state, cycle, stage, rng, round);
+    if (round + 1 < stage.dates.length) {
+      openJunniRound(state, cycle, stage, rng);
+      return;
+    }
+    stage.winners = [junniChallenger(state, stage, rng)].filter(Boolean);
+    finishOtherLeagues(state, cycle, stage);
+    finishStage(state, cycle, stage, rng);
+    return;
+  }
   const busy = new Set();
   for (const id of stage.rounds[round] ?? []) {
     const game = state.games[id];
@@ -1058,6 +1175,7 @@ function closeJunniRound(state, cycle, stage, rng) {
     stage.losses[aWins ? b : a] += 1;
     countRecord(state, aWins ? a : b, aWins ? b : a, gameFee({ type: 'junni', cls: stage.cls }));
   }
+  playOtherLeagues(state, cycle, stage, rng, round);
   if (round + 1 < stage.dates.length) {
     openJunniRound(state, cycle, stage, rng);
     return;
@@ -1073,7 +1191,8 @@ function closeJunniRound(state, cycle, stage, rng) {
   noteMilestone(state, { event: 'meijin', kind: promoted ? 'advance' : 'plain', text: junniText });
   if (promoted) pushResult(state, { type: 'promote', event: 'meijin', text: `順位戦 ${CLASS_NAMES[stage.cls]}から${CLASS_NAMES[NEXT_CLASS[stage.cls]] ?? ''}へ昇級`, sub: junniText });
   // A級の1位が名人戦の挑戦者(プレイヤーがA級なら、そのリーグの1位。ほかのクラスなら、A級を勝率で決める)。
-  stage.winners = [stage.cls === 'A' ? rows[0].id : junniAWinner(state, rng, { count: true })];
+  stage.winners = [junniChallenger(state, stage, rng)].filter(Boolean);
+  finishOtherLeagues(state, cycle, stage);
   finishStage(state, cycle, stage, rng);
 }
 
@@ -3473,6 +3592,34 @@ export function eventView(state, eventId) {
   };
 }
 
+/**
+ * 順位戦の1つのクラスの表(26章)。印は、A級の1位が挑戦者(まだなら首位)、上位が昇級(まだなら昇級圏)、
+ * A級・B級1組の下位が降級(まだなら降級圏)。何回戦まで終わったか(いちばん多く指した棋士の局数)。
+ */
+function junniTable(state, cls, rows, { done = false, you = false, rounds = null } = {}) {
+  const rule = CLASS_RULES[cls] ?? {};
+  const total = rounds ?? rule.rounds ?? 10;
+  const played = Math.min(total, Math.max(0, ...rows.map((row) => row.wins + row.losses)));
+  const size = rows.length;
+  const markOf = (index) => {
+    if (!played) return null;
+    if (cls === 'A' && index === 0) return done ? { id: 'challenger', text: '挑戦者' } : { id: 'top', text: '首位' };
+    if (cls !== 'A' && index < (rule.promote ?? 0)) return done ? { id: 'up', text: '昇級' } : { id: 'up-zone', text: '昇級圏' };
+    if (rule.relegate && index >= size - rule.relegate) return done ? { id: 'down', text: '降級' } : { id: 'down-zone', text: '降級圏' };
+    return null;
+  };
+  return {
+    cls,
+    name: CLASS_NAMES[cls] ?? cls,
+    you,
+    played,
+    rounds: total,
+    done,
+    rule: cls === 'A' ? '1位が名人に挑戦' : `上位${rule.promote ?? 0}人が昇級${rule.relegate ? `・下位${rule.relegate}人が降級` : ''}`,
+    rows: rows.map((row, index) => ({ rank: index + 1, ...card(state, row.id), wins: row.wins, losses: row.losses, mark: markOf(index) })),
+  };
+}
+
 function stageDetail(state, cycle, stage, def) {
   if (stage.type === 'series') {
     const games = (stage.rounds ?? []).flat().map((id) => state.games[id]).filter(Boolean);
@@ -3499,22 +3646,32 @@ function stageDetail(state, cycle, stage, def) {
   }
   if (stage.type === 'league') {
     return {
-      groups: stage.groups.map((group) => ({
-        name: group.name,
-        rows: leagueRows(state, group).map((row, index) => ({ rank: index + 1, ...card(state, row.id), wins: row.wins, losses: row.losses })),
-      })),
+      groups: stage.groups.map((group) => {
+        const rows = leagueRows(state, group);
+        // 何回戦まで終わったか(26章。いちばん多く指した棋士の局数)。
+        const played = Math.max(0, ...rows.map((row) => row.wins + row.losses));
+        return {
+          name: group.name,
+          played,
+          rounds: group.schedule?.length ?? 0,
+          done: Boolean(stage.done),
+          rows: rows.map((row, index) => ({ rank: index + 1, ...card(state, row.id), wins: row.wins, losses: row.losses, mark: index === 0 && played ? { id: stage.done ? 'challenger' : 'top', text: stage.done ? '1位' : '首位' } : null })),
+        };
+      }),
       winners: stage.winners.map((id) => card(state, id)),
     };
   }
   if (stage.type === 'junni') {
-    if (!stage.cls) return { winners: stage.winners.map((id) => card(state, id)) };
-    const rows = junniRows(state, stage);
-    const mine = rows.findIndex((row) => row.id === PRO_USER_ID);
+    // 順位戦(26章): 5つのクラスの順位表。あなたのクラスを先に、あとはA級から。
+    const tables = [];
+    if (stage.cls) tables.push(junniTable(state, stage.cls, junniRows(state, stage), { done: stage.done, you: true }));
+    for (const cls of JUNNI_CLASS_ORDER) {
+      const league = stage.leagues?.[cls];
+      if (league) tables.push(junniTable(state, cls, junniLeagueRows(league), { done: stage.done, rounds: league.rounds }));
+    }
     return {
-      cls: CLASS_NAMES[stage.cls],
-      promote: CLASS_RULES[stage.cls]?.promote ?? 0,
-      rows: rows.map((row, index) => ({ rank: index + 1, ...card(state, row.id), wins: row.wins, losses: row.losses }))
-        .filter((_, index) => index < 6 || Math.abs(index - mine) <= 2),
+      leagues: tables,
+      cls: stage.cls ? CLASS_NAMES[stage.cls] : '',
       winners: stage.winners.map((id) => card(state, id)),
     };
   }

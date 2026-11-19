@@ -898,25 +898,43 @@
             <p class="pro-year__note">○●は{{ nameText(shownStage.series.a) }}から見た星。{{ shownStage.series.need }}勝で決まり。</p>
           </div>
           <!-- リーグ -->
-          <div v-else-if="shownStage.groups" class="pro-year__tables">
-            <table v-for="group in shownStage.groups" :key="group.name" class="team-battle__table">
-              <caption v-if="group.name">{{ group.name }}</caption>
+          <!-- リーグ(王位リーグなど)。組ごとの順位表と何回戦まで終わったか(26章)。 -->
+          <div v-else-if="shownStage.groups" class="pro-year__tables" data-pro-league>
+            <table v-for="group in shownStage.groups" :key="group.name" class="team-battle__table pro-year__league-table">
+              <caption>{{ group.name ? `${group.name}・` : "" }}{{ group.done ? "全局終了" : `${group.played}/${group.rounds}回戦まで` }}</caption>
               <tbody>
-                <tr v-for="row in group.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
-                  <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+                <tr v-for="row in group.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you, 'pro-year__league-row--rival': row.story === 'hanane' }">
+                  <td>{{ row.rank }}</td><td>{{ nameText(row) }}<small v-if="row.dan" class="pro-year__league-dan">{{ row.dan }}</small></td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+                  <td><b v-if="row.mark" class="pro-year__league-mark" :class="`pro-year__league-mark--${row.mark.id}`">{{ row.mark.text }}</b></td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <!-- 順位戦 -->
-          <table v-else-if="shownStage.rows" class="team-battle__table">
-            <caption>{{ shownStage.cls }}・上位{{ shownStage.promote }}人が昇級</caption>
-            <tbody>
-              <tr v-for="row in shownStage.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you }">
-                <td>{{ row.rank }}</td><td>{{ nameText(row) }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
-              </tr>
-            </tbody>
-          </table>
+          <!-- 順位戦(26章): 5つのクラスをタブで切り替え、順位表・何回戦まで・昇級と降級の印。 -->
+          <div v-else-if="shownStage.leagues?.length" class="pro-year__junni" data-pro-junni>
+            <div v-if="shownStage.leagues.length > 1" class="pro-year__tabs pro-year__tabs--small" role="tablist" aria-label="クラス">
+              <button
+                v-for="(league, index) in shownStage.leagues"
+                :key="league.cls"
+                type="button"
+                role="tab"
+                :aria-selected="shownLeagueIndex === index"
+                :data-pro-junni-class="league.cls"
+                @click="leagueIndex = Number(index)"
+              >{{ league.name }}{{ league.you ? "（あなた）" : "" }}</button>
+            </div>
+            <div v-if="shownLeague" class="pro-year__league-scroll">
+            <table class="team-battle__table pro-year__league-table">
+              <caption>{{ shownLeague.name }}・{{ shownLeague.done ? "全局終了" : `${shownLeague.played}/${shownLeague.rounds}回戦まで` }}・{{ shownLeague.rule }}</caption>
+              <tbody>
+                <tr v-for="row in shownLeague.rows" :key="row.id" :class="{ 'team-battle__row--you': row.you, 'pro-year__league-row--rival': row.story === 'hanane' }">
+                  <td>{{ row.rank }}</td><td>{{ nameText(row) }}<small v-if="row.dan" class="pro-year__league-dan">{{ row.dan }}</small></td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+                  <td><b v-if="row.mark" class="pro-year__league-mark" :class="`pro-year__league-mark--${row.mark.id}`">{{ row.mark.text }}</b></td>
+                </tr>
+              </tbody>
+            </table>
+            </div>
+          </div>
           <!-- 前の版の保存(表の最初の並びがない): 対局の並び -->
           <div v-else-if="shownStage.block" class="pro-year__block">
             <small v-if="shownStage.blockCount > 1">{{ shownStage.block.name }}（{{ shownStage.blockCount }}ブロックの1つ）</small>
@@ -928,7 +946,7 @@
               </li>
             </ul>
           </div>
-          <p v-if="shownStage.done && shownStage.winners?.length && !shownStage.series" class="pro-year__winners">勝ち上がり：{{ shownStage.winners.slice(0, 8).map(nameText).join("・") }}{{ shownStage.winners.length > 8 ? " ほか" : "" }}</p>
+          <p v-if="shownStage.done && shownStage.winners?.length && !shownStage.series && !shownStage.leagues?.length" class="pro-year__winners">勝ち上がり：{{ shownStage.winners.slice(0, 8).map(nameText).join("・") }}{{ shownStage.winners.length > 8 ? " ほか" : "" }}</p>
         </section>
       </div>
 
@@ -1480,6 +1498,11 @@ const shownCycle = computed(() => eventOpen.value?.cycles[cycleIndex.value] ?? n
 const shownStage = computed(() => shownCycle.value?.stages[stageIndex.value] ?? null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const shownBracket = computed<any>(() => shownStage.value?.brackets?.[bracketIndex.value] ?? shownStage.value?.brackets?.[0] ?? null);
+// 順位戦のクラスのタブ(26章)。はじめはあなたのクラス(いなければA級)。
+const leagueIndex = ref(0);
+const shownLeagueIndex = computed(() => Math.min(leagueIndex.value, Math.max(0, (shownStage.value?.leagues?.length ?? 1) - 1)));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const shownLeague = computed<any>(() => shownStage.value?.leagues?.[shownLeagueIndex.value] ?? null);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rivalId = computed(() => (Object.values(props.state?.players ?? {}) as any[]).find((member) => member?.story === "hanane")?.id ?? "");
 /** 期のはじめに見せる段階(自分がいま出ている段階 → いま進んでいる段階 → 最後に始まった段階)。 */
@@ -1497,11 +1520,13 @@ function selectCycle(index: number) {
   cycleIndex.value = index;
   stageIndex.value = defaultStage(eventOpen.value?.cycles[index]);
   bracketIndex.value = 0;
+  leagueIndex.value = 0;
   revealSelectedTabs();
 }
 function selectStage(index: number) {
   stageIndex.value = index;
   bracketIndex.value = 0;
+  leagueIndex.value = 0;
   revealSelectedTabs();
 }
 /** 棋戦の画面のタブの列は、細い画面では1行で横に動く。選んだタブ(はじめは「いま」の段階)が見えるように送る。 */
@@ -2022,6 +2047,22 @@ defineExpose({ goBack });
 .shogi-game .pro-year__player-honors li { display: flex; align-items: baseline; gap: 0.3rem; padding: 0.15rem 0.6rem; border-radius: 999px; background: rgba(255, 252, 244, 0.1); font-size: 0.85rem; }
 .shogi-game .pro-year__player-honors .pro-year__player-honor--held { color: #3a2405; background: #f6d55c; }
 .shogi-game .pro-year__player-honors small { font-size: 0.7rem; }
+/* リーグ・順位戦の表(26章)。印は、挑戦者・首位は金、昇級は緑、降級は赤み。圏(まだ決まっていない)は縁だけ。 */
+.shogi-game .pro-year__junni { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.4rem; min-height: 0; }
+.shogi-game .pro-year__league-scroll { min-height: 0; overflow-y: auto; }
+.shogi-game .pro-year__league-table { width: min(100%, 40rem); }
+.shogi-game .pro-year__league-table td:first-child { width: 2.4em; }
+.shogi-game .pro-year__league-table td:nth-child(3) { width: 5.2em; white-space: nowrap; }
+.shogi-game .pro-year__league-table td:last-child { width: 4.6em; text-align: right; }
+.shogi-game .pro-year__league-dan { margin-left: 0.35rem; color: #9fb3c8; font-size: 0.72rem; }
+.shogi-game .pro-year__league-row--rival td:first-child { box-shadow: inset 4px 0 0 #8a5ad1; }
+.shogi-game .pro-year__league-mark { display: inline-block; padding: 0 0.4rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; white-space: nowrap; }
+.shogi-game .pro-year__league-mark--challenger, .shogi-game .pro-year__league-mark--top { color: #3a2405; background: #f6d55c; border-color: #f6d55c; }
+.shogi-game .pro-year__league-mark--top { color: #f6d55c; background: transparent; }
+.shogi-game .pro-year__league-mark--up { color: #10301f; background: #7fd6a2; border-color: #7fd6a2; }
+.shogi-game .pro-year__league-mark--up-zone { color: #7fd6a2; }
+.shogi-game .pro-year__league-mark--down { color: #fffcf4; background: #b5544a; border-color: #b5544a; }
+.shogi-game .pro-year__league-mark--down-zone { color: #f0a59b; }
 .shogi-game .pro-year__subhead { margin: 0.2rem 0 0; color: var(--amber, #f1a54c); font-size: 0.85rem; }
 .shogi-game .pro-year__log { display: grid; gap: 0.2rem; margin: 0; padding: 0; list-style: none; font-size: 0.82rem; }
 .shogi-game .pro-year__log li { display: grid; grid-template-columns: 3.6rem minmax(0, 1fr); gap: 0.4rem; }

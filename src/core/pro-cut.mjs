@@ -47,7 +47,7 @@ export function cutSpec(state, { userName = 'あなた', userCharacter = null } 
     // 勝ち負けは盤の上で決めるので、筋書きの勝者は形勢を寄せる側(五分なら種で)。止めるのは中盤の途中なので、決め手の手までは指さない。
     winner: lean > 0 ? 'black' : lean < 0 ? 'white' : (seed & 1 ? 'black' : 'white'),
     how: 'ending',
-    story: [lean, lean, 300 * (lean >= 0 ? 1 : -1)],
+    story: [lean + 0, lean + 0, 300 * (lean >= 0 ? 1 : -1)],
     openings: { [color]: null, [other]: pending.style?.opening ?? null },
     castles: { black: null, white: null },
   };
