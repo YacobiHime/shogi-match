@@ -190,37 +190,40 @@ describe('観戦記', () => {
     expect(turningPoint([[40, 50], [42, 30]], 41)).toMatchObject({ ply: 42, by: 'opponent' });
     expect(turningPoint([[10, 50], [12, 90]], 41)).toBeNull();
   });
-  it('勝った局は見出しに抜け出した手、封じ手と予想を書く', () => {
+  it('勝った局は、1日目の小見出しに封じ手と予想・昼食を書き、勝ちメシを残す(記事の形は kansenki-writer.mjs)', () => {
     const day = { rates: [[0, 50], [40, 52], [42, 55], [44, 82]], think: [], meal: 'のどぐろ御膳', seal: { ply: 41, move: '4f4e', predicted: '4f4e' } };
     const text = writeKansenki({ ...base, day, sealText: '▲4五歩', predictedText: '▲4五歩', win: true, plies: 97, score: '2勝0敗' });
-    expect(text.headline).toBe('やこび、2日目に43手目の手で抜け出す');
-    expect(text.paragraphs.join('')).toContain('▲4五歩を封じて');
-    expect(text.paragraphs.join('')).toContain('控室の予想どおり');
-    expect(text.paragraphs.join('')).toContain('のどぐろ御膳');
-    expect(text.paragraphs.at(-1)).toContain('97手まで、やこびの勝ち。これで2勝0敗。');
+    expect(text.headline).toContain('やこび');
+    const dayOne = text.sections.find((section) => section.title === '1日目');
+    expect(dayOne.paragraphs.join('')).toContain('▲4五歩を封じて');
+    expect(dayOne.paragraphs.join('')).toContain('控室の予想どおり');
+    expect(dayOne.paragraphs.join('')).toContain('のどぐろ御膳');
+    expect(text.sections.map((section) => section.title)).toEqual(['序盤', '1日目', '2日目', '終盤', '局後']);
+    expect(text.lead).toContain('2勝0敗');
+    expect(text.paragraphs.join('')).toContain('97手まで、やこびの勝ち。');
     // 勝った局の勝負メシは勝ちメシになる(負けた局は書かない)。
-    expect(text.paragraphs.at(-1)).toContain('昼ののどぐろ御膳は、やこびの勝ちメシになった。');
+    expect(text.paragraphs.join('')).toContain('昼ののどぐろ御膳は、やこびの勝ちメシになった。');
     expect(writeKansenki({ ...base, day, win: false, plies: 97 }).paragraphs.join('')).not.toContain('勝ちメシ');
   });
   it('封じ手の前に終わった負けの局も、責めずに書く', () => {
     const text = writeKansenki({ ...base, day: emptyDay(), win: false, plies: 33 });
-    expect(text.headline).toBe('天鷺善彦が33手で制す　やこびは次の局へ');
+    expect(text.headline).toContain('天鷺善彦');
     expect(text.paragraphs.join('')).toContain('決着は、1日目のうちについた');
-    expect(text.paragraphs.length).toBeLessThanOrEqual(5);
+    expect(text.paragraphs.join('')).not.toMatch(/悪手|ミス|ひどい/);
   });
-  it('詰ませて勝った局は、寄せの手数を見出しと最後の段落に書く(docs/mate-finish-design.md)', () => {
+  it('詰ませて勝った局は、寄せの手数を副見出しと終盤に書く(docs/mate-finish-design.md)', () => {
     const text = writeKansenki({ ...base, day: emptyDay(), win: true, plies: 101, mate: { plies: 7, from: 95 } });
-    expect(text.headline).toBe('やこび、7手詰めで寄せ切る');
-    expect(text.paragraphs.at(-1)).toBe('最後は95手目95手目の手からの7手詰め。やこびが鮮やかに寄せ切った。101手まで、やこびの勝ち。');
-    // タイトルが決まった勝ちは、決まったことを見出しにする(寄せは最後の段落に書く)。
+    expect(text.subhead).toContain('7手詰めの寄せ');
+    expect(text.sections.find((section) => section.title === '終盤').paragraphs.join('')).toContain('7手詰め');
+    // タイトルが決まった勝ちは、決まったことを見出しにする(寄せは終盤に書く)。
     const crowned = writeKansenki({ ...base, day: emptyDay(), win: true, plies: 101, decided: '竜王獲得', mate: { plies: 7, from: 95 } });
     expect(crowned.headline).toBe('やこび、竜王獲得');
-    expect(crowned.paragraphs.at(-1)).toContain('7手詰め');
+    expect(crowned.paragraphs.join('')).toContain('7手詰め');
   });
   it('タイトルが決まった勝ちは見出しにする', () => {
     expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王獲得' }).headline).toBe('やこび、竜王獲得');
-    expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王防衛' }).paragraphs.at(-1)).toContain('竜王の座を守った');
-    expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王獲得' }).paragraphs.at(-1)).toContain('竜王の座についた');
+    expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王防衛' }).paragraphs.join('')).toContain('竜王の座を守った');
+    expect(writeKansenki({ ...base, day: emptyDay(), win: true, plies: 120, decided: '竜王獲得' }).paragraphs.join('')).toContain('竜王の座についた');
   });
   it('保存は新しい順に上限まで。壊れた保存は空', () => {
     const storage = memoryStorage();

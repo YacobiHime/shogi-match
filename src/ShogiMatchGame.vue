@@ -5531,7 +5531,7 @@ const TOURNAMENT_EVENT_TEXT: { [event in TournamentEvent]: string } = { ryuo: "�
  * 大会の対局の観戦記を書く(やこびノートの「大会」で読み返せる)。タイトル戦(二日制)は1日目のまとめと封じ手つきの観戦記、ほかの対局は短い観戦記
  * (docs/mate-finish-design.md)。詰ませて勝ったら、最後の寄せを書く。
  */
-function writeTournamentKansenki(win: boolean, plies: number) {
+function writeTournamentKansenki(win: boolean, plies: number, reason = "") {
   const game = ryuoGame.value;
   if (!game || game.practice) return;
   // 舞台の札がない局(前の版で始めた局・期の途中から戻した局)でも、大会の名前と回戦で必ず書く。
@@ -5547,6 +5547,13 @@ function writeTournamentKansenki(win: boolean, plies: number) {
   const mate = win && finishMate.value ? { plies: finishMate.value.plies, from: finishMate.value.from } : null;
   const moveText = (ply: number) => dayMoveText(ply, moveHistory[ply - 1] ?? "");
   const formations = { black: dayFormation(Color.BLACK), white: dayFormation(Color.WHITE) };
+  // 新聞の記事の材料(docs/mate-finish-design.mdの6章): 棋譜・終わり方・相手(CPU)が気づかなかったことのある手数・相手の段と得意戦法。
+  const opponent = ryuoOpponent.value as { dan?: string; style?: { label?: string } | null } | null;
+  const story = {
+    moves: [...moveHistory], initialSfen: matchInitialSfen.value, reason, seed: `${game.opponentId}:${Date.now()}`,
+    oversights: Object.entries(cpuNotes).filter(([, notes]) => notes?.length).map(([ply]) => Number(ply)),
+    opponentDan: opponent?.dan ?? "", opponentStyle: opponent?.style?.label ?? "",
+  };
   if (!stage?.twoDay || !day) {
     // 番勝負(三番勝負など)のときだけ星を書く。ふつうの1局は、節目の言葉(「6組優勝」など)を書く。
     const milestoneText = finishMilestone?.kind === "group" ? finishMilestone.title.replace(/！$/, "")
@@ -5555,7 +5562,7 @@ function writeTournamentKansenki(win: boolean, plies: number) {
       eventText, label, venue, userName: playerDisplayName(playerName.value),
       opponentName: ryuoOpponent.value?.name ?? "相手", userColor: activePlayerColor.value, formations,
       win, plies, decided: decided || (win ? milestoneText : ""), score: stage?.marks?.length ? `${wins}勝${marks.length - wins}敗` : "",
-      rates: gameRates, moveText, mate,
+      rates: gameRates, moveText, mate, ...story,
     });
     const entry = { id: `${eventText}:${label}:${Date.now()}`, at: Date.now(), eventText, label, venue, win, ...text };
     saveKansenki(browserStorage(), entry);
@@ -5570,7 +5577,7 @@ function writeTournamentKansenki(win: boolean, plies: number) {
     sealText: day.seal ? dayMoveText(day.seal.ply, day.seal.move) : "",
     predictedText: unsealView.value?.predicted ?? "",
     win, plies, decided, score: `${wins}勝${marks.length - wins}敗`,
-    moveText, mate,
+    moveText, mate, ...story,
   });
   const entry = { id: `${eventText}:${label}:${Date.now()}`, at: Date.now(), eventText, label, venue, win, ...text };
   saveKansenki(browserStorage(), entry);
@@ -12364,7 +12371,7 @@ function finish(matchResult: MatchResult) {
   pendingPlayed = null;
   recordRyuoOutcome(matchResult);
   if (tournamentFinish) {
-    writeTournamentKansenki(outcome === "win", matchResult.moveCount);
+    writeTournamentKansenki(outcome === "win", matchResult.moveCount, matchResult.reason);
     recordTitleMeal(outcome === "win");
   }
   if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });

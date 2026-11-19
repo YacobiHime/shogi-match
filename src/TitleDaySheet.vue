@@ -99,7 +99,26 @@
     <article v-else-if="mode === 'kansenki' && article" class="title-day__panel title-day__paper" data-kansenki>
       <small class="title-day__paper-event">{{ article.eventText }} {{ article.label }}</small>
       <h2 class="title-day__paper-headline">{{ article.headline }}</h2>
-      <p v-for="(paragraph, index) in article.paragraphs" :key="index">{{ paragraph }}</p>
+      <!-- 新聞の記事の形(docs/mate-finish-design.mdの6章)。前の版の観戦記(段落だけ)は、そのまま段落を並べる。 -->
+      <template v-if="article.sections?.length">
+        <p v-if="article.subhead" class="title-day__paper-subhead" data-kansenki-subhead>{{ article.subhead }}</p>
+        <p class="title-day__paper-lead" data-kansenki-lead>{{ article.lead }}</p>
+        <figure v-if="curvePath" class="title-day__paper-chart" data-kansenki-chart>
+          <svg viewBox="0 0 100 40" preserveAspectRatio="none" role="img" :aria-label="article.curveKind === 'material' ? '駒の損得の流れ' : '形勢の流れ'">
+            <line x1="0" y1="20" x2="100" y2="20" class="title-day__paper-chart-mid" />
+            <path :d="curvePath" class="title-day__paper-chart-line" />
+          </svg>
+          <figcaption>{{ article.curveKind === "material" ? "駒の損得の流れ" : "形勢の流れ" }}（上ほど{{ userLabel }}よし）</figcaption>
+        </figure>
+        <dl v-if="article.facts?.length" class="title-day__paper-facts" data-kansenki-facts>
+          <div v-for="fact in article.facts" :key="fact.label"><dt>{{ fact.label }}</dt><dd>{{ fact.value }}</dd></div>
+        </dl>
+        <section v-for="section in article.sections" :key="section.title" class="title-day__paper-section">
+          <h3>◆{{ section.title }}</h3>
+          <p v-for="(paragraph, index) in section.paragraphs" :key="index">{{ paragraph }}</p>
+        </section>
+      </template>
+      <p v-for="(paragraph, index) in article.sections?.length ? [] : article.paragraphs" :key="index">{{ paragraph }}</p>
       <button type="button" class="title-day__close" data-kansenki-close @click="emit('close')">閉じる</button>
     </article>
   </div>
@@ -133,7 +152,12 @@ export type DaySummaryView = {
   predictedText: string;
   review: DayReviewView | null;
 };
-export type KansenkiView = { headline: string; paragraphs: string[]; eventText: string; label: string };
+export type KansenkiView = {
+  headline: string; paragraphs: string[]; eventText: string; label: string;
+  // 新聞の記事の形(docs/mate-finish-design.mdの6章)。前の版の観戦記にはない。
+  subhead?: string; lead?: string; sections?: { title: string; paragraphs: string[] }[];
+  curve?: [number, number][]; curveKind?: "rate" | "material"; facts?: { label: string; value: string }[];
+};
 
 const props = defineProps({
   mode: { type: String as PropType<"summary" | "kansenki">, required: true },
@@ -145,6 +169,15 @@ const props = defineProps({
   /** やこび姫の助言の行(休憩の画面だけ)。 */
   advice: { type: Array as PropType<string[]>, default: () => [] },
 });
+/** 観戦記の形勢の線(横は手数、縦はあなたから見た勝率%。上ほどあなたよし)。点が2つ未満なら出さない。 */
+const curvePath = computed(() => {
+  const curve = props.article?.curve ?? [];
+  if (curve.length < 2) return "";
+  const last = Math.max(1, curve[curve.length - 1][0]);
+  return curve.map(([ply, rate], index) => `${index ? "L" : "M"}${((ply / last) * 100).toFixed(1)},${(40 - (Math.max(0, Math.min(100, rate)) / 100) * 40).toFixed(1)}`).join(" ");
+});
+const userLabel = "あなた";
+
 const emit = defineEmits<{ close: [] }>();
 const review = computed(() => props.summary?.review ?? null);
 /** ふりかえる局面の手数。開いたときは、いちばん新しい局面。 */
@@ -276,4 +309,18 @@ const cursorX = computed(() => ((cursor.value / Math.max(1, review.value?.moves.
 .shogi-game .title-day__paper-headline { margin: 0; padding-bottom: 0.4rem; border-bottom: 3px double #2a2016; font-size: 1.35rem; line-height: 1.4; }
 .shogi-game .title-day__paper p { margin: 0; line-height: 1.8; text-indent: 1em; }
 .shogi-game .title-day__paper .title-day__close { font-family: inherit; }
+/* 新聞の記事(6章): 副見出し・太字のリード・形勢の線・記録の欄・◆の小見出し。 */
+.shogi-game .title-day__paper .title-day__paper-subhead { margin: 0; text-indent: 0; font-weight: 700; font-size: 1rem; color: #4a3a22; }
+.shogi-game .title-day__paper .title-day__paper-lead { text-indent: 0; font-weight: 800; padding: 0.4rem 0; border-bottom: 1px solid #c9bb95; }
+.shogi-game .title-day__paper-chart { margin: 0; display: grid; gap: 0.15rem; }
+.shogi-game .title-day__paper-chart svg { width: 100%; height: 4.5rem; background: #f3eedd; border: 1px solid #c9bb95; }
+.shogi-game .title-day__paper-chart-mid { stroke: #b9ab86; stroke-width: 0.4; stroke-dasharray: 1.5 1.5; vector-effect: non-scaling-stroke; }
+.shogi-game .title-day__paper-chart-line { fill: none; stroke: #8c2f22; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.shogi-game .title-day__paper-chart figcaption { color: #7a6a4a; font-size: 0.75rem; }
+.shogi-game .title-day__paper-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 0; margin: 0; border: 1px solid #2a2016; }
+.shogi-game .title-day__paper-facts div { padding: 0.25rem 0.5rem; border: 0.5px solid #c9bb95; }
+.shogi-game .title-day__paper-facts dt { color: #7a6a4a; font-size: 0.72rem; }
+.shogi-game .title-day__paper-facts dd { margin: 0; font-weight: 800; }
+.shogi-game .title-day__paper-section { display: grid; gap: 0.3rem; }
+.shogi-game .title-day__paper-section h3 { margin: 0.3rem 0 0; font-size: 0.95rem; color: #2a2016; }
 </style>

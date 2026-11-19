@@ -1222,10 +1222,10 @@ describe("match screen regressions", () => {
     // 封じ手予想は、助言の読みの最善手(新しい探索は足さない)。
     expect(source).toMatch(/if \(bestMove\) roomPick = \{ ply: analyzedHistoryLength, move: bestMove \};/);
     // 観戦記は終局で書き、結果の窓から読める。重ねたシートは戻る操作で閉じ、開いているあいだは秒読みを止める。
-    expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTournamentKansenki\(outcome === "win", matchResult\.moveCount\);\s*recordTitleMeal\(outcome === "win"\);/);
+    expect(source).toMatch(/if \(tournamentFinish\) \{\s*writeTournamentKansenki\(outcome === "win", matchResult\.moveCount, matchResult\.reason\);\s*recordTitleMeal\(outcome === "win"\);/);
     expect(source).toMatch(/v-if="resultKansenki"[^>]*data-kansenki-open/);
     // 舞台の札がない局(前の版で始めた局など)でも、大会の名前と回戦で必ず書く(docs/mate-finish-design.mdの3章)。
-    expect(source).toMatch(/function writeTournamentKansenki\(win: boolean, plies: number\) \{\s*const game = ryuoGame\.value;\s*if \(!game \|\| game\.practice\) return;/);
+    expect(source).toMatch(/function writeTournamentKansenki\(win: boolean, plies: number, reason = ""\) \{\s*const game = ryuoGame\.value;\s*if \(!game \|\| game\.practice\) return;/);
     expect(source).toMatch(/const stage = matchStage\.value \?\? game\.stage \?\? null;\s*const eventText = stage\?\.eventText \|\| TOURNAMENT_EVENT_TEXT\[/);
     // 大会の結果の画面から開いたノートは「大会へ戻る」で、閉じると大会の画面(結果)へ戻る。戻る操作も同じ。
     expect(source).toMatch(/@open-note="openNoteFromTournament"/);

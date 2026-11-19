@@ -1,7 +1,7 @@
 // タイトル戦の二日制(docs/title-match-day-design.md)。1日目のまとめ・控室の声・封じ手の開封・勝負メシ・観戦記。
 // 画面に依存しない。手の言葉(▲4五歩など)は画面が作って渡す。
 
-import { mateKansenkiSentence } from './mate-finish.mjs';
+import { writeArticle } from './kansenki-writer.mjs';
 
 /** 勝負メシの札を出す手数。この手数を越えた最初の自分の手番で出す。 */
 export const LUNCH_PLY = 20;
@@ -515,22 +515,9 @@ export function turningPoint(rates, sealPly) {
 export function writeKansenki({
   eventText, label, venue, userName, opponentName, userColor, formations, day, opponentMeal: theirMeal,
   sealText = '', predictedText = '', win, plies, decided = '', score = '', moveText, mate = null,
+  moves = [], initialSfen, reason = '', seed = '', oversights = [], opponentDan = '', opponentStyle = '',
 }) {
-  const black = userColor === 'black' ? userName : opponentName;
-  const white = userColor === 'black' ? opponentName : userName;
   const sealed = Boolean(day.seal) && plies >= day.seal.ply;
-  const turning = sealed ? turningPoint(day.rates, day.seal.ply) : null;
-  const turningText = turning ? moveText(turning.ply) : '';
-  let headline;
-  if (win && decided) headline = `${userName}、${decided}`;
-  else if (win && turning?.by === 'user' && turningText) headline = `${userName}、2日目に${turningText}で抜け出す`;
-  else if (win && mate && mate.plies >= 3) headline = `${userName}、${mate.plies}手詰めで寄せ切る`;
-  else if (win) headline = `${userName}、${plies}手で制す`;
-  else headline = `${opponentName}が${plies}手で制す　${userName}は次の局へ`;
-  const known = formations.black && formations.white;
-  const paragraphs = [
-    `${eventText}${label}は、${venue || '対局場'}で行われた。先手は${black}、後手は${white}。${known ? `戦型は${formations.black}対${formations.white}となった。` : '序盤から定跡を離れた力戦となった。'}`,
-  ];
   const sealRate = sealed ? daySummary({ day, untilPly: day.seal.ply }).rate : null;
   const flow = (() => {
     const state = balance(sealRate, userColor);
@@ -539,23 +526,21 @@ export function writeKansenki({
     return `1日目は、${state.lead}${state.diff < 20 ? 'が少しリードして' : 'が大きくリードして'}終えた。`;
   })();
   const lunch = day.meal ? `昼食に${userName}は${day.meal}、${opponentName}は${theirMeal}を注文。` : '';
+  const dayOne = [];
   if (sealed) {
     const matched = predictedText && predictedText === sealText;
-    paragraphs.push(`${flow}${lunch}${day.seal.ply}手目、${userName}が${sealText}を封じて1日目を終えた。${matched ? '控室の予想どおりの一手だった。' : predictedText ? `控室の予想は${predictedText}だった。` : ''}`);
+    dayOne.push(`${flow}${lunch}${day.seal.ply}手目、${userName}が${sealText}を封じて1日目を終えた。${matched ? '控室の予想どおりの一手だった。' : predictedText ? `控室の予想は${predictedText}だった。` : ''}`);
   } else {
-    paragraphs.push(`${lunch}決着は、1日目のうちについた。`);
-  }
-  if (turning && turningText) {
-    const who = turning.by === 'user' ? userName : opponentName;
-    paragraphs.push(`2日目、勝負を分けたのは${turning.ply}手目、${who}の${turningText}。この一手で、形勢は${who}に傾いた。`);
+    dayOne.push(`${lunch}決着は、1日目のうちについた。`);
   }
   // 勝った局の勝負メシは「勝ちメシ」として残る(8章)。
   const winningMeal = win && day.meal ? `昼の${day.meal}は、${userName}の勝ちメシになった。` : '';
-  const mateText = win && mate ? mateKansenkiSentence({ ...mate, fromText: moveText(mate.from), userName }) : '';
-  paragraphs.push(win
-    ? `${mateText}${plies}手まで、${userName}の勝ち。${score ? `これで${score}。` : ''}${decided ? `${userName}が${decided.replace(/(獲得|防衛)$/, '')}の座${decided.endsWith('防衛') ? 'を守った' : 'についた'}。` : ''}${winningMeal}`
-    : `${plies}手まで、${opponentName}の勝ち。${score ? `これで${score}。` : ''}${userName}は、次の局へ静かに闘志を燃やしていた。`);
-  return { headline, paragraphs };
+  const takes = decided ? `${userName}が${decided.replace(/(獲得|防衛)$/, '')}の座${decided.endsWith('防衛') ? 'を守った' : 'についた'}。` : '';
+  return writeArticle({
+    eventText, label, venue: venue || '対局場', userName, opponentName, userColor, formations, win, plies, decided, score,
+    rates: day.rates ?? [], moves, initialSfen, reason, seed, oversights, opponentDan, opponentStyle, moveText, mate,
+    dayBlocks: [{ title: '1日目', paragraphs: dayOne }], winningMeal: `${takes}${winningMeal}`,
+  });
 }
 
 /** 保存した観戦記(新しい順)。読めなければ空。 */
