@@ -9,7 +9,7 @@ import {
   OPENING_STRATEGIES,
 } from './opening-guide.mjs';
 import { parseSfenBoard } from './sfen-board.mjs';
-import { ruleSpecificity } from './formation-catalog.mjs';
+import { CUSTOM_CASTLE_RULES, customRuleSpecificity, ruleSpecificity } from './formation-catalog.mjs';
 
 /** 戦法の名前を新しく付けるのは、この手数まで(docs/formation-detect-design.mdの7-2。終盤に急に戦法が付かない)。 */
 export const STRATEGY_PLY_LIMIT = 60;
@@ -79,10 +79,15 @@ function bestCastleName(board, color, sfen, rules) {
   const guide = OPENING_CASTLES
     .filter((definition) => matchesGuideCompletion(definition, board, color, sfen))
     .map((definition) => ({ name: definition.label, spec: guideSpecificity(definition, board, color), order: 0 }));
+  // 自作の規則(data/formation-rules.mjs)。置き換える名前の、ひらがなすいしょうの規則は使わない。
+  const replaced = new Set(CUSTOM_CASTLE_RULES.filter((rule) => rule.replaces).map((rule) => rule.name));
+  const custom = CUSTOM_CASTLE_RULES
+    .map((rule) => ({ name: rule.name, spec: customRuleSpecificity(rule, board, color), order: 0.5 }))
+    .filter((item) => item.spec > 0);
   const hs = rules
-    .filter((rule) => rule.group === 'enc_match')
+    .filter((rule) => rule.group === 'enc_match' && !replaced.has(rule.name))
     .map((rule, index) => ({ name: rule.name, spec: ruleSpecificity(rule), order: index + 1 }));
-  return [...guide, ...hs].sort((a, b) => b.spec - a.spec || a.order - b.order)[0]?.name ?? '';
+  return [...guide, ...custom, ...hs].sort((a, b) => b.spec - a.spec || a.order - b.order)[0]?.name ?? '';
 }
 
 function guideTacticNames(board, color, sfen) {

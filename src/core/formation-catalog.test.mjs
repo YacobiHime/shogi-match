@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, test } from 'vitest';
 import { FORMATION_META } from '../data/formation-catalog.mjs';
 import { collectionCatalog } from './collection.mjs';
-import { formationCatalog, formationMeta, formationShapes, mirrorSquare, ruleOwnPieces, ruleSpecificity, wazaTierOfRarity } from './formation-catalog.mjs';
+import { CUSTOM_CASTLE_RULES, evolvedFrom, formationCatalog, formationMeta, formationShapes, mirrorSquare, ruleOwnPieces, ruleSpecificity, wazaTierOfRarity } from './formation-catalog.mjs';
 import {
   CASTLE_PLY_LIMIT,
   createFormationState,
@@ -96,7 +96,10 @@ describe('目録', () => {
 });
 
 describe('いちばん具体的な囲い(7-4)', () => {
-  const castleRules = master.rules.filter((rule) => rule.group === 'enc_match');
+  // 自作の規則に置き換えた名前は、自作の規則のほうで確かめる(下)。
+  const replaced = new Set(CUSTOM_CASTLE_RULES.filter((rule) => rule.replaces).map((rule) => rule.name));
+  const castleRules = master.rules.filter((rule) => rule.group === 'enc_match' && !replaced.has(rule.name));
+  const RENAMED = { 銀冠: ['居飛車銀冠'] };
   for (const color of ['black', 'white']) {
     test(`${color === 'black' ? '先手' : '後手'}: どの囲いの形だけを置いても、その囲い(か、同じ駒の数の名前)になる`, () => {
       const wrong = [];
@@ -108,6 +111,8 @@ describe('いちばん具体的な囲い(7-4)', () => {
         const snapshot = detectFormationSnapshot(sfenOf([...pieces, enemyKing]), master);
         const got = snapshot[color].castle;
         if (got === rule.name) continue;
+        // 名前を分けた形(ひらがなすいしょうの居飛車の「銀冠」は、自作の規則の居飛車銀冠)。
+        if (RENAMED[rule.name]?.includes(got)) continue;
         // 同じ駒の数の、ほかの名前(並びの先・定跡補助の形)に当たったときは、その形も同じ駒をすべて満たす。
         const other = castleRules.find((item) => item.name === got);
         const sameSize = other ? ruleSpecificity(other) >= ruleSpecificity(rule) : OPENING_CASTLES.some((item) => item.label === got);
@@ -119,7 +124,7 @@ describe('いちばん具体的な囲い(7-4)', () => {
 
   test('銀冠穴熊・ビッグ4の局面(先手・後手)', () => {
     const cases = {
-      銀冠穴熊: 'lnsgkgsnl/1r5b1/ppppppppp/9/9/1PP6/1S1PPPPPP/LG2G2R1/KN4SNL b B 1',
+      銀冠穴熊: 'lnsgkgsnl/1r5b1/ppppppppp/9/9/1PP6/1S1PPPPPP/LGG4R1/KN4SNL b B 1',
       ビッグ4: 'lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PSSPPPPPP/LGG4R1/KN5NL b B 1',
       松尾流穴熊: 'lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/LSG1G2R1/KNS4NL b B 1',
     };
@@ -141,6 +146,49 @@ describe('いちばん具体的な囲い(7-4)', () => {
     const anaguma = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/2P6/PP1PPPPPP/LSG4R1/KNG3SNL b B 1';
     const snapshot = detectFormationSnapshot(anaguma, master);
     expect(snapshot.black.castle).toBe('居飛車穴熊');
+  });
+});
+
+describe('自作の囲いの規則(F2)', () => {
+  const cell = (text, color) => {
+    const square = text.slice(0, 2);
+    const kind = text.slice(2);
+    return color === 'black' ? [square, kind] : [mirrorSquare(square), kind.toLowerCase()];
+  };
+  for (const color of ['black', 'white']) {
+    test(`${color === 'black' ? '先手' : '後手'}: 規則の形を置くとその名前、駒を1つ抜くとその名前にならない`, () => {
+      for (const rule of CUSTOM_CASTLE_RULES) {
+        const variant = rule.variants[0];
+        const cells = [...variant.own, ...(variant.ownAny ?? []).map((group) => group[0])];
+        const enemyKing = color === 'black' ? ['51', 'k'] : ['59', 'K'];
+        const full = detectFormationSnapshot(sfenOf([...cells.map((text) => cell(text, color)), enemyKing]), master)[color].castle;
+        expect(full, rule.name).toBe(rule.name);
+        for (const missing of variant.own.filter((text) => !text.endsWith('K'))) {
+          const rest = cells.filter((text) => text !== missing).map((text) => cell(text, color));
+          const got = detectFormationSnapshot(sfenOf([...rest, enemyKing]), master)[color].castle;
+          expect(got, `${rule.name}から${missing}を抜く`).not.toBe(rule.name);
+        }
+      }
+    });
+  }
+
+  test('片銀冠に4七の金を足すと銀冠(振り飛車銀冠)', () => {
+    const base = ['28K', '27S', '38G', '26P'].map((text) => cell(text, 'black'));
+    expect(detectFormationSnapshot(sfenOf([...base, ['51', 'k']]), master).black.castle).toBe('片銀冠');
+    const crown = detectFormationSnapshot(sfenOf([...base, ['47', 'G'], ['51', 'k']]), master).black.castle;
+    expect(['振り飛車銀冠', '銀冠']).toContain(crown);
+  });
+
+  test('居飛車穴熊の銀を8七に上げただけでは銀冠穴熊にならない(前の規則の誤り)', () => {
+    const sfen = sfenOf([['99', 'K'], ['98', 'L'], ['89', 'N'], ['87', 'S'], ['78', 'G'], ['51', 'k']]);
+    expect(detectFormationSnapshot(sfen, master).black.castle).not.toBe('銀冠穴熊');
+  });
+
+  test('進化のもと: すでに組んだ形のうち、いちばん近いもの', () => {
+    expect(evolvedFrom('ビッグ4', ['居飛車穴熊', '銀冠穴熊'])).toBe('銀冠穴熊');
+    expect(evolvedFrom('ビッグ4', ['居飛車穴熊'])).toBe('居飛車穴熊');
+    expect(evolvedFrom('振り飛車銀冠', ['片美濃'])).toBe('片美濃');
+    expect(evolvedFrom('居飛車穴熊', ['舟囲い'])).toBe('');
   });
 });
 

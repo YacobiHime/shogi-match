@@ -2,6 +2,7 @@
 // 作戦カードの目録(collection.mjsのcollectionCatalog)に、作戦カードのない名前(銀冠穴熊・ビッグ4など)を足す。
 // 画面・保存に依存しない。
 import { FORMATION_META, FORMATION_SAME_NAMES, RANGING_STRATEGY_FAMILIES } from '../data/formation-catalog.mjs';
+import { FORMATION_CASTLE_RULES } from '../data/formation-rules.mjs';
 
 /** 同じ作戦のもう1つの呼び方。 */
 const sameName = (name) => FORMATION_SAME_NAMES.find((pair) => pair.includes(name))?.find((item) => item !== name) ?? '';
@@ -144,5 +145,60 @@ export function formationShapes(master) {
     const pieces = ruleOwnPieces(rule);
     if ((shapes.get(rule.name)?.length ?? 0) < pieces.length) shapes.set(rule.name, pieces);
   }
+  // 自作の規則は、置き換えるものも足すものも、最初の形の駒で描く。
+  for (const rule of FORMATION_CASTLE_RULES) {
+    const variant = rule.variants[0];
+    shapes.set(rule.name, [...variant.own, ...(variant.ownAny ?? []).map((group) => group[0])].map(splitCell));
+  }
   return shapes;
+}
+
+/** 「99K」を、マスと駒の記号に分ける(「11+P」は「+P」)。 */
+const splitCell = (cell) => /** @type {[string, string]} */ ([cell.slice(0, 2), cell.slice(2)]);
+
+/** 「99」をUSIのマス(「9i」)に。 */
+const usiSquare = (square) => `${square[0]}${String.fromCharCode(96 + Number(square[1]))}`;
+
+/**
+ * 自作の囲いの規則の、いま当たっている形の具体的さ(当たらなければ0)。boardはsfen-board.mjsの盤。
+ * @param {{ variants: { own: string[], ownAny?: string[][], ownNot?: string[] }[] }} rule
+ * @param {Map<string, { color: string, kind: string }>} board
+ * @param {'black' | 'white'} color
+ */
+export function customRuleSpecificity(rule, board, color) {
+  const has = (cell) => {
+    const [square, kind] = splitCell(cell);
+    const at = usiSquare(color === 'white' ? mirrorSquare(square) : square);
+    const piece = board.get(at);
+    return piece?.color === color && piece.kind === kind;
+  };
+  let best = 0;
+  for (const variant of rule.variants) {
+    if (!variant.own.every(has)) continue;
+    if (!(variant.ownAny ?? []).every((group) => group.some(has))) continue;
+    if ((variant.ownNot ?? []).some(has)) continue;
+    best = Math.max(best, variant.own.length + (variant.ownAny ?? []).length);
+  }
+  return best;
+}
+
+/** 自作の囲いの規則。 */
+export const CUSTOM_CASTLE_RULES = FORMATION_CASTLE_RULES;
+
+/**
+ * いちばん近い進化のもと(1局ですでに組んだ形のうち、進化のもとをたどって最初に見つかるもの)。なければ''。
+ * 「高美濃 → 銀冠 進化！」の演出に使う(設計の6-3)。
+ * @param {string} name
+ * @param {Iterable<string>} formed
+ */
+export function evolvedFrom(name, formed) {
+  const had = new Set(formed);
+  const seen = new Set([name]);
+  let parent = formationMeta(name)?.parent ?? '';
+  while (parent && !seen.has(parent)) {
+    if (had.has(parent)) return parent;
+    seen.add(parent);
+    parent = formationMeta(parent)?.parent ?? '';
+  }
+  return '';
 }

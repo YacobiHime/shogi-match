@@ -27,7 +27,7 @@ export const FORMATION_META = Object.freeze({
   ダイヤモンド美濃: 'cr mino 4 高美濃',
   四枚美濃: 'cr mino 5 高美濃',
   振り飛車銀冠: 'cr ginkan 4 高美濃',
-  端玉銀冠: 'cr ginkan 5 振り飛車銀冠',
+  片銀冠: 'cr ginkan 3 片美濃',
   // ---- 穴熊
   振り飛車穴熊: 'cr anaguma 3',
   居飛車穴熊: 'cs anaguma 3',
@@ -35,6 +35,7 @@ export const FORMATION_META = Object.freeze({
   銀冠穴熊: 'cs anaguma 4 居飛車穴熊',
   ビッグ4: 'cs anaguma 5 銀冠穴熊',
   四枚穴熊: 'cs anaguma 5 居飛車穴熊',
+  矢倉穴熊: 'cs anaguma 5 金矢倉',
   // ---- 金無双・相振り
   片金無双: 'cr kinmuso 1',
   金無双: 'cr kinmuso 2 片金無双',
@@ -52,6 +53,8 @@ export const FORMATION_META = Object.freeze({
   左美濃: 'cs hidarimino 2 舟囲い',
   居角左美濃: 'cs hidarimino 3 左美濃',
   天守閣美濃: 'cs hidarimino 4 左美濃',
+  居飛車銀冠: 'cs ginkan 4 左美濃',
+  端玉銀冠: 'cs ginkan 5 居飛車銀冠',
   エルモ囲い: 'cs other 3',
   ミレニアム: 'cs millennium 4',
   ボナンザ囲い: 'cs other 3',
