@@ -1077,6 +1077,9 @@
       :entries="planSheetEntries"
       :selected-id="planSheet === 'cpu' ? cpuPlanId : selectedPlanId"
       :selected-castle="planSheet === 'cpu' ? cpuDetailedCastle : selectedCastle"
+      :selected-castle-auto="planSheet !== 'cpu' && castleAuto"
+      :opponent-rook="planSheet === 'cpu' ? '' : castleAdviceContext(planSheet === 'game' ? 'game' : 'pregame').opponentRook"
+      :bishop-exchanged="planSheet === 'cpu' ? false : castleAdviceContext(planSheet === 'game' ? 'game' : 'pregame').bishopExchanged"
       :broad-options="CPU_STRATEGY_OPTIONS"
       :broad-value="cpuStrategyDetailsOpen ? '' : cpuStrategy"
       :allow-clear="Boolean(selectedStrategy || selectedCastle)"
@@ -1620,7 +1623,7 @@
             />
             <span class="shogi-game__opening-plan-text">
               <span class="shogi-game__opening-plan-line" data-plan-strategy><em>戦法</em>{{ selectedStrategyLabel || "なし" }}</span>
-              <span class="shogi-game__opening-plan-line" data-plan-castle><em>囲い</em>{{ selectedCastleLabel || "なし" }}</span>
+              <span class="shogi-game__opening-plan-line" data-plan-castle><em>囲い</em><template v-if="castleAuto && selectedCastleLabel">おすすめ：</template>{{ selectedCastleLabel || "なし" }}</span>
               <small v-if="planProgress && planProgress.total">完成まで、あと{{ planProgress.total - planProgress.filled }}マス。盤の矢印の手を指そう</small>
               <small v-else-if="openingPlanComplete">完成！</small>
             </span>
@@ -1671,6 +1674,14 @@
               @click="acceptCoachPlanOffer"
             >{{ coachPlanOffer.label }}にする</button>
             <button type="button" data-plan-offer-dismiss @click="dismissCoachPlanOffer">このまま指す</button>
+          </div>
+        </div>
+        <!-- 囲いの組み替え(docs/opening-guide-ux-design.mdの14-4)。おすすめに任せた囲いを組み始めたあと、相手が振った・角換わりになったら1回だけ聞く。 -->
+        <div v-if="castleSwitchOffer" class="shogi-game__plan-interrupt shogi-game__castle-switch" data-castle-switch role="status">
+          <p><b>囲いの組み替え</b>{{ castleSwitchOffer.text }}</p>
+          <div>
+            <button type="button" data-castle-switch-accept @click="acceptCastleSwitch">{{ castleSwitchOffer.label }}に組み替える</button>
+            <button type="button" data-castle-switch-dismiss @click="dismissCastleSwitch">このまま</button>
           </div>
         </div>
         <!--
@@ -2927,6 +2938,7 @@ import {
   saveSeenPlans,
   saveShowAllPlans,
 } from "./core/opening-unlocks.mjs";
+import { AUTO_CASTLE, castleAdviceLine, castleSwitch, recommendCastle } from "./core/castle-advice.mjs";
 import { openingFormationGhosts, openingFormationProgress } from "./core/opening-formation.mjs";
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, mistakeTarget, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
@@ -3264,6 +3276,8 @@ import {
   chooseSafeOpeningMove,
   filterOpeningCompatibleCandidates,
   inferOpeningRookStyle,
+  bishopExchangeState,
+  openingPlanSteps,
   isOpeningGuideExpired,
   isOpeningPlanComplete,
   isStandaloneOpening,
@@ -4672,6 +4686,11 @@ const coachPortraitSizesValue = computed(() => coachPortraitSizes(portraitWidth.
 let portraitObserver: ResizeObserver | undefined;
 const selectedStrategy = ref("");
 const selectedCastle = ref("");
+/** 囲いを「おすすめ」(相手の飛車で決める)に任せているか(14-3)。囲いを外したら任せない。 */
+const castleAuto = ref(false);
+/** 組み替えを聞いた節目(相手が振った'ranging'・角換わり'exchanged')。1つの節目で1回だけ聞く(14-4)。 */
+const castleAdviceAsked = ref<string[]>([]);
+watch(selectedCastle, (value) => { if (!value) castleAuto.value = false; });
 const formationState = ref(createFormationState());
 const searchNodes = ref(normalizeNodes(props.engineNodes));
 const cpuStrategy = ref("random");
@@ -6902,7 +6921,7 @@ const planCardShown = computed(() => {
 const openingGuideContent = computed(() => (
   openingGuideCollapsed.value
   || planCardShown.value
-  || Boolean(planInterruption.value || coachPlanOffer.value || lunchOffer.value || dayBreakOffer.value)
+  || Boolean(planInterruption.value || coachPlanOffer.value || castleSwitchOffer.value || lunchOffer.value || dayBreakOffer.value)
   || rangingRookChoiceRequired.value
   || strategyCompletionChoiceRequired.value
   || Boolean(nearCompletionPrompt.value)
@@ -7145,9 +7164,33 @@ function togglePlanSwitch(on: boolean) {
   showAllPlans.value = on;
   saveShowAllPlans(browserStorage(), on);
 }
+/** 囲いのおすすめに使う、相手の飛車と角換わり(docs/opening-guide-ux-design.mdの14-3)。対局準備ではCPUの作戦の指定から。 */
+function castleAdviceContext(context: "pregame" | "game") {
+  if (context === "pregame") return { opponentRook: opponentRangingFor("pregame") ? "ranging" : "", bishopExchanged: false };
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const color = playerIsBlack ? "black" : "white";
+  const opponentRook = inferOpeningRookStyle({
+    color: playerIsBlack ? "white" : "black",
+    playedMoves: moveHistory.filter((_, index) => isBlackMoveIndex(index) !== playerIsBlack),
+    currentSfen: currentSfen.value,
+  }) ?? "";
+  return { opponentRook, bishopExchanged: bishopExchangeState(currentSfen.value, color) === "exchanged" };
+}
 function applyPlan(planId: string, castleId: string, context: "pregame" | "game" | "cpu") {
   const plan = openingPlanById(planId);
   if (!plan) return;
+  // 「おすすめ」は、いまの相手の様子で囲いを決め、対局中は相手が振った・角換わりの節目で替える(14-3・14-4)。
+  if (castleId === AUTO_CASTLE && context !== "cpu") {
+    const entry = planEntries(context).find((item) => item.plan.id === planId);
+    castleId = recommendCastle({ castles: entry?.castles ?? plan.castles, ...castleAdviceContext(context) });
+    selectedStrategy.value = plan.strategyId;
+    selectedCastle.value = castleId;
+    castleAuto.value = Boolean(castleId);
+    castleAdviceAsked.value = [];
+    if (context === "game") announceOpeningGuide();
+    return;
+  }
+  castleAuto.value = false;
   if (context === "cpu") {
     cpuStrategyDetailsOpen.value = true;
     cpuDetailedStrategy.value = plan.strategyId;
@@ -10695,6 +10738,8 @@ function persistMatchState() {
     coachLevel: coachLevel.value,
     selectedStrategy: selectedStrategy.value,
     selectedCastle: selectedCastle.value,
+    castleAuto: castleAuto.value,
+    castleAdviceAsked: [...castleAdviceAsked.value],
     hintsRemaining: hintsRemaining.value,
     undosRemaining: undosRemaining.value,
     openingGuideStartedAtPly: openingGuideStartedAtPly.value,
@@ -10899,6 +10944,8 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
       ? snapshot.selectedStrategy
       : "";
     selectedCastle.value = typeof snapshot.selectedCastle === "string" ? snapshot.selectedCastle : "";
+    castleAuto.value = snapshot.castleAuto === true && Boolean(selectedCastle.value);
+    castleAdviceAsked.value = Array.isArray(snapshot.castleAdviceAsked) ? snapshot.castleAdviceAsked.filter((item: unknown) => typeof item === "string") : [];
     hintsRemaining.value = savedMatchNumber(snapshot.hintsRemaining, matchHintAllowance(), 0, matchHintAllowance());
     undosRemaining.value = savedMatchNumber(snapshot.undosRemaining, matchUndoAllowance(), 0, matchUndoAllowance());
     openingGuideStartedAtPly.value = savedMatchNumber(snapshot.openingGuideStartedAtPly, 0, 0, moves.length);
@@ -11837,6 +11884,62 @@ async function offerCoachPlan(
   lastPlanAdvice = { advice, sfen, historyLength };
   return { key: advice.key, topic: advice.topic, text: advice.text };
 }
+/** 囲いの組み替えの札(14-4)。駒を動かしたら閉じる(次の節目まで聞かない)。 */
+const castleSwitchOffer = ref<null | { to: string; label: string; situation: string; text: string; historyLength: number }>(null);
+/** おすすめの囲いの駒(歩のほか)を、もう動かしたか。囲いの手順の手で、歩でない駒の手を指していれば組み始め。 */
+function castleStarted(color: "black" | "white", played: string[]) {
+  const pawnRank = color === "black" ? "g" : "c";
+  const castleMoves = openingPlanSteps(selectedStrategy.value, selectedCastle.value, color)
+    .filter(({ phase, usi }) => phase === "castle" && !usi.includes("*") && usi[1] !== pawnRank)
+    .map(({ usi }) => usi);
+  return played.some((usi) => castleMoves.includes(usi));
+}
+/** 相手の手のあと、おすすめに任せた囲いを相手に合わせて替えるか聞く(14-4)。 */
+function checkCastleAdvice() {
+  if (!castleAuto.value || !active.value || reviewMode.value || !selectedCastle.value || !openingGuideAvailable.value) return;
+  const plan = openingPlanFor(selectedStrategy.value);
+  if (!plan) return;
+  const playerIsBlack = humanColor.value === Color.BLACK;
+  const color = playerIsBlack ? "black" : "white";
+  const played = moveHistory.filter((_, index) => isBlackMoveIndex(index) === playerIsBlack);
+  const decision = castleSwitch({
+    auto: true,
+    current: selectedCastle.value,
+    castles: plan.castles,
+    ...castleAdviceContext("game"),
+    started: castleStarted(color, played),
+    complete: castlePhaseComplete.value,
+    asked: castleAdviceAsked.value,
+  });
+  const label = OPENING_CASTLES.find(({ id }) => id === decision.to)?.label ?? "";
+  if (decision.action === "switch") {
+    selectedCastle.value = decision.to;
+    castleAuto.value = true;
+    announceOpeningGuide();
+    if (coachLevel.value !== "off") guideText.value = castleAdviceLine("switch", decision.situation, label);
+  } else if (decision.action === "ask") {
+    castleAdviceAsked.value = [...castleAdviceAsked.value, decision.situation];
+    castleSwitchOffer.value = { to: decision.to, label, situation: decision.situation, text: castleAdviceLine("ask", decision.situation, label), historyLength: moveHistory.length };
+  }
+}
+function acceptCastleSwitch() {
+  const offer = castleSwitchOffer.value;
+  castleSwitchOffer.value = null;
+  if (!offer) return;
+  selectedCastle.value = offer.to;
+  castleAuto.value = true;
+  announceOpeningGuide();
+  if (coachLevel.value !== "off") guideText.value = `${offer.label}に組み替えよう！ 盤の矢印と薄い駒を目指して指そう。`;
+}
+function dismissCastleSwitch() {
+  castleSwitchOffer.value = null;
+}
+watch(moveCount, () => {
+  if (castleSwitchOffer.value && castleSwitchOffer.value.historyLength !== moveHistory.length) castleSwitchOffer.value = null;
+  // 相手が指して、あなたの手番になったときだけ見る。
+  if (record.value.position.color === humanColor.value) checkCastleAdvice();
+});
+watch([reviewMode, active], () => { castleSwitchOffer.value = null; });
 /** 「◯◯にする」。作戦カードに入れ、まだ使えない段でも使えるようにする。 */
 function acceptCoachPlanOffer() {
   const offer = coachPlanOffer.value;

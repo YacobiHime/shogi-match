@@ -50,20 +50,23 @@ const plan = (id, strategyId, castles, group, tier, style, difficulty, extra = {
 /** @type {readonly OpeningPlan[]} */
 export const OPENING_PLANS = Object.freeze([
   // ===== 居飛車で攻める =====
-  plan("bougin", "bougin", ["nakazumai", "kanigakoi"], "static", "entry", "attack", 1),
-  plan("ibisha", "ibisha", ["funagakoi", "yagura", "gangi"], "static", "basic", "attack", 1),
-  plan("hayaguri-gin", "hayaguri-gin", ["yagura", "nakazumai"], "static", "basic", "attack", 2),
-  plan("koshikake-gin", "koshikake-gin", ["yagura"], "static", "basic", "attack", 2),
+  // 居飛車の作戦の囲いは、相手の飛車で決める「おすすめ」の候補(docs/opening-guide-ux-design.mdの14-3)。
+  // 相手が居飛車・分からない・角換わりなら矢倉、振り飛車なら左美濃を勧める(castle-advice.mjs)。舟囲いは先頭に置かない。
+  plan("bougin", "bougin", ["yagura", "left-mino", "nakazumai", "kanigakoi"], "static", "entry", "attack", 1),
+  plan("ibisha", "ibisha", ["yagura", "left-mino", "gangi", "ibisha-anaguma", "elmo", "funagakoi"], "static", "basic", "attack", 1),
+  plan("hayaguri-gin", "hayaguri-gin", ["yagura", "left-mino", "nakazumai", "ibisha-anaguma", "elmo"], "static", "basic", "attack", 2),
+  plan("koshikake-gin", "koshikake-gin", ["yagura", "left-mino", "ibisha-anaguma", "elmo"], "static", "basic", "attack", 2),
   // 矢倉は、居飛車(飛車先の歩交換)と金矢倉の組。矢倉戦法の定義はやこび姫補助で選べないため、この組で目指す。
   plan("yagura", "ibisha", ["yagura"], "static", "basic", "defense", 2, {
     name: "矢倉",
     explanation: "yagura-strategy",
     catch: "金銀を玉の上に積み上げて、堅く囲ってから攻める居飛車の王道だよ！",
   }),
-  plan("right-shiken", "right-shiken", ["elmo", "funagakoi", "left-mino"], "static", "advanced", "attack", 2),
-  plan("kakugawari", "kakugawari", ["nakazumai"], "static", "advanced", "attack", 3),
+  plan("right-shiken", "right-shiken", ["left-mino", "ibisha-anaguma", "elmo", "funagakoi"], "static", "advanced", "attack", 2),
+  // 角換わりは、角の手を飛ばして矢倉に組める(14-2)。
+  plan("kakugawari", "kakugawari", ["yagura", "nakazumai"], "static", "advanced", "attack", 3),
   plan("kakugawari-koshikake-gin", "kakugawari-koshikake-gin", [], "static", "advanced", "attack", 3),
-  plan("kakugawari-45-knight", "kakugawari-45-knight", ["nakazumai"], "static", "advanced", "attack", 3),
+  plan("kakugawari-45-knight", "kakugawari-45-knight", ["yagura", "nakazumai"], "static", "advanced", "attack", 3),
   plan("aigakari", "aigakari", ["nakazumai"], "static", "advanced", "attack", 3),
   plan("hineribisha", "hineribisha", ["nakazumai"], "static", "advanced", "attack", 3),
   plan("yokofudori-33-bishop", "yokofudori-33-bishop", ["nakazumai", "nakahara"], "static", "advanced", "attack", 3),
@@ -73,7 +76,7 @@ export const OPENING_PLANS = Object.freeze([
   plan("morishita-system", "morishita-system", [], "static", "advanced", "defense", 3),
   plan("gangi-right-shiken", "gangi-right-shiken", [], "static", "advanced", "attack", 3),
   plan("right-shiken-elmo", "right-shiken-elmo", [], "static", "advanced", "attack", 2),
-  plan("sodebisha", "sodebisha", ["funagakoi", "elmo"], "static", "advanced", "attack", 2),
+  plan("sodebisha", "sodebisha", ["left-mino", "ibisha-anaguma", "elmo", "funagakoi"], "static", "advanced", "attack", 2),
   plan("chikatetsu-bisha", "chikatetsu-bisha", [], "static", "advanced", "attack", 3),
   plan("torizashi", "torizashi", [], "static", "advanced", "attack", 2),
   // ===== 振り飛車で受ける =====
@@ -130,7 +133,9 @@ export function openingPlanById(id) {
 /** 戦法と囲いの組から、いちばん近いカード。選び方が古い(戦法と囲いを別々に選んだ)保存の復元に使う。 */
 export function openingPlanFor(strategyId, castleId = "") {
   if (strategyId) {
-    return OPENING_PLANS.find((entry) => entry.strategyId === strategyId && entry.castles[0] === castleId)
+    // 名前のカード(矢倉＝居飛車と金矢倉)が同じ組なら、そのカードを先に引く。
+    return OPENING_PLANS.find((entry) => entry.name && entry.strategyId === strategyId && entry.castles[0] === castleId)
+      ?? OPENING_PLANS.find((entry) => entry.strategyId === strategyId && entry.castles[0] === castleId)
       ?? OPENING_PLANS.find((entry) => entry.strategyId === strategyId && !entry.name)
       ?? null;
   }

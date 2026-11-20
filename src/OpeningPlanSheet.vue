@@ -21,7 +21,7 @@
       <!-- くわしく: 完成形を大きく見せ、得意・苦手・コツを1行ずつ。囲いは合う順に並べて替えられる。 -->
       <div v-else-if="detail" class="plan-sheet__body plan-sheet__detail">
         <div class="plan-sheet__detail-head">
-          <FormationThumb class="plan-sheet__detail-thumb" :strategy-id="detail.plan.strategyId" :castle-id="detailCastle" :ply="replayPly" />
+          <FormationThumb class="plan-sheet__detail-thumb" :strategy-id="detail.plan.strategyId" :castle-id="shownCastle" :ply="replayPly" />
           <!-- 手順を1手ずつ。自分が指す手だけを、同じ小さな盤ですべらせて見せる(相手の手は局面しだいで変わるため描かない)。 -->
           <div class="plan-sheet__replay" data-plan-replay>
             <button type="button" aria-label="1手もどる" :disabled="replayIndex === 0" @click="stepReplay(-1)">◀</button>
@@ -49,6 +49,17 @@
         <div v-if="detail.castles.length && detail.plan.strategyId && !detail.plan.name" class="plan-sheet__castles" role="radiogroup" aria-label="いっしょに組む囲い">
           <p>いっしょに組む囲い</p>
           <div>
+            <!-- おすすめ(相手の飛車で決める。docs/opening-guide-ux-design.mdの14-3)。いまの答えを添える。 -->
+            <button
+              v-if="autoCastleShown"
+              type="button"
+              role="radio"
+              class="plan-sheet__castle plan-sheet__castle--auto"
+              :class="{ 'plan-sheet__castle--selected': detailCastle === AUTO_CASTLE }"
+              :aria-checked="detailCastle === AUTO_CASTLE"
+              data-plan-castle-auto
+              @click="detailCastle = AUTO_CASTLE"
+            ><b aria-hidden="true">★</b>おすすめ<small>相手の飛車で決める（いまは{{ castleLabel(autoCastle) }}）</small></button>
             <button
               v-for="(castleId, index) in detail.castles"
               :key="castleId"
@@ -58,7 +69,7 @@
               :class="{ 'plan-sheet__castle--selected': detailCastle === castleId }"
               :aria-checked="detailCastle === castleId"
               @click="detailCastle = castleId"
-            ><b aria-hidden="true">{{ index === 0 ? "◎" : "○" }}</b>{{ castleLabel(castleId) }}<small v-if="index === 0">いちばん合う</small></button>
+            ><b aria-hidden="true">{{ !autoCastleShown && index === 0 ? "◎" : "○" }}</b>{{ castleLabel(castleId) }}<small v-if="!autoCastleShown && index === 0">いちばん合う</small></button>
             <button
               type="button"
               role="radio"
@@ -98,7 +109,7 @@
         <div v-else class="plan-sheet__actions">
           <!-- やこび姫のおすすめ。どの作戦かを先に見せ、押すとくわしい画面へ(勝手には入れない。13章)。 -->
           <button v-if="recommended" type="button" class="plan-sheet__auto" data-plan-recommended @click="openDetail(recommended)">
-            <FormationThumb class="plan-sheet__auto-thumb" :strategy-id="recommended.plan.strategyId" :castle-id="recommended.castles[0] ?? ''" />
+            <FormationThumb class="plan-sheet__auto-thumb" :strategy-id="recommended.plan.strategyId" :castle-id="cardCastle(recommended)" />
             <span class="plan-sheet__auto-text">
               <small>やこび姫のおすすめ</small>
               <span>{{ planTitle(recommended.plan) }}</span>
@@ -126,7 +137,7 @@
               :data-plan-id="entry.plan.id"
               @click="openDetail(entry)"
             >
-              <FormationThumb class="plan-sheet__thumb" :strategy-id="entry.plan.strategyId" :castle-id="entry.castles[0] ?? ''" />
+              <FormationThumb class="plan-sheet__thumb" :strategy-id="entry.plan.strategyId" :castle-id="cardCastle(entry)" />
               <span class="plan-sheet__card-text">
                 <b>{{ planTitle(entry.plan) }}<em v-if="entry.isNew" class="plan-sheet__new">NEW</em></b>
                 <small>{{ catchLine(entry.plan) }}</small>
@@ -181,6 +192,7 @@ import OpeningFortune from "./OpeningFortune.vue";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 import { openingExplanation } from "./core/opening-explanations.mjs";
 import { OPENING_PLAN_GROUPS, OPENING_PLAN_TIERS, OPENING_STYLE_LABELS } from "./core/opening-catalog.mjs";
+import { AUTO_CASTLE, castleAdviceApplies, recommendCastle } from "./core/castle-advice.mjs";
 import { openingFormationSteps, openingStepLabel } from "./core/opening-formation.mjs";
 
 export type OpeningPlanView = {
@@ -220,6 +232,11 @@ const props = defineProps({
   recommendedId: { type: String, default: "" },
   // 手順の名前を、先手なら▲、後手なら盤を反転して△で書く。
   playerColor: { type: String as PropType<"black" | "white">, default: "black" },
+  /** 囲いのおすすめに使う相手の飛車('ranging'・'static'、分からなければ空)と角換わり(14-3)。 */
+  opponentRook: { type: String, default: "" },
+  bishopExchanged: { type: Boolean, default: false },
+  /** いま選んでいる囲いが「おすすめ」か。 */
+  selectedCastleAuto: { type: Boolean, default: false },
 });
 const emit = defineEmits<{
   choose: [planId: string, castleId: string];
@@ -277,23 +294,36 @@ const groups = computed(() => OPENING_PLAN_GROUPS.map((group) => {
 const detailId = ref("");
 const detailCastle = ref("");
 const detail = computed(() => props.entries.find(({ plan, locked }) => plan.id === detailId.value && !locked) ?? null);
+/** カードの小さな盤の囲い。居飛車の作戦はいまのおすすめ、ほかは合う囲いのいちばん目。 */
+function cardCastle(entry: OpeningPlanEntry) {
+  return props.mode === "player" && castleAdviceApplies({ ...entry.plan, castles: entry.castles })
+    ? recommendCastle({ castles: entry.castles, opponentRook: props.opponentRook, bishopExchanged: props.bishopExchanged })
+    : entry.castles[0] ?? "";
+}
+/** 「おすすめ」を出す作戦か(あなたの居飛車の作戦で、合う囲いが2つ以上)。 */
+const autoCastleShown = computed(() => Boolean(detail.value && props.mode === "player" && castleAdviceApplies({ ...detail.value.plan, castles: detail.value.castles })));
+const autoCastle = computed(() => (detail.value
+  ? recommendCastle({ castles: detail.value.castles, opponentRook: props.opponentRook, bishopExchanged: props.bishopExchanged })
+  : ""));
+/** 小さな盤・名前・解説に使う囲い。「おすすめ」ならいまの答え。 */
+const shownCastle = computed(() => (detailCastle.value === AUTO_CASTLE ? autoCastle.value : detailCastle.value));
 const detailName = computed(() => {
   if (!detail.value) return "";
   const title = planTitle(detail.value.plan);
-  const castle = detail.value.plan.strategyId && !detail.value.plan.name && detailCastle.value ? castleLabel(detailCastle.value) : "";
+  const castle = detail.value.plan.strategyId && !detail.value.plan.name && shownCastle.value ? castleLabel(shownCastle.value) : "";
   return castle ? `${title}＋${castle}` : title;
 });
 const detailFacts = computed(() => {
   const plan = detail.value?.plan;
   if (!plan) return [];
   const own = explanationOf(plan);
-  const castle = detailCastle.value && plan.strategyId && !plan.name ? openingExplanation(detailCastle.value) : null;
+  const castle = shownCastle.value && plan.strategyId && !plan.name ? openingExplanation(shownCastle.value) : null;
   const facts = [
     { label: plan.strategyId ? "どんな作戦？" : "どんな囲い？", text: plan.catch ?? own?.overview ?? "" },
     { label: "ねらい", text: own?.aim ?? "" },
     { label: "コツ", text: own?.tip ?? "" },
     { label: "気をつけること", text: own?.caution ?? own?.weakness ?? "" },
-    { label: castle ? `${castleLabel(detailCastle.value)}は` : "", text: castle?.overview ?? "" },
+    { label: castle ? `${castleLabel(shownCastle.value)}は` : "", text: castle?.overview ?? "" },
   ];
   return facts.filter(({ label, text }) => label && text);
 });
@@ -303,7 +333,7 @@ const detailFacts = computed(() => {
 const replayPly = ref<number | null>(null);
 const replayTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const REPLAY_INTERVAL_MS = 800;
-const replaySteps = computed(() => (detail.value ? openingFormationSteps(detail.value.plan.strategyId, detailCastle.value).steps : []));
+const replaySteps = computed(() => (detail.value ? openingFormationSteps(detail.value.plan.strategyId, shownCastle.value).steps : []));
 const replayIndex = computed(() => replayPly.value ?? replaySteps.value.length);
 const replayStepLabel = computed(() => {
   const step = replaySteps.value[replayIndex.value - 1];
@@ -340,8 +370,11 @@ onBeforeUnmount(stopReplay);
 
 function openDetail(entry: OpeningPlanEntry) {
   detailId.value = entry.plan.id;
-  const current = entry.plan.id === props.selectedId && entry.castles.includes(props.selectedCastle) ? props.selectedCastle : "";
-  detailCastle.value = current || entry.castles[0] || "";
+  const selected = entry.plan.id === props.selectedId;
+  const current = selected && entry.castles.includes(props.selectedCastle) ? props.selectedCastle : "";
+  // 居飛車の作戦は、自分で囲いを選んでいなければ「おすすめ」(14-3)。
+  const auto = props.mode === "player" && castleAdviceApplies({ ...entry.plan, castles: entry.castles }) && (!selected || props.selectedCastleAuto || !current);
+  detailCastle.value = auto ? AUTO_CASTLE : current || entry.castles[0] || "";
 }
 const recommended = computed(() => props.entries.find(({ plan, locked }) => plan.id === props.recommendedId && !locked) ?? null);
 const fortuneOpen = ref(false);
@@ -350,10 +383,11 @@ function backToList() {
   fortuneOpen.value = false;
   detailId.value = "";
 }
-/** 占いの結果の作戦にする。囲いは、今の局面から組める合う囲いのいちばん目。 */
+/** 占いの結果の作戦にする。囲いは、居飛車の作戦ならおすすめ、ほかは今の局面から組める合う囲いのいちばん目。 */
 function chooseFortune(planId: string) {
   const entry = props.entries.find(({ plan }) => plan.id === planId);
-  emit("choose", planId, entry?.castles[0] ?? "");
+  const auto = entry && props.mode === "player" && castleAdviceApplies({ ...entry.plan, castles: entry.castles });
+  emit("choose", planId, auto ? AUTO_CASTLE : entry?.castles[0] ?? "");
 }
 function choose() {
   if (!detail.value) return;
