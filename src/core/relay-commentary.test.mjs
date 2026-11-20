@@ -894,3 +894,34 @@ describe('ニックネームの応援', () => {
     expect(black.name).toBe('天鷺羽音');
   });
 });
+
+describe('戦型の★(docs/formation-detect-design.mdの17章)', () => {
+  const spec = {
+    key: 'ryuo:1:ranking:rk-star', event: 'ryuo', kind: 'game', label: '6組ランキング戦 1回戦', weight: 'plain',
+    black: player('a', '中村大輔'), white: player('b', '鈴木蓮'), winner: 'black', how: 'middle', story: [100, 250, 300], seed: relaySeed('ryuo:1:ranking:rk-star'),
+  };
+  const moves = ['7g7f', '3c3d', '2g2f', '4c4d', '2f2e', '2b3c', '3i4h', '3a2b', '5g5f', '8b4b', '4i5h', '5a6b'];
+
+  it('★3以上の囲いには★を添え、★4以上の戦法は名前と★を言う', () => {
+    const cast = { id: 'c', name: '佐藤誠', dan: '九段', story: null, voice: 'polite' };
+    const script = createRelayScript({ spec, cast });
+    const record = createGameRecord();
+    const entries = moves.map((move) => ({ move, eval: 40, pv: '', best: '', loss: 0, time: 60, mark: '' }));
+    const timeline = relayTimeline({ entries }, relayTimeControl({ event: spec.event, kind: spec.kind }));
+    moves.forEach((move, index) => {
+      const before = record.position.sfen;
+      appendUsiMove(record, move);
+      const formations = index >= 9
+        ? { battle: '', black: { rook: '', castle: 'ビッグ4', tactics: [] }, white: { rook: '四間飛車', castle: '舟囲い', tactics: ['藤井システム'] } }
+        : null;
+      script.add({
+        index, entry: entries[index], previousEval: 40, sfenBefore: before, sfenAfter: record.position.sfen,
+        before: timeline[index], after: timeline[index + 1], formations, last: false, end: null,
+      });
+    });
+    const texts = script.lines.map(({ text }) => text);
+    expect(texts.some((text) => /ビッグ4（★5）が完成/.test(text))).toBe(true);
+    expect(texts.some((text) => /舟囲い（/.test(text))).toBe(false);
+    expect(texts.filter((text) => /藤井システム（★4）ですね/.test(text))).toHaveLength(1);
+  });
+});

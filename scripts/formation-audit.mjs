@@ -114,13 +114,15 @@ for (const game of corpus) {
 
 const sides = corpus.length * 2;
 console.log(`棋譜 ${corpus.length}局(${sides}の側)`);
-console.log("\n名前ごと(出た側の数・はじめて出た手数の中央と最大):");
+console.log("\n名前ごと(★・出た側の数・はじめて出た手数の中央と最大):");
 const rows = [...byName].sort((a, b) => b[1].games - a[1].games);
 for (const [name, { games, plies }] of rows) {
   const sorted = [...plies].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
-  const flag = games > sides / 2 ? " ←出すぎ" : "";
-  console.log(`  ${name}\t${games}\t中央${median}手\t最大${sorted.at(-1)}手${flag}`);
+  // ★4以上(珍しい形)が1割を超える側に出たら、★か形を見直す(docs/formation-detect-design.mdの17章)。
+  const rarity = formationMeta(name)?.rarity ?? 0;
+  const flag = games > sides / 2 ? " ←出すぎ" : rarity >= 4 && games > sides / 10 ? " ←★のわりに多い" : "";
+  console.log(`  ${name}\t★${rarity || "-"}\t${games}\t中央${median}手\t最大${sorted.at(-1)}手${flag}`);
 }
 if (conflicts.length) console.log(`\n居飛車の囲いと振り飛車の囲い・戦法が同じ側に出た局(${conflicts.length}):\n  ${conflicts.join("\n  ")}`);
 if (baseline) {

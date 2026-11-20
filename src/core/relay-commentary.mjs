@@ -2,6 +2,7 @@
 // どれも盤の事実(手の種類・評価値・時間・戦型の判定)と、棋士の能力・特殊能力から作り、言い切れないことは言わない。
 // 対局者を責める言葉は使わない(U:4-3, 8)。種(対局の鍵)が同じなら、同じ中継になる。保存はしない。画面に依存しない。
 
+import { formationRarity } from './formation-catalog.mjs';
 import { createRng, pick } from './ryuo-random.mjs';
 import { HANANE, YOSHIHIKO, YOSHIHIKO_RATING, STORY_PEOPLE, crownText } from './ryuo-story.mjs';
 import { resignStyleOf } from './resign-style.mjs';
@@ -790,6 +791,10 @@ function shortOpening(name) {
 }
 /** 珍しい囲い(「まさかの○○」)と、囲いの発展形(「ここから○○でもいいぞ」。上から順に合わせる)。 */
 const RARE_CASTLE = /ミレニアム|エルモ|elmo|銀冠|天守閣|菊水|カニ囲い|木村美濃|中住まい/;
+/** 珍しい囲い(27章の名前に、戦型の目録の★4以上を足す。docs/formation-detect-design.mdの17章)。 */
+const isRareCastle = (name) => RARE_CASTLE.test(name) || formationRarity(name) >= 4;
+/** 解説の行に添える★(★3から。「銀冠穴熊（★4）」)。 */
+const starNote = (name) => (formationRarity(name) >= 3 ? `（★${formationRarity(name)}）` : '');
 const CASTLE_NEXT = Object.freeze([[/舟囲い/, 'エルモ'], [/片美濃/, '銀冠'], [/美濃囲い/, '銀冠']]);
 /** 8つのタイトル(記録係の経歴の言い方)。 */
 const TITLE_NAMES = Object.freeze(['竜王', '名人', '叡王', '王位', '王座', '棋王', '王将', '棋聖']);
@@ -1462,7 +1467,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
         const castleKey = color === 'black' ? 'castleBlack' : 'castleWhite';
         if (!formationsSeen[castleKey] && castle(color) && at >= 10) {
           formationsSeen[castleKey] = castle(color);
-          line(at, 'move', 'host', `${SIDE_NAME[color]}の${call(color)}、${castle(color)}が完成！`);
+          line(at, 'move', 'host', `${SIDE_NAME[color]}の${call(color)}、${castle(color)}${starNote(castle(color))}が完成！`);
           if (rng.next() < 0.6) {
             line(at, 'move', 'commentator', speak(cast, 'しっかり囲いましたね。これで戦いの準備ができました。', ha('囲いができたね。これで、戦えるよ。', `${castle(color)}。なるほど、堅いね。`),
               yo('しっかり、囲いましたね。まあ、これで一応、準備はできたという感じで。', `えー、${castle(color)}が完成と。まあ、固いのは固いですよね、えぇ。`)));
@@ -1471,7 +1476,7 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
           const guard = kingGuard(sfenAfter, color);
           if (/穴熊/.test(castle(color)) && once(`anaguma-go:${color}`)) maybe(0.6, at, 'move', 'anagumaGo', { name: fan(color), opp: fan(other(color)) });
           // 27章: 珍しい囲い(「まさかのミレニアム」)と、発展形(「ここからエルモでもいいぞ」)。
-          if (RARE_CASTLE.test(castle(color))) maybe(0.7, at, 'move', 'rareCastle', { castle: castle(color).replace(/囲い$/, '') });
+          if (isRareCastle(castle(color))) maybe(0.7, at, 'move', 'rareCastle', { castle: castle(color).replace(/囲い$/, '') });
           const next = CASTLE_NEXT.find(([pattern]) => pattern.test(castle(color)))?.[1];
           if (next && at < plan.middleEnd) maybe(0.4, at, 'move', 'evolve', { next });
           if (guard?.anaguma) maybe(0.6, at, 'move', 'anaguma', { side: SIDE_NAME[color] });
@@ -1482,6 +1487,16 @@ export function createRelayScript({ spec, cast, oshiId = null, nextId = null }) 
             const [a, b] = color === 'black' ? [castle(color), otherCastle] : [otherCastle, castle(color)];
             comment(at, 'move', 'castles', { a, b });
           }
+        }
+      }
+    }
+
+    // 珍しい戦法(★4以上)が初めて付いたとき、聞き手が名前と★を言う(docs/formation-detect-design.mdの17章)。
+    if (formations) {
+      for (const color of /** @type {const} */ (['black', 'white'])) {
+        for (const name of formations[color]?.tactics ?? []) {
+          if (formationRarity(name) < 4 || !once(`rare-tactic:${color}:${name}`)) continue;
+          line(at, 'move', 'host', `${SIDE_NAME[color]}の${call(color)}、${name}${starNote(name)}ですね！`);
         }
       }
     }

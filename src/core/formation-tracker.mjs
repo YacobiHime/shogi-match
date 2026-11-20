@@ -215,23 +215,42 @@ export const FORMATION_LABEL_ALIASES = Object.freeze(new Map([
 ]));
 
 /**
- * 1局で見つかった戦型の名前を、コレクション・使用率に数える名前にする。目録の呼び方へ寄せた名前と、
+ * 1局で見つかった戦型の名前を、コレクションに数える名前にする。目録の呼び方へ寄せた名前と、
  * くわしい名前に隠れた親の名前(「一手損角換わり」の「角換わり」)も足す。目録にない名前はそのまま残す(数える側が捨てる)。
+ * labels(目録の名前)を渡すと、それ自身が目録にある名前(「棒銀」など)は別名(「原始棒銀」)へ寄せない
+ * (docs/formation-detect-design.mdの17章。F1で別のカードになったので、両方に数えない)。
  * @param {Iterable<string>} names
+ * @param {Set<string>} [labels]
  * @returns {string[]}
  */
-export function collectionFormationNames(names) {
+export function collectionFormationNames(names, labels) {
   const out = new Set();
   for (const name of names) {
     if (!name) continue;
     out.add(name);
-    const alias = FORMATION_LABEL_ALIASES.get(name);
+    const alias = labels?.has(name) ? '' : FORMATION_LABEL_ALIASES.get(name);
     if (alias) out.add(alias);
     for (const parent of FORMATION_PARENTS_BY_SPECIFIC.get(name) ?? []) {
       out.add(parent);
-      const parentAlias = FORMATION_LABEL_ALIASES.get(parent);
+      const parentAlias = labels?.has(parent) ? '' : FORMATION_LABEL_ALIASES.get(parent);
       if (parentAlias) out.add(parentAlias);
     }
+  }
+  return [...out];
+}
+
+/**
+ * 使用率・勝率の統計に数える名前(17章)。くわしい名前があれば親の名前は数えず、目録にない呼び方は目録の名前へ寄せ、
+ * 1局で同じ名前を2回数えない。目録にない名前は捨てる。
+ * @param {Iterable<string>} names
+ * @param {Set<string>} labels 目録の名前
+ * @returns {string[]}
+ */
+export function statFormationNames(names, labels) {
+  const out = new Set();
+  for (const name of preferSpecificFormationNames([...names])) {
+    const label = labels.has(name) ? name : FORMATION_LABEL_ALIASES.get(name) ?? '';
+    if (label && labels.has(label)) out.add(label);
   }
   return [...out];
 }

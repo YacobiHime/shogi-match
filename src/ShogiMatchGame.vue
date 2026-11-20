@@ -3074,6 +3074,7 @@ import {
   formedNamesFromState,
   formationMove,
   collectionFormationNames,
+  statFormationNames,
   updateFormationState,
 } from "./core/formation-tracker.mjs";
 import {
@@ -6340,7 +6341,7 @@ function recordCollection(won: boolean) {
   const before = loadCollection(browserStorage());
   const recorded = recordMatchCollection(before, {
     // 目録にない呼び方(「棒銀」「矢倉」など)も、目録の名前へ寄せて数える(docs/player-world-note-design.mdの9章)。
-    formations: collectionFormationNames(matchFormationNames),
+    formations: collectionFormationNames(matchFormationNames, FORMATION_LABELS),
     tesuji: [...matchTesuji],
     tesujiNames: WAZA_TESUJI_NAMES,
     wonLevel: won && ratingChange.value && level !== undefined ? level : null,
@@ -6500,6 +6501,11 @@ function showCastleCallout(label: string) {
  * 表示補助の「技の演出」で消せる(はじめは付いている)。
  */
 const STRATEGY_LABELS = new Set(COLLECTION_CATALOG.filter(({ kind }) => kind === "strategy").map(({ label }) => label));
+const FORMATION_LABELS = new Set(COLLECTION_CATALOG.map(({ label }) => label));
+/** 1局で組んだ囲いのうち、いちばん後のもの(終局で崩されていても統計に数える)。 */
+function lastFormedCastle(side: { formed?: string[] }) {
+  return [...(side.formed ?? [])].reverse().find((name) => CASTLE_LABELS.has(name)) ?? "";
+}
 // 全部・かんたん(どの★も小さな帯だけ)・なし(docs/formation-detect-design.mdの6-7。棋桜の簡易表示にならう)。
 const WAZA_EFFECT_ORDER = ["on", "simple", "off"] as const;
 const wazaEffectChoice = ref<"on" | "simple" | "off">((() => {
@@ -6555,8 +6561,8 @@ function noteWaza(previous: string, usi: string, before: { player: Set<string>; 
   const mover = previous.split(" ")[1] === "w" ? "white" : "black";
   const mine = mover === playerColorKey.value;
   const formations = formationWaza({
-    before: collectionFormationNames(mine ? before.player : before.opponent),
-    after: collectionFormationNames(mine ? matchFormationNames : formedNamesFromState(formationState.value, mover)),
+    before: collectionFormationNames(mine ? before.player : before.opponent, FORMATION_LABELS),
+    after: collectionFormationNames(mine ? matchFormationNames : formedNamesFromState(formationState.value, mover), FORMATION_LABELS),
     castles: CASTLE_LABELS,
     strategies: STRATEGY_LABELS,
   });
@@ -6568,7 +6574,7 @@ function noteWaza(previous: string, usi: string, before: { player: Set<string>; 
   const collection = loadCollection(browserStorage());
   const first = mine && !repeat && (waza.kind === "tesuji" ? !collection.tesuji?.[waza.id] : !collection.formations?.[waza.name]);
   // 進化のもと(1局で組んだ形のうち、進化のもとをたどって見つかるもの。「高美濃 → 銀冠」)。
-  const evolved = waza.kind === "tesuji" ? "" : evolvedFrom(waza.name, collectionFormationNames(mine ? before.player : before.opponent));
+  const evolved = waza.kind === "tesuji" ? "" : evolvedFrom(waza.name, collectionFormationNames(mine ? before.player : before.opponent, FORMATION_LABELS));
   const simple = wazaEffectChoice.value === "simple";
   const view = wazaPresentation(waza, { mine, repeat, first, tip, evolved, simple });
   // ★3から、形を作る駒を玉に近い順(戦法は動いた駒に近い順)に光らせる。
@@ -12306,13 +12312,13 @@ function recordRatedGame(matchResult: MatchResult) {
     profile: {
       battle: formationState.value.battle,
       rook: own.rook,
-      castle: own.castle,
+      // 囲いは終局の形でなく、1局でいちばん後に組んだ囲い(崩されても数える。docs/formation-detect-design.mdの17章)。
+      castle: own.castle || lastFormedCastle(own),
       opponentRook: other.rook,
-      opponentCastle: other.castle,
-      // 組んだ戦法(居飛車の棒銀・早繰り銀も。作戦カードの名前に寄せる。docs/player-world-note-design.mdの9章)。
-      strategy: collectionFormationNames(matchFormationNames).filter((name) => STRATEGY_LABELS.has(name)),
-      opponentStrategy: collectionFormationNames(formationNamesFromState(formationState.value, color === "white" ? "black" : "white"))
-        .filter((name) => STRATEGY_LABELS.has(name)),
+      opponentCastle: other.castle || lastFormedCastle(other),
+      // 組んだ戦法(居飛車の棒銀・早繰り銀も。目録の名前に寄せ、親の名前と同じ名前は1局で1回。17章)。
+      strategy: statFormationNames(matchFormationNames, STRATEGY_LABELS),
+      opponentStrategy: statFormationNames(formedNamesFromState(formationState.value, color === "white" ? "black" : "white"), STRATEGY_LABELS),
     },
     event: tournament ? ryuoGame.value?.event ?? "ryuo" : "free",
     opponent: tournament ? ryuoOpponent.value?.name : undefined,

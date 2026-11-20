@@ -6,12 +6,14 @@ import { collectionCatalog } from './collection.mjs';
 import { CUSTOM_CASTLE_RULES, evolvedFrom, formationCatalog, formationMeta, formationShapes, mirrorSquare, ruleOwnPieces, ruleSpecificity, wazaTierOfRarity } from './formation-catalog.mjs';
 import {
   CASTLE_PLY_LIMIT,
+  collectionFormationNames,
   createFormationState,
   detectFormationSnapshot,
   FORMATION_LABEL_ALIASES,
   formationMove,
   formedNamesFromState,
   STRATEGY_PLY_LIMIT,
+  statFormationNames,
   updateFormationState,
 } from './formation-tracker.mjs';
 import { formationWaza } from './move-waza.mjs';
@@ -250,5 +252,22 @@ describe('技の演出の目録', () => {
     const strategies = new Set(catalog.filter((entry) => entry.kind === 'strategy').map((entry) => entry.label));
     const found = formationWaza({ before: ['居飛車穴熊'], after: ['居飛車穴熊', 'ビッグ4', '銀冠穴熊'], castles, strategies });
     expect(found.map((item) => [item.name, item.tier])).toEqual([['ビッグ4', 'legend'], ['銀冠穴熊', 'rare']]);
+  });
+});
+
+describe('コレクションと統計の名前(17章)', () => {
+  test('目録にある名前は別名へ寄せない(棒銀で原始棒銀を数えない)。親の名前はコレクションには足す', () => {
+    const labels = new Set(catalog.map((entry) => entry.label));
+    const names = collectionFormationNames(['棒銀', '一手損角換わり'], labels);
+    expect(names).toContain('棒銀');
+    expect(names).not.toContain('原始棒銀');
+    expect(names).toContain('角換わり');
+  });
+
+  test('統計は、くわしい名前があれば親を数えず、目録の呼び方へ寄せ、同じ名前は1回', () => {
+    const labels = new Set(catalog.filter((entry) => entry.kind === 'strategy').map((entry) => entry.label));
+    expect(statFormationNames(['一手損角換わり', '角換わり'], labels)).toEqual(['一手損角換わり']);
+    expect(statFormationNames(['四間飛車', 'ノーマル四間飛車'], labels)).toEqual(['ノーマル四間飛車']);
+    expect(statFormationNames(['藤井システム', '四間飛車', '舟囲い'], labels)).toEqual(['藤井システム']);
   });
 });

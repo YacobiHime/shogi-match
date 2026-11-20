@@ -122,7 +122,7 @@ export const FORMATION_META = Object.freeze({
   へなちょこ急戦: 's anti-ranging 2',
   超速3七銀: 's anti-ranging 2',
   後手超速: 's anti-ranging 2',
-  右四間飛車: 's anti-ranging 3',
+  右四間飛車: 's anti-ranging 2',
   右四間飛車エルモ囲い: 's anti-ranging 3',
   ポンポン桂: 's anti-ranging 3',
   居合抜き超速: 's anti-ranging 3',
