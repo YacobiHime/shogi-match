@@ -2913,7 +2913,7 @@ import PregamePicker, { type PickerSection, type PickerValue } from "./PregamePi
 import OpeningPlanSheet, { type OpeningPlanEntry } from "./OpeningPlanSheet.vue";
 import TitleDaySheet, { type DayReviewView, type DaySummaryView, type KansenkiView } from "./TitleDaySheet.vue";
 import SealBreak from "./SealBreak.vue";
-import { proYearRival, proYearScene, proYearSealSceneId, sealSeriesText } from "./core/pro-year-story.mjs";
+import { proYearRival, proYearScene, proYearSealSceneId, sceneryText, sealSeriesText } from "./core/pro-year-story.mjs";
 import FormationThumb from "./FormationThumb.vue";
 import HananePortrait from "./HananePortrait.vue";
 import { ALL_OPENING_PLANS, openingPlanById, openingPlanFor } from "./core/opening-catalog.mjs";
@@ -5467,11 +5467,15 @@ const sealBreakScene = computed(() => {
     winsOpponent: marks.filter((mark: string) => mark === "loss").length,
     need: stage.need ?? 0,
   };
+  const pending = proYearState.value?.pending ?? null;
+  const proYearSeed = `${stage.eventText ?? ""}:${proYearState.value?.fy ?? ""}`;
   const sceneId = proYearSealSceneId({
     ...series,
     // 保持者として指す防衛戦は、受けて立つ側の夜(docs/pro-year-design.mdの20-3の3)。
     defense: Boolean(stage.sides?.some((side: { you: boolean; role: string }) => side.you && side.role !== "挑戦者")),
     rival: proYearRival(ryuoOpponent.value),
+    // 同じ場合が続く夜は、局ごとに次の台本へ(docs/pro-year-design.mdの31-3)。種は棋戦と年度。
+    seed: proYearSeed,
   });
   const role = stage.sides?.find((side: { you: boolean; role: string }) => !side.you && side.role !== "挑戦者")?.role
     ?? stage.sides?.find((side: { you: boolean; role: string }) => side.you)?.role ?? "";
@@ -5479,7 +5483,7 @@ const sealBreakScene = computed(() => {
   return proYearScene(sceneId, {
     playerName: playerName.value,
     momokaCall: momokaCallName(playerProfile.value),
-    vars: { title, series: sealSeriesText({ ...series, title }) },
+    vars: { title, series: sealSeriesText({ ...series, title }), scenery: sceneryText(pending?.date ?? "", `${proYearSeed}:${series.winsUser + series.winsOpponent}`) },
   });
 });
 /** 休憩の画面の封じ手の札(封筒・控室の予想)。 */

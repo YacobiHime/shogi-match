@@ -124,3 +124,77 @@ describe('羽音・善彦との公式戦の場面(docs/pro-year-design.mdの22-3
     expect(proYearSceneDue({ ...vsFather, scenes: [...(vsFather.scenes ?? []), 'pro-yoshihiko'] })).toBeNull();
   });
 });
+
+describe('場合分けを増やした夜(docs/pro-year-design.mdの31章)', async () => {
+  const { proYearSealSceneId, sealKind, rotateScene, sceneryText, titleEveId, defenseEveId, proYearScene } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_MORE_SCENES, SEAL_ROTATIONS } = await import('./pro-year-story-more.mjs');
+
+  it('番勝負の星に、王手(あと1勝)と最終局を足す', () => {
+    expect(sealKind({ winsUser: 3, winsOpponent: 1, need: 4 })).toBe('oute');
+    expect(sealKind({ winsUser: 3, winsOpponent: 3, need: 4 })).toBe('final');
+    expect(sealKind({ winsUser: 1, winsOpponent: 3, need: 4 })).toBe('kado');
+    expect(sealKind({ winsUser: 2, winsOpponent: 1, need: 4 })).toBe('lead');
+    expect(sealKind({ winsUser: 0, winsOpponent: 0, need: 4 })).toBe('tie');
+    expect(proYearSealSceneId({ winsUser: 3, winsOpponent: 3, need: 4, rival: 'hanane' })).toBe('pro-seal-hanane-final');
+  });
+
+  it('同じ場合が続く夜は、局ごとに別の台本になる。同じ局ならいつも同じ', () => {
+    const seed = '王位戦:2027';
+    const nights = [0, 1, 2].map((turn) => rotateScene(SEAL_ROTATIONS.tie, turn, seed));
+    expect(new Set(nights).size).toBe(3);
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 1, need: 4, seed })).toBe(proYearSealSceneId({ winsUser: 1, winsOpponent: 1, need: 4, seed }));
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 1, need: 4 })).toBe('pro-seal-tie');
+  });
+
+  it('回す台本は、どれも台本の目録にある', () => {
+    for (const ids of Object.values(SEAL_ROTATIONS)) for (const id of ids) expect(proYearScene(id), id).not.toBeNull();
+  });
+
+  it('季節の1行は、対局の月から選ぶ', () => {
+    expect(sceneryText('2027-08-10', 'oi')).toMatch(/虫|熱|夏祭り/);
+    expect(sceneryText('2028-02-01', 'osho')).toMatch(/雪|冷たい|白く/);
+    expect(sceneryText('', 'x')).toBe('');
+  });
+
+  it('前夜の場合分け: 奪還＞2度目＞冠を持って＞挑戦の経験あり＞はじめて。防衛は冠の数＞連覇＞はじめて', () => {
+    expect(titleEveId({ heldBefore: true, challengedHere: true })).toBe('pro-title-eve-retake');
+    expect(titleEveId({ challengedHere: true, crowns: 2 })).toBe('pro-title-eve-again');
+    expect(titleEveId({ crowns: 1, challengedAny: true })).toBe('pro-title-eve-crowned');
+    expect(titleEveId({ challengedAny: true })).toBe('pro-title-eve-next');
+    expect(titleEveId({})).toBe('pro-title-eve');
+    expect(defenseEveId({ crowns: 2, streak: 5 })).toBe('pro-defense-eve-crowns');
+    expect(defenseEveId({ streak: 2 })).toBe('pro-defense-eve-again');
+    expect(defenseEveId({ streak: 1 })).toBe('pro-defense-eve');
+  });
+
+  it('新しい台本は、差し込みがなくても読め、題名に差し込みを書かない', () => {
+    for (const id of Object.keys(PRO_YEAR_MORE_SCENES)) {
+      const scene = proYearScene(id, { playerName: 'やこび' });
+      expect(scene.title, id).not.toMatch(/\{/);
+      expect(scene.lines.map((entry) => entry.text).join(''), id).not.toMatch(/\{[a-zA-Z]+\}/);
+      expect(scene.lines.length, id).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('次の年度の同じタイトルの番勝負でも、前夜を出す(見た印は棋戦と年度ごと)', () => {
+    let state = markProYearScene(start(), 'pro-debut');
+    for (let step = 0; step < 300; step += 1) {
+      state = advanceToNextGame(state);
+      if (state.yearDone) break;
+      const due = proYearSceneDue(state);
+      if (due?.id.startsWith('pro-title-eve')) {
+        expect(due.key.endsWith(`:${state.fy}`)).toBe(true);
+        expect(proYearSceneDue(markProYearScene(state, due.key))).toBeNull();
+        const nextYear = { ...state, fy: state.fy + 1, scenes: [...(state.scenes ?? []), due.key] };
+        const again = proYearSceneDue(nextYear);
+        expect(again).not.toBeNull();
+        // 羽音・善彦でない相手なら、同じ棋戦に次の年度も挑むと2度目の挑戦の前夜になる。
+        if (due.id === 'pro-title-eve') expect(again.id).toBe('pro-title-eve-again');
+        return;
+      }
+      if (due) state = markProYearScene(state, due.key);
+      state = recordProGame(state, 'win').state;
+    }
+    throw new Error('タイトル戦の第1局に届かなかった');
+  });
+});

@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText } from './pro-year-story.mjs';
+import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, rotateScene } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -881,7 +881,9 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   const eternalName = eternalNow ? ETERNAL_RULES[event.id]?.name ?? '' : '';
   if (rival) {
     const won = isTitleWin(kind);
-    const id = `pro-${won ? 'beat' : 'lost'}-${rival}`;
+    const base = `pro-${won ? 'beat' : 'lost'}-${rival}`;
+    // 羽音との番勝負のあとは、1回目と2回目からの台本を回す(docs/pro-year-design.mdの31-3)。
+    const id = rival === 'hanane' ? rotateScene([base, `${base}-2`], (state.scenes ?? []).filter((mark) => mark.startsWith(`${base}`)).length) : base;
     queueProYearScene(state, {
       key: `${id}:${event.id}:${state.fy}`,
       id,
@@ -892,6 +894,10 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
       },
     });
   }
+  // ほかに持っているタイトルの数(失冠の夜の場合分け。31-3)。
+  const crownsOther = TITLE_EVENTS.filter((id) => id !== event.id && state.titles[id] === PRO_USER_ID).length;
+  // はじめてタイトルを取った夜(31-3。羽音・善彦から取ったときは、相手ごとの場面が言う)。
+  if (kind === 'take' && firstEver && !rival) queueProYearScene(state, { key: 'pro-first-title', id: 'pro-first-title', vars: { title: event.short } });
   if (isTitleWin(kind)) {
     state.user.titleCounts = { ...counts, [event.id]: after.total };
     state.user.crowns = (state.user.crowns ?? 0) + 1;
@@ -904,13 +910,22 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
       // 永世称号の夜(20-3の4)。届いた番勝負では、連覇の夜は出さない。
       if (!rival) queueProYearScene(state, { key: `pro-eternal:${event.id}`, id: 'pro-eternal', vars: { title: event.short, eternal: name } });
     } else if (kind === 'defend' && isStreakSceneMark(after.streak) && !rival) {
-      queueProYearScene(state, { key: `pro-defense-streak:${event.id}:${after.streak}`, id: 'pro-defense-streak', vars: { title: event.short, streak: String(after.streak) } });
+      // 5連覇からは長い連覇の夜(31-3)。
+      const id = after.streak >= 5 ? 'pro-defense-streak-long' : 'pro-defense-streak';
+      queueProYearScene(state, { key: `${id}:${event.id}:${after.streak}`, id, vars: { title: event.short, streak: String(after.streak) } });
     }
   } else if (kind === 'lost') {
     noteEvent(state, { kind: 'lostTitle', short: event.short, winner: opponent });
     seedFormerHolder(state, cycle, event);
     // 失冠の夜(20-3の4)。棋戦と年度ごとに1回。
-    if (!rival) queueProYearScene(state, { key: `pro-title-lost:${event.id}:${state.fy}`, id: 'pro-title-lost', vars: { title: event.short, challenger: opponent } });
+    // 3期以上続けて守ったあと＞ほかのタイトルを持ったまま＞そのほか(31-3)。
+    const id = (before.streak ?? 0) >= 3 ? 'pro-title-lost-long' : crownsOther > 0 ? 'pro-title-lost-still' : 'pro-title-lost';
+    if (!rival) {
+      queueProYearScene(state, {
+        key: `${id}:${event.id}:${state.fy}`, id,
+        vars: { title: event.short, challenger: opponent, total: String(before.total ?? 0), crowns: String(crownsOther) },
+      });
+    }
   }
 }
 

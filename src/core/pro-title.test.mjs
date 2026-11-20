@@ -306,12 +306,14 @@ describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
     const state = plain(firstDefenseGame(startNextYear(year1.state)));
     expect(state).toBeTruthy();
     const due = proYearSceneDue(state);
-    expect(due.id).toBe('pro-defense-eve');
+    // 防衛戦の前夜は、ほかに持っているタイトルの数と連覇で台本が分かれる(docs/pro-year-design.mdの31-3)。
+    expect(due.id).toMatch(/^pro-defense-eve/);
     const challenger = state.players[state.pending.opponentId].name;
     expect(due.vars.challenger).toBe(challenger);
     const scene = proYearScene(due.id, { playerName: 'やこび', vars: due.vars });
     const text = scene.lines.map((entry) => entry.text).join('\n');
-    expect(text).toContain(`${challenger}が挑戦者としてやこびに挑んでくる`);
+    expect(text).toContain(`${challenger}が`);
+    expect(text).toMatch(/挑んでくる/);
     expect(text).not.toMatch(/に挑む。/);
     // 一度見たら、同じタイトルの防衛戦では出さない。
     expect(proYearSceneDue(markProYearScene(state, due.key))).toBeNull();
@@ -335,7 +337,8 @@ describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
     expect([2, 3, 4, 5, 10, 11].map(isStreakSceneMark)).toEqual([false, true, false, true, true, false]);
     const year2 = playYear(startNextYear(plainYear1.state));
     const year3 = playYear(startNextYear(year2.state));
-    const queued = queuedProYearScene(year3.state);
+    // 1年目に積んだ初タイトルの夜(31-3)より後ろに、連覇の夜が積まれている。
+    const queued = (year3.state.sceneQueue ?? []).find((item) => item.id === 'pro-defense-streak');
     expect(queued?.id).toBe('pro-defense-streak');
     expect(queued.vars.streak).toBe('3');
     const text = proYearScene(queued.id, { playerName: 'やこび', vars: queued.vars }).lines.map((entry) => entry.text).join('\n');
@@ -344,7 +347,8 @@ describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
     while (queuedProYearScene(seen)) seen = markProYearScene(seen, queuedProYearScene(seen).key);
     expect(queuedProYearScene(seen)).toBeNull();
     const lostYear = playYear(startNextYear(plainYear1.state), (state) => (state.pending.defense ? 'loss' : 'win'));
-    expect(lostYear.state.sceneQueue.some((item) => item.id === 'pro-title-lost' && item.vars.challenger)).toBe(true);
+    // 失冠の夜は、ほかのタイトルを持ったままか・長く守ったかで台本が分かれる(31-3)。
+    expect(lostYear.state.sceneQueue.some((item) => item.id.startsWith('pro-title-lost') && item.vars.challenger)).toBe(true);
   });
 
   it('物語のサブで読み直せる(差し込みがなくても読める文)', () => {
@@ -383,7 +387,8 @@ describe('相手が羽音・善彦のときの場面(docs/pro-year-design.mdの2
     const vsFather = firstTitleGame(start(), { defense: false }, YOSHIHIKO);
     const due = proYearSceneDue(vsFather);
     expect(due.id).toBe('pro-title-eve-yoshihiko');
-    expect(due.key).toBe(`pro-title-eve-yoshihiko:${vsFather.games[vsFather.pending.gameId].event}`);
+    // 見た印は棋戦と年度ごと(毎年の番勝負の前に出す。31-3)。
+    expect(due.key).toBe(`pro-title-eve-yoshihiko:${vsFather.games[vsFather.pending.gameId].event}:${vsFather.fy}`);
     const text = textOf(due);
     expect(text).toContain(`天鷺善彦の持つ${vsFather.pending.titleName}に挑む`);
     expect(text).toContain('どっちの味方かは、聞かないで');

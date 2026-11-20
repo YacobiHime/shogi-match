@@ -6,6 +6,7 @@
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
+import { PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -558,6 +559,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
       line('narration', 'neutral', '電話を切る。次の挑戦は、もう始まっている。', { tone: 'dim' }),
     ],
   }),
+  // 場合分けを増やした台本(docs/pro-year-design.mdの31章)。
+  ...PRO_YEAR_MORE_SCENES,
 });
 
 /**
@@ -575,13 +578,57 @@ export function proYearRival(opponent) {
  * 封じ手の夜の場面(docs/seal-break-design.mdの2-5)。番勝負の星から、リード・タイ・カド番のどれかの場面のid。
  * defenseは保持者として指す防衛戦(防衛戦の3本。docs/pro-year-design.mdの20-3の3)。
  * rivalは相手が羽音・善彦のとき(22-3の3)。羽音は挑戦でも防衛でも星で3本、善彦は1本(星は`sealSeriesText`の1行で言う)。
- * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean, rival?: string }} series
+ * 同じ場合の中では、番勝負の何局目か(星の数)と種(棋戦と年度)で台本を回す(docs/pro-year-design.mdの31-3)。王手(あと1勝)と最終局も分ける。
+ * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean, rival?: string, seed?: string }} series
  */
-export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false, rival = '' } = {}) {
-  const kind = need > 0 && winsOpponent >= need - 1 && winsOpponent > winsUser ? 'kado' : winsUser > winsOpponent ? 'lead' : 'tie';
-  if (rival === 'hanane') return `pro-seal-hanane-${kind}`;
-  if (rival === 'yoshihiko') return 'pro-seal-yoshihiko';
-  return defense ? `pro-seal-defense-${kind}` : `pro-seal-${kind}`;
+export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false, rival = '', seed = '' } = {}) {
+  const rotation = SEAL_ROTATIONS[/** @type {keyof typeof SEAL_ROTATIONS} */ (rival === 'yoshihiko' ? 'yoshihiko' : `${rival || (defense ? 'defense' : '')}${rival || defense ? '-' : ''}${sealKind({ winsUser, winsOpponent, need })}`)];
+  // 同じ番勝負の続く夜は、局ごとに次の台本へ(31-3)。種がなければ今までの台本(いちばん前)。
+  return seed ? rotateScene(rotation, winsUser + winsOpponent, seed) : rotation[0];
+}
+
+/**
+ * 番勝負の星の場合(31-3)。最終局(両者あと1勝)・王手(あなたがあと1勝)・カド番(相手があと1勝)・リード・タイ。
+ * @param {{ winsUser?: number, winsOpponent?: number, need?: number }} series
+ */
+export function sealKind({ winsUser = 0, winsOpponent = 0, need = 0 }) {
+  const userNear = need > 0 && winsUser >= need - 1;
+  const opponentNear = need > 0 && winsOpponent >= need - 1;
+  if (userNear && opponentNear) return need > 1 ? 'final' : 'tie';
+  if (opponentNear && winsOpponent > winsUser) return 'kado';
+  if (userNear && winsUser > winsOpponent) return 'oute';
+  return winsUser > winsOpponent ? 'lead' : 'tie';
+}
+
+/** 文字の種を数にする(乱数を使わず、同じ局ならいつも同じ台本にする)。 */
+function seedNumber(seed) {
+  let hash = 0;
+  for (const char of String(seed)) hash = (hash * 31 + char.charCodeAt(0)) % 100003;
+  return hash;
+}
+
+/**
+ * 同じ場合の中の台本を回す(31-3)。turnが1つ進むと次の台本。種がなく、turnが0ならいちばん前(今までの台本)。
+ * @param {readonly string[]} ids
+ * @param {number} turn
+ * @param {string} [seed]
+ */
+export function rotateScene(ids, turn, seed = '') {
+  if (!ids?.length) return '';
+  return ids[(Math.max(0, Math.floor(Number(turn) || 0)) + seedNumber(seed)) % ids.length];
+}
+
+/**
+ * 季節の夜の1行(31-3の`{scenery}`)。日付(YYYY-MM-DD)の月から季節を決め、種で選ぶ。日付がなければ空。
+ * @param {string} date
+ * @param {string} [seed]
+ */
+export function sceneryText(date, seed = '') {
+  const month = Number(String(date ?? '').slice(5, 7));
+  if (!month) return '';
+  const season = month >= 3 && month <= 5 ? 'spring' : month >= 6 && month <= 8 ? 'summer' : month >= 9 && month <= 11 ? 'autumn' : 'winter';
+  const lines = SCENERY_LINES[season];
+  return lines[seedNumber(`${seed}:${date}`) % lines.length];
 }
 
 /**
@@ -629,6 +676,8 @@ const DEFAULT_VARS = Object.freeze({
   challenger: '若手の棋士', streak: '3', eternal: '永世称号',
   // 相手が羽音・善彦のとき(22-3の6)。recordは空なら行ごと出さない。
   series: '番勝負は、まだ続いている。', result: 'タイトル戦の番勝負が終わった。', record: '',
+  // 場合分けを増やした台本の差し込み(31-3)。読み直しのときは、どの季節にも読める1行と、決まった数。
+  scenery: '窓の外は、もう暗い。', crowns: '2', total: '3',
   // 研究会で指したことがあるかで変える羽音の1行(23章。研究会に出ていないのに「何度も指した」と言わない)。
   study: STUDY_LINES.pro.studied, studyBig: STUDY_LINES.big.studied,
 });
@@ -638,14 +687,14 @@ const DEFAULT_VARS = Object.freeze({
  * 棋戦の言葉を先に入れ、名前をあとで入れる(言葉の中に{name}を書けるように。22-3の6)。中身が空になった行は出さない(`{record}`だけの行)。
  * 声だけの人(善彦)の名前の札は、行の名前を使う。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string, scenery?: string, crowns?: string, total?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
   const fill = (text) => sceneText(
-    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig)\}/g, (_, key) => words[key]),
+    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig|scenery|crowns|total)\}/g, (_, key) => words[key]),
     playerName,
     momokaCall,
   );
@@ -704,20 +753,26 @@ export function proYearSceneDue(state) {
   // 研究会でその相手と指したことがあるか(羽音の「研究会では何度も指した」の1行。23章)。
   const studyRecord = state.study?.records?.[pending.opponentId];
   const studied = Boolean(studyRecord && (studyRecord.w ?? 0) + (studyRecord.l ?? 0) + (studyRecord.d ?? 0) > 0);
+  const event = String(pending.gameId && state.games?.[pending.gameId]?.event || '');
+  const firstGame = pending.kind === 'finals' && pending.series && (pending.series.games?.length ?? 0) === 0;
+  // 場合分けを増やした台本の差し込み(31-3)。季節の1行・ほかに持っているタイトルの数・そのタイトルの通算期数。
+  const fy = String(state.fy ?? '');
+  const crowns = Object.entries(state.titles ?? {}).filter(([id, holder]) => holder === 'user' && id !== event).length;
+  const total = state.user?.titleRecord?.[event]?.total ?? state.user?.titleCounts?.[event] ?? 0;
   const vars = {
     title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '',
     study: studied ? STUDY_LINES.pro.studied : STUDY_LINES.pro.fresh, studyBig: studied ? STUDY_LINES.big.studied : STUDY_LINES.big.fresh,
+    scenery: sceneryText(pending.date, `${event}:${fy}`), crowns: String(crowns), total: String(total),
   };
-  const event = String(pending.gameId && state.games?.[pending.gameId]?.event || '');
-  const firstGame = pending.kind === 'finals' && pending.series && (pending.series.games?.length ?? 0) === 0;
   const due = (key, id, extra = {}) => (seenProYearScene(state, key) ? null : { key, id, vars: { ...vars, ...extra } });
   if (rival) {
     // 羽音・善彦との番勝負の前夜(22-3の2)。永世称号がかかる防衛戦は、見たことがあっても記録の1行をつけて出す。
+    // 見た印は棋戦と年度ごと(31-3。毎年の番勝負の前に出す)。
     if (firstGame) {
       const id = `pro-${pending.defense ? 'defense' : 'title'}-eve-${rival}`;
       const eternal = pending.defense ? pending.titleStakes?.eternal ?? null : null;
       const record = eternal && !eternal.reached && eternal.left === 1 ? `この番勝負を勝てば、${eternal.name}の資格に届く。` : '';
-      return due(`${id}:${event}${record ? ':eternal' : ''}`, id, { holder: '', record });
+      return due(`${id}:${event}:${fy}${record ? ':eternal' : ''}`, id, { holder: '', record });
     }
     // 公式戦ではじめて当たる対局(番勝負の途中でも、公式戦がもう終わっていれば出さない)。
     if (!metInOfficialGame(state, pending.opponentId)) {
@@ -731,18 +786,45 @@ export function proYearSceneDue(state) {
   if (!firstGame) return null;
   // 防衛戦は受けて立つ側の前夜(20-3の1・2)。挑戦者向けの前夜は出さない(「保持者」に挑戦者の名前が入って逆さまになるため)。
   if (pending.defense) {
-    const defenseVars = { ...vars, holder: '', challenger: opponent?.name ?? '' };
+    const streak = pending.titleStakes?.streak ?? 0;
+    const defenseVars = { ...vars, holder: '', challenger: opponent?.name ?? '', streak: String(streak) };
     const eternal = pending.titleStakes?.eternal ?? null;
     const eternalKey = `pro-defense-eternal:${event}`;
     if (eternal && !eternal.reached && eternal.left === 1 && !seenProYearScene(state, eternalKey)) {
       return { key: eternalKey, id: 'pro-defense-eternal', vars: { ...defenseVars, eternal: eternal.name } };
     }
-    const key = `pro-defense-eve:${event}`;
-    return seenProYearScene(state, key) ? null : { key, id: 'pro-defense-eve', vars: defenseVars };
+    const id = defenseEveId({ streak, crowns });
+    const key = `${id}:${event}:${fy}`;
+    return seenProYearScene(state, key) ? null : { key, id, vars: defenseVars };
   }
-  const key = `pro-title-eve:${event}`;
-  if (!seenProYearScene(state, key)) return { key, id: 'pro-title-eve', vars };
+  const challengedHere = (state.scenes ?? []).some((mark) => mark.startsWith('pro-title-eve') && mark.split(':')[1] === event);
+  const challengedAny = (state.scenes ?? []).some((mark) => /^pro-(title|defense)-eve/.test(mark));
+  const id = titleEveId({ heldBefore: total > 0, challengedHere, crowns, challengedAny });
+  const key = `${id}:${event}:${fy}`;
+  if (!seenProYearScene(state, key)) return { key, id, vars };
   return null;
+}
+
+/**
+ * タイトル戦(挑戦)の前夜の場合分け(31-3)。奪還＞2度目の挑戦＞冠を持って挑む＞ほかのタイトルの挑戦の経験あり＞はじめて。
+ * @param {{ heldBefore?: boolean, challengedHere?: boolean, crowns?: number, challengedAny?: boolean }} input
+ */
+export function titleEveId({ heldBefore = false, challengedHere = false, crowns = 0, challengedAny = false }) {
+  if (heldBefore) return 'pro-title-eve-retake';
+  if (challengedHere) return 'pro-title-eve-again';
+  if (crowns > 0) return 'pro-title-eve-crowned';
+  if (challengedAny) return 'pro-title-eve-next';
+  return 'pro-title-eve';
+}
+
+/**
+ * 防衛戦の前夜の場合分け(31-3。永世称号がかかる夜は先に決める)。ほかに2つ以上持っている＞2期以上続けて守った＞はじめての防衛。
+ * @param {{ streak?: number, crowns?: number }} input streakはいままで続けて持った期数、crownsはほかに持っているタイトルの数。
+ */
+export function defenseEveId({ streak = 0, crowns = 0 }) {
+  if (crowns >= 2) return 'pro-defense-eve-crowns';
+  if (streak >= 2) return 'pro-defense-eve-again';
+  return 'pro-defense-eve';
 }
 
 /**
