@@ -5165,6 +5165,54 @@
   color: #8fdcaa;
   font-size: 0.85em;
 }
+/* 結果の窓の「寄せのふり返り」。寄せの速度計の大事な瞬間を押すと、その局面から検討する(docs/phase-guide-design.mdの10章)。 */
+.shogi-game__result-gauge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em 0.45em;
+  align-items: center;
+  justify-content: center;
+  margin: 0.2em 0;
+}
+.shogi-game__result-gauge b {
+  padding: 0.05em 0.45em;
+  border-radius: 0.3em;
+  color: #10281b;
+  background: #8fdcaa;
+  font-size: 0.8em;
+  font-weight: 800;
+}
+.shogi-game .shogi-game__result-gauge button {
+  display: inline-flex;
+  gap: 0.4em;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.2em 0.7em;
+  border: 1px solid rgba(255, 252, 244, 0.45);
+  border-radius: 0.4em;
+  color: inherit;
+  background: rgba(255, 252, 244, 0.06);
+  box-shadow: none;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+.shogi-game__result-gauge em {
+  font-style: normal;
+  font-weight: 800;
+}
+/* 色に加えて、言葉(受けた・見逃した)と線の形(実線と点線)で見分ける(U:7-3)。 */
+.shogi-game .shogi-game__result-gauge button.shogi-game__result-gauge--good {
+  border-color: #8fdcaa;
+}
+.shogi-game__result-gauge--good em {
+  color: #8fdcaa;
+}
+.shogi-game .shogi-game__result-gauge button.shogi-game__result-gauge--miss {
+  border: 1px dashed #ef9a8b;
+}
+.shogi-game__result-gauge--miss em {
+  color: #ef9a8b;
+}
 /* 結果の窓の「勝ちメシ ★ 海鮮丼」。 */
 .shogi-game__result-meal {
   display: flex;

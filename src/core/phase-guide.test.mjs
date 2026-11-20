@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   MIDDLE_MIN_PLY,
   attackFile,
+  gaugeMoments,
+  noteGauge,
   endgameGauge,
   guidePhase,
   kingSafety,
@@ -133,5 +135,58 @@ describe("はじめての1行を見た印", () => {
     expect(loadPhaseIntroSeen(storage)).toEqual({ middle: false, endgame: false });
     markPhaseIntroSeen("middle", storage);
     expect(loadPhaseIntroSeen(storage)).toEqual({ middle: true, endgame: false });
+  });
+});
+
+describe("盤から数える1手詰め(10章)", () => {
+  it("自分の手番で1手詰めがあれば、読みがなくても相手玉は4", () => {
+    const gauge = endgameGauge({ sfen: GUARDED, color: "black", mateNow: true });
+    expect(gauge.attack.level).toBe(4);
+    expect(gauge.action.key).toBe("mate");
+  });
+  it("手番を渡すと相手に1手詰めがあれば、自玉は詰めろ", () => {
+    expect(endgameGauge({ sfen: GUARDED, color: "black", threatNow: true }).risk).toMatchObject({ level: 3, text: "詰めろ" });
+  });
+  it("指したあとは、かけた詰めろと残った詰めろを言う", () => {
+    const raced = endgameGauge({ sfen: GUARDED, color: "black", myTurn: false, mateNow: true });
+    expect(raced.attack).toMatchObject({ level: 3, text: "詰めろをかけた" });
+    expect(raced.action.key).toBe("raced");
+    expect(endgameGauge({ sfen: GUARDED, color: "black", myTurn: false, threatNow: true }).action.key).toBe("left-threat");
+    expect(endgameGauge({ sfen: GUARDED, color: "black", myTurn: false }).action.key).toBe("wait");
+  });
+  it("指したあとは、相手の手番の読みを使わない", () => {
+    const gauge = endgameGauge({ sfen: GUARDED, color: "black", myTurn: false, reading: { score: { type: "mate", value: 1 } } });
+    expect(gauge.attack.level).toBe(1);
+  });
+});
+
+describe("寄せのふり返り(10章)", () => {
+  const e = (ply, myTurn, attack, risk) => ({ ply, myTurn, attack, risk });
+  it("詰めろを受けたか、受けなかったかを言う", () => {
+    const held = gaugeMoments([e(60, true, 1, 3), e(61, false, 1, 1)]);
+    expect(held).toEqual([expect.objectContaining({ key: "threat", move: 61, outcome: "受けた", good: true })]);
+    const left = gaugeMoments([e(60, true, 1, 3), e(61, false, 1, 3)]);
+    expect(left[0]).toMatchObject({ outcome: "受けなかった", good: false });
+  });
+  it("1手詰めが残っていなくても、すぐ詰まされたら受けなかった", () => {
+    expect(gaugeMoments([e(60, true, 1, 3), e(61, false, 1, 1)], { lostByMateAt: 66 })[0].outcome).toBe("受けなかった");
+  });
+  it("詰みを詰ませたか、見逃したか", () => {
+    expect(gaugeMoments([e(80, true, 4, 1)], { wonByMateAt: 81 })[0]).toMatchObject({ key: "mate", outcome: "詰ませた" });
+    expect(gaugeMoments([e(80, true, 4, 1), e(81, false, 1, 1)])[0]).toMatchObject({ outcome: "見逃した", good: false });
+  });
+  it("詰めろをかけた手は、上がったときだけ", () => {
+    const moments = gaugeMoments([e(71, false, 3, 1), e(72, true, 2, 1), e(73, false, 3, 1)]);
+    expect(moments.map((m) => [m.key, m.move])).toEqual([["race", 71], ["race", 73]]);
+  });
+  it("多すぎるときは大事なものから3つ、手数の順に並べる", () => {
+    const log = [e(41, false, 3, 1), e(50, true, 1, 3), e(51, false, 1, 1), e(61, false, 3, 1), e(70, true, 4, 1), e(71, false, 1, 1), e(75, false, 3, 1)];
+    const moments = gaugeMoments(log);
+    expect(moments.map((m) => [m.key, m.move])).toEqual([["race", 41], ["threat", 51], ["mate", 71]]);
+    expect(moments[2].outcome).toBe("見逃した");
+  });
+  it("待ったで戻ったら、その手数から後ろの記録を消す", () => {
+    expect(noteGauge([e(60, true, 1, 1), e(61, false, 1, 1), e(62, true, 2, 1)], e(61, false, 3, 1)))
+      .toEqual([e(60, true, 1, 1), e(61, false, 3, 1)]);
   });
 });

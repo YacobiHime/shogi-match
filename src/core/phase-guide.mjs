@@ -29,6 +29,8 @@ export const PHASE_GUIDE_TEXT = Object.freeze({
   safety: { 3: '堅い', 2: 'ふつう', 1: '薄い' },
   attackLevels: { 1: 'まだ遠い', 2: '迫っている', 3: '詰めろをかけられる', 4: '詰みがある' },
   riskLevels: { 1: '安全', 2: '迫られている', 3: '詰めろ', 4: '王手' },
+  attackPlaced: '詰めろをかけた',
+  momentsTitle: '寄せのふり返り',
 });
 
 /** 玉のまわり8升。 */
@@ -176,37 +178,113 @@ export function middleBoard({ sfen, color, materialDiff = null, reading = null }
 }
 
 /**
- * 寄せの速度計(5章)。
- * @param {{ sfen: string, color: 'black' | 'white', reading?: PhaseReading | null }} input
+ * 寄せの速度計(5章)。盤から数えられる1手詰め(mateNow・threatNow)は、助言の設定によらず使う(10章)。
+ * @param {{ sfen: string, color: 'black' | 'white', reading?: PhaseReading | null, myTurn?: boolean,
+ *   mateNow?: boolean, threatNow?: boolean }} input
+ *   myTurn: プレイヤーの手番か。相手の手番(指したあと)は、指した結果を出す。
+ *   mateNow: プレイヤーの手番なら、プレイヤーに1手詰めがある。相手の手番なら、手番を渡すとプレイヤーに1手詰めがある(詰めろをかけた)。
+ *   threatNow: プレイヤーの手番なら、手番を渡すと相手に1手詰めがある(自玉が詰めろ)。相手の手番なら、相手に1手詰めがある(詰めろが残っている)。
  */
-export function endgameGauge({ sfen, color, reading = null }) {
+export function endgameGauge({ sfen, color, reading = null, myTurn = true, mateNow = false, threatNow = false }) {
   const { board } = parseSfenState(sfen);
   const enemy = opponentOf(color);
   const ownKing = findKing(board, color);
-  const inCheck = Boolean(ownKing && attackersOf(board, ownKing, enemy).length);
-  const score = reading?.score ?? null;
-  const winMate = score?.type === 'mate' && score.value > 0;
+  const inCheck = Boolean(myTurn && ownKing && attackersOf(board, ownKing, enemy).length);
+  const score = myTurn ? reading?.score ?? null : null;
+  const winMate = Boolean(myTurn && (mateNow || (score?.type === 'mate' && score.value > 0)));
+  const attackPressure = kingPressure(board, enemy) >= PRESSURE_SQUARES ? 2 : 1;
+  const riskPressure = kingPressure(board, color) >= PRESSURE_SQUARES ? 2 : 1;
   const attack = winMate ? 4
-    : reading?.bestGivesMateThreat === true ? 3
-      : kingPressure(board, enemy) >= PRESSURE_SQUARES ? 2 : 1;
+    : (myTurn ? reading?.bestGivesMateThreat === true : mateNow) ? 3 : attackPressure;
   const risk = inCheck ? 4
-    : reading?.mateThreat === true ? 3
-      : kingPressure(board, color) >= PRESSURE_SQUARES ? 2 : 1;
+    : (threatNow || (myTurn && reading?.mateThreat === true)) ? 3 : riskPressure;
   let action;
-  if (attack === 4) action = { key: 'mate', text: '詰ませにいこう' };
+  if (!myTurn) {
+    // 指したあと(相手の手番)は、指した結果を言う。
+    if (risk === 3) action = { key: 'left-threat', text: '詰めろが残ってる。次は受けよう' };
+    else if (attack === 3) action = { key: 'raced', text: '詰めろをかけた。相手の受けを見よう' };
+    else action = { key: 'wait', text: '相手の番。次の手を考えよう' };
+  } else if (attack === 4) action = { key: 'mate', text: '詰ませにいこう' };
   else if (risk === 4) action = { key: 'check', text: '王手をしのごう' };
   else if (risk === 3 && reading?.bestGivesCheck) action = { key: 'threat-check', text: '王手で迫りながら、しのごう' };
   else if (risk === 3) action = { key: 'threat-defend', text: 'まず受けよう' };
   else if (attack === 3) action = { key: 'race', text: '詰めろをかけて、攻め合いで勝とう' };
   else if (risk === 2 && attack === 1) action = { key: 'defend-first', text: '一手かけて守ろう' };
   else action = { key: 'approach', text: '相手玉に迫る手を探そう' };
+  const attackText = !myTurn && attack === 3 ? PHASE_GUIDE_TEXT.attackPlaced : PHASE_GUIDE_TEXT.attackLevels[attack];
   return {
     phase: /** @type {'endgame'} */ ('endgame'),
     title: PHASE_GUIDE_TEXT.endgameTitle,
+    myTurn,
     action,
-    attack: { level: attack, label: PHASE_GUIDE_TEXT.attackKing, text: PHASE_GUIDE_TEXT.attackLevels[attack] },
+    attack: { level: attack, label: PHASE_GUIDE_TEXT.attackKing, text: attackText },
     risk: { level: risk, label: PHASE_GUIDE_TEXT.ownKing, text: PHASE_GUIDE_TEXT.riskLevels[risk] },
   };
+}
+
+// ---- 寄せのふり返り(10章)。対局中の速度計の段を手数ごとに残し、終局後に大事な瞬間を並べる。
+
+/** @typedef {{ ply: number, myTurn: boolean, attack: number, risk: number }} GaugeLogEntry */
+
+/** 詰めろの確かめで読む詰みの手数(助言のengineMateCheckのmaxPly)。 */
+const THREAT_MATE_PLIES = 7;
+/** 結果の窓に並べる瞬間の数の上限。 */
+export const GAUGE_MOMENT_LIMIT = 3;
+
+/**
+ * 速度計の段の記録に、同じ手数・手番の段を上書きして足す(待ったで戻ったら、その手数より後ろを消す)。
+ * @param {GaugeLogEntry[]} log @param {GaugeLogEntry} entry
+ * @returns {GaugeLogEntry[]}
+ */
+export function noteGauge(log, entry) {
+  const kept = log.filter((item) => item.ply < entry.ply);
+  return [...kept, entry];
+}
+
+/**
+ * 寄せの大事な瞬間(10章)。自玉が詰めろになった手(受けたか)、相手玉に詰めろをかけた手、詰みがあった手(詰ませたか)。
+ * 大事な順(見逃した詰み・受けなかった詰めろ → 受けた詰めろ・詰ませた・詰めろをかけた)に、多くてGAUGE_MOMENT_LIMITまで。並びは手数の順。
+ * @param {GaugeLogEntry[]} log
+ * 受けたかは、指したあとに1手詰めが残っていないことと、そのあと詰めろの読みの手数(7手)のうちに詰まされていないことで決める
+ * (詳しい助言の詰めろは長い詰みも見るので、1手詰めだけでは受けたかを決められない)。
+ * @param {{ wonByMateAt?: number | null, lostByMateAt?: number | null }} [options]
+ *   wonByMateAt: プレイヤーが詰ませて勝った手数(指した数)。lostByMateAt: プレイヤーが詰まされた手数。
+ * @returns {{ key: string, ply: number, move: number, text: string, outcome: string, good: boolean | null, weight: number }[]}
+ */
+export function gaugeMoments(log, { wonByMateAt = null, lostByMateAt = null } = {}) {
+  const sorted = [...log].sort((a, b) => a.ply - b.ply);
+  const at = (ply) => sorted.find((item) => item.ply === ply) ?? null;
+  const moments = [];
+  let prevMine = null;
+  let prevTheirs = null;
+  for (const item of sorted) {
+    if (item.myTurn) {
+      const move = item.ply + 1;
+      if (item.attack === 4 && (prevMine?.attack ?? 0) < 4) {
+        const after = at(item.ply + 1);
+        if (wonByMateAt === move) moments.push({ key: 'mate', ply: item.ply, move, text: '詰みがあった', outcome: '詰ませた', good: true, weight: 2 });
+        else if (after) moments.push({ key: 'mate', ply: item.ply, move, text: '詰みがあった', outcome: '見逃した', good: false, weight: 3 });
+      }
+      if (item.risk === 3 && (prevMine?.risk ?? 0) !== 3) {
+        const after = at(item.ply + 1);
+        if (after) {
+          const matedSoon = lostByMateAt !== null && lostByMateAt - move <= THREAT_MATE_PLIES;
+          const held = after.risk !== 3 && !matedSoon;
+          moments.push({ key: 'threat', ply: item.ply, move, text: '自玉に詰めろ', outcome: held ? '受けた' : '受けなかった', good: held, weight: held ? 2 : 3 });
+        }
+      }
+      prevMine = item;
+      // 相手が受けて詰めろが消えたら、次にかけた詰めろも数える。
+      if (item.attack < 3) prevTheirs = null;
+    } else {
+      if (item.attack === 3 && (prevTheirs?.attack ?? 0) < 3) {
+        moments.push({ key: 'race', ply: item.ply, move: item.ply, text: '相手玉に詰めろ', outcome: 'かけた', good: true, weight: 1 });
+      }
+      prevTheirs = item;
+    }
+  }
+  const chosen = [...moments].sort((a, b) => b.weight - a.weight || a.ply - b.ply).slice(0, GAUGE_MOMENT_LIMIT);
+  return chosen.sort((a, b) => a.ply - b.ply);
 }
 
 // ---- はじめての1行を見た印(3章。phase-guide:v1)

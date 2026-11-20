@@ -2554,6 +2554,19 @@
         <p v-if="matchTipsUsed.length" class="shogi-game__result-tips" data-result-tips>
           <b>教室のコツ</b>{{ matchTipsUsed.map(({ short }) => short).join("・") }}<small>コツどおり！</small>
         </p>
+        <!-- 寄せの速度計の大事な瞬間(docs/phase-guide-design.mdの10章)。押すと、その局面から検討する。 -->
+        <div v-if="gaugeMomentRows.length" class="shogi-game__result-gauge" data-result-gauge>
+          <b>{{ PHASE_GUIDE_TEXT.momentsTitle }}</b>
+          <button
+            v-for="moment in gaugeMomentRows"
+            :key="`${moment.key}:${moment.ply}`"
+            type="button"
+            :class="{ 'shogi-game__result-gauge--good': moment.good === true, 'shogi-game__result-gauge--miss': moment.good === false }"
+            data-gauge-moment
+            :aria-label="`${moment.move}手目 ${moment.text}、${moment.outcome}。この局面から検討する`"
+            @click="openGaugeMoment(moment.ply)"
+          >{{ moment.move }}手目 {{ moment.text }}<em>{{ moment.outcome }}</em></button>
+        </div>
         <details class="shogi-game__result-record">
           <summary>対局の記録</summary>
           <dl class="shogi-game__result-details">
@@ -2690,6 +2703,19 @@
         <p v-if="matchTipsUsed.length" class="shogi-game__result-tips" data-result-tips>
           <b>教室のコツ</b>{{ matchTipsUsed.map(({ short }) => short).join("・") }}<small>コツどおり！</small>
         </p>
+        <!-- 寄せの速度計の大事な瞬間(docs/phase-guide-design.mdの10章)。押すと、その局面から検討する。 -->
+        <div v-if="gaugeMomentRows.length" class="shogi-game__result-gauge" data-result-gauge>
+          <b>{{ PHASE_GUIDE_TEXT.momentsTitle }}</b>
+          <button
+            v-for="moment in gaugeMomentRows"
+            :key="`${moment.key}:${moment.ply}`"
+            type="button"
+            :class="{ 'shogi-game__result-gauge--good': moment.good === true, 'shogi-game__result-gauge--miss': moment.good === false }"
+            data-gauge-moment
+            :aria-label="`${moment.move}手目 ${moment.text}、${moment.outcome}。この局面から検討する`"
+            @click="openGaugeMoment(moment.ply)"
+          >{{ moment.move }}手目 {{ moment.text }}<em>{{ moment.outcome }}</em></button>
+        </div>
         <!-- タイトル戦で勝った局の勝負メシは「勝ちメシ」。次に同じ対局場で選ぶとき★が付く(docs/title-match-day-design.mdの8-4)。 -->
         <p v-if="resultMeal" class="shogi-game__result-meal" data-result-meal>
           <b>勝ちメシ</b><span aria-hidden="true">★</span>{{ resultMeal.meal }}<small>{{ resultMeal.venue }}</small>
@@ -3294,7 +3320,7 @@ import {
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
 import { AI_PIECE_POINTS, CAPTURE_POP_MS, materialBalance, materialLabel, materialPops } from "./core/piece-points.mjs";
-import { PHASE_GUIDE_TEXT, endgameGauge, guidePhase, loadPhaseIntroSeen, markPhaseIntroSeen, middleBoard } from "./core/phase-guide.mjs";
+import { PHASE_GUIDE_TEXT, endgameGauge, gaugeMoments, guidePhase, loadPhaseIntroSeen, markPhaseIntroSeen, middleBoard, noteGauge } from "./core/phase-guide.mjs";
 import { FURIGOMA_LAND_AT, createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
@@ -6902,7 +6928,10 @@ const phaseGuideAllowed = computed(() => (
 /** この対局で終盤に入った手数(3章。いちど入ったら終盤のまま。待ったでそれより前へ戻ったら消す)。 */
 const phaseEndgameFrom = ref<number | null>(null);
 watch([currentSfen, moveCount], ([sfen, ply]) => {
-  if (phaseEndgameFrom.value !== null && ply < phaseEndgameFrom.value) phaseEndgameFrom.value = null;
+  if (phaseEndgameFrom.value !== null && ply < phaseEndgameFrom.value) {
+    phaseEndgameFrom.value = null;
+    gaugeLog.value = [];
+  }
   if (phaseEndgameFrom.value === null && isEndgame(sfen, ply)) phaseEndgameFrom.value = ply;
 });
 const phaseGuide = computed((): ReturnType<typeof middleBoard> | ReturnType<typeof endgameGauge> | null => {
@@ -6915,11 +6944,36 @@ const phaseGuide = computed((): ReturnType<typeof middleBoard> | ReturnType<type
   const color = humanColor.value === Color.WHITE ? "white" : "black";
   const saved = phaseReading.value;
   const reading = saved && saved.sfen === sfen ? saved : null;
-  if (phase === "endgame") return endgameGauge({ sfen, color, reading });
+  if (phase === "endgame") return endgameGauge({ sfen, color, reading, ...boardMates(sfen, color) });
   const totals = materialBalance(sfen, matchInitialSfen.value);
   const materialDiff = totals[color] - totals[color === "black" ? "white" : "black"];
   return middleBoard({ sfen, color, materialDiff, reading });
 });
+/**
+ * 盤から数える1手詰め(docs/phase-guide-design.mdの10章)。助言の設定によらず使う。同じ局面は1回だけ数える。
+ * プレイヤーの手番: mateNow=1手詰めがある、threatNow=手番を渡すと相手に1手詰め(自玉が詰めろ)。
+ * 相手の手番(指したあと): threatNow=相手に1手詰め(詰めろが残った)、mateNow=手番を渡すとプレイヤーに1手詰め(詰めろをかけた)。
+ */
+let boardMatesMemo: { sfen: string; value: { myTurn: boolean; mateNow: boolean; threatNow: boolean } } | null = null;
+function boardMates(sfen: string, color: "black" | "white") {
+  if (boardMatesMemo?.sfen === sfen) return boardMatesMemo.value;
+  const myTurn = (sfen.trim().split(/\s+/)[1] === "w" ? "white" : "black") === color;
+  const mateIn = (target: string | null) => {
+    if (!target) return false;
+    try {
+      return Boolean(findMateInOne(target));
+    } catch {
+      return false;
+    }
+  };
+  const here = mateIn(sfen);
+  const passed = mateIn(flipSideToMove(sfen));
+  const value = myTurn ? { myTurn, mateNow: here, threatNow: passed } : { myTurn, mateNow: passed, threatNow: here };
+  boardMatesMemo = { sfen, value };
+  return value;
+}
+/** 寄せの速度計の段の記録(10章)。終局後の「寄せのふり返り」に使う。新しい対局・終盤より前への待ったで消す。 */
+const gaugeLog = shallowRef<Array<{ ply: number; myTurn: boolean; attack: number; risk: number }>>([]);
 const phaseMiddle = computed(() => (phaseGuide.value?.phase === "middle" ? phaseGuide.value as ReturnType<typeof middleBoard> : null));
 const phaseEnd = computed(() => (phaseGuide.value?.phase === "endgame" ? phaseGuide.value as ReturnType<typeof endgameGauge> : null));
 /** はじめての1行(3章)。段階が替わったはじめての1回だけ、その手から3手(自分の手番で数えて)ほど出す。 */
@@ -6937,6 +6991,26 @@ watch(() => phaseGuide.value?.phase ?? null, (phase) => {
   phaseIntro.value = { phase, ply: moveHistory.length };
   phaseIntroSeen.value = markPhaseIntroSeen(phase);
 });
+watch(() => (phaseEnd.value ? [phaseEnd.value.myTurn, phaseEnd.value.attack.level, phaseEnd.value.risk.level] : null), (levels) => {
+  if (!levels || !phaseGuideAllowed.value) return;
+  const [myTurn, attack, risk] = levels as [boolean, number, number];
+  gaugeLog.value = noteGauge(gaugeLog.value, { ply: moveCount.value, myTurn, attack, risk });
+});
+/** 終局の窓の「寄せのふり返り」(10章)。押すと、その局面から検討する。 */
+const gaugeMomentRows = computed(() => {
+  const finished = result.value;
+  if (!finished || !gaugeLog.value.length) return [];
+  const player = humanColor.value;
+  const mated = finished.reason === "checkmate";
+  return gaugeMoments(gaugeLog.value, {
+    wonByMateAt: mated && finished.winner === player ? finished.moveCount : null,
+    lostByMateAt: mated && finished.winner !== null && finished.winner !== player ? finished.moveCount : null,
+  });
+});
+function openGaugeMoment(ply: number) {
+  enterAnalysisMode("ここが寄せの分かれ道だよ。この局面から考えてみよう");
+  goToReviewLinePly(ply);
+}
 /** 寄せの速度計で、相手玉の段が上がったときだけ目盛りを光らせる(5章)。 */
 const phaseAttackFlash = ref(false);
 let phaseAttackFlashTimer: ReturnType<typeof setTimeout> | null = null;
