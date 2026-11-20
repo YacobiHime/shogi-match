@@ -133,14 +133,17 @@ export function cpuOpeningTier(level) {
  * 相手の構えに応じて組む囲いの候補。左ほど簡単な囲いで、棋力帯が上がるほど右側を選びやすい。
  * どの組み合わせも、組み込み定義と編集データの双方で先後とも完成まで進められることをテストしている。
  */
+// 居飛車の作戦は、定跡補助のおすすめ(castle-advice.mjs)と同じく、相手が居飛車なら矢倉、振り飛車なら左美濃を先頭にする
+// (docs/opening-guide-ux-design.mdの15章)。舟囲いは級位者らしい急戦の囲いとして2番目に残す。
 const ADAPTIVE_CASTLES = Object.freeze({
-  ibisha: { static: ["yagura", "gangi", "nakazumai"], ranging: ["funagakoi", "elmo", "left-mino", "millennium"] },
-  bougin: { static: ["yagura", "kanigakoi"], ranging: ["funagakoi", "elmo", "left-mino"] },
-  "hayaguri-gin": { static: ["yagura", "kanigakoi"], ranging: ["funagakoi", "elmo", "left-mino", "millennium"] },
-  "koshikake-gin": { static: ["yagura", "kanigakoi"], ranging: ["funagakoi", "elmo", "left-mino"] },
-  "right-shiken": { static: ["yagura", "kanigakoi"], ranging: ["funagakoi", "elmo", "left-mino"] },
+  ibisha: { static: ["yagura", "left-mino", "gangi", "nakazumai"], ranging: ["left-mino", "funagakoi", "elmo", "ibisha-anaguma", "millennium"] },
+  bougin: { static: ["yagura", "left-mino", "kanigakoi"], ranging: ["left-mino", "funagakoi", "elmo"] },
+  "hayaguri-gin": { static: ["yagura", "left-mino", "kanigakoi"], ranging: ["left-mino", "funagakoi", "elmo", "ibisha-anaguma", "millennium"] },
+  "koshikake-gin": { static: ["yagura", "left-mino", "kanigakoi"], ranging: ["left-mino", "funagakoi", "elmo", "ibisha-anaguma"] },
+  "right-shiken": { static: ["yagura", "left-mino", "kanigakoi"], ranging: ["left-mino", "funagakoi", "elmo", "ibisha-anaguma"] },
   "yagura-strategy": { static: ["yagura"], ranging: ["yagura"] },
-  kakugawari: { static: ["nakazumai"], ranging: ["nakazumai"] },
+  // 角換わりは、角の手を飛ばして矢倉に組める(14-2)。
+  kakugawari: { static: ["yagura", "nakazumai"], ranging: ["yagura", "nakazumai"] },
   shiken: { static: ["mino", "high-mino", "silver-crown", "furibisha-anaguma"], ranging: ["mino", "kinmusou", "half-kinmusou"] },
   sangen: { static: ["mino", "high-mino", "silver-crown", "furibisha-anaguma"], ranging: ["mino", "kinmusou", "half-kinmusou"] },
   ishida: { static: ["mino", "high-mino", "silver-crown", "furibisha-anaguma"], ranging: ["mino", "kinmusou", "half-kinmusou"] },
@@ -477,6 +480,17 @@ export function adaptCpuOpeningPlan({
   const pools = ADAPTIVE_CASTLES[next.strategyId];
   if (!pools) return next;
   const opponentColor = cpuColor === "black" ? "white" : "black";
+  // 左美濃を組んでいる途中で角換わりになったら、7八銀→7七銀・6九金→7八金で矢倉へ組み替える(15章。定跡補助の組み替えと同じ)。
+  if (
+    next.castleId === "left-mino" && !next.castleSwitched && currentSfen && pools.static.includes("yagura")
+    && bishopExchangeState(currentSfen, cpuColor) === "exchanged"
+    && !isOpeningPlanComplete({
+      strategyId: next.strategyId, castleId: next.castleId, color: cpuColor,
+      playedMoves: cpuMoves, opponentMoves, currentSfen, completedPhases: { strategy: true },
+    })
+  ) {
+    return { ...next, castleId: "yagura", castleSwitched: true, castleStance: next.castleStance ?? "static", label: planLabel(next.strategyId, "yagura") };
+  }
   // 構えが見えないまま駒組みが進んだ場合は、実戦で多い居飛車を仮定し、判明したら組み直す。
   const strategyComplete = () => isOpeningPlanComplete({
     strategyId: next.strategyId, castleId: "", color: cpuColor,

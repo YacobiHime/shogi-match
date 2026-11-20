@@ -119,7 +119,8 @@ describe("CPU opening adaptation", () => {
     const moves = ["7g7f", "3c3d", "2g2f", "4c4d", "2f2e", "8b4b"];
     const plan = createAdaptiveCpuPlan(CPU_OPENING_REPERTOIRES.ibisha);
     const pick = (level, value) => adapt(plan, moves, "black", { level, random: () => value }).castleId;
-    // 低級は舟囲いが大半、プロ級はミレニアムなど手数のかかる囲いを選びやすい。
+    // 低級は左美濃と舟囲いが大半(左美濃が先頭。docs/opening-guide-ux-design.mdの15章)、プロ級はミレニアムなど手数のかかる囲いを選びやすい。
+    expect(pick(3, 0.1)).toBe("left-mino");
     expect(pick(3, 0.5)).toBe("funagakoi");
     expect(pick(40, 0.5)).not.toBe("funagakoi");
     expect(pick(40, 0.99)).toBe("millennium");
@@ -171,5 +172,40 @@ describe("CPU opening adaptation", () => {
     });
     expect(result.plan.switchedFrom).toBe("yagura-strategy");
     expect(result.complete, `${result.plan.label}: ${result.moves.join(" ")}`).toBe(true);
+  });
+});
+
+describe("左美濃の途中で角換わりになったら矢倉へ組み替える(docs/opening-guide-ux-design.mdの15章)", () => {
+  // 先手CPUが左美濃を組みかけ(7八銀・7九玉)、角を交換した局面(両方の角が持ち駒)。
+  const exchanged = "lnsgkgsnl/1r7/pppppp1pp/6p2/9/2P6/PP1PPPPPP/2S4R1/LNKG1GSNL b Bb 1";
+  // 序盤の早いうちの角換わりは角換わりの作戦への切り替えが先に効くので、それを済ませた(exchangeHandled)作戦で確かめる。
+  const plan = { ...createAdaptiveCpuPlan(CPU_OPENING_REPERTOIRES.ibisha), castleId: "left-mino", castleStance: "ranging", exchangeHandled: true };
+  const cpuMoves = ["7g7f", "7i7h", "5i6h", "6h7i"];
+
+  it("矢倉に替え、もう一度は替えない", () => {
+    const next = adaptCpuOpeningPlan({ plan, cpuColor: "black", cpuMoves, opponentMoves: ["3c3d"], currentSfen: exchanged });
+    expect(next).toMatchObject({ castleId: "yagura", castleSwitched: true });
+    expect(adaptCpuOpeningPlan({ plan: next, cpuColor: "black", cpuMoves, opponentMoves: ["3c3d"], currentSfen: exchanged }).castleId).toBe("yagura");
+  });
+
+  it("角換わりでなければ左美濃のまま", () => {
+    const sfen = "lnsgkgsnl/1r5b1/pppppp1pp/6p2/9/2P6/PP1PPPPPP/1BS4R1/LNKG1GSNL b - 1";
+    expect(adaptCpuOpeningPlan({ plan, cpuColor: "black", cpuMoves, opponentMoves: ["3c3d"], currentSfen: sfen }).castleId).toBe("left-mino");
+  });
+
+  it("組み替えた矢倉を、その局面から完成まで指せる", () => {
+    let record = createGameRecord(exchanged);
+    const playedMoves = [...cpuMoves];
+    for (let step = 0; step < 20; step += 1) {
+      if (isOpeningPlanComplete({ strategyId: "", castleId: "yagura", color: "black", playedMoves, opponentMoves: [], currentSfen: record.position.sfen })) return;
+      const fields = record.position.sfen.split(" "); fields[1] = "b";
+      record = createGameRecord(fields.join(" "));
+      const legalMoves = enumerateLegalMoves(record.position).map(({ usi }) => usi);
+      const next = nextOpeningPlanMove({ strategyId: "", castleId: "yagura", color: "black", playedMoves, opponentMoves: [], moveHistory: playedMoves, currentSfen: record.position.sfen, legalMoves });
+      expect(next, `step ${step}`).toBeTruthy();
+      expect(appendUsiMove(record, next.usi), next.usi).toBeTruthy();
+      playedMoves.push(next.usi);
+    }
+    throw new Error("矢倉が完成しなかった");
   });
 });

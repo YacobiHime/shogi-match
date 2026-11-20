@@ -80,7 +80,8 @@ export const FORMATION_STRATEGY_RULES = Object.freeze([
   // 位は銀で支える(歩の交換の直後の5五歩だけでは付けない。監査で見つけた)。
   { name: '5筋位取り', maxPly: 40, variants: [{ own: ['55P'], ownAny: [['46S', '56S', '66S']], ownNot: ['58R', '55R'], oppRook: 'static' }] },
   // 角を7九に引き、銀を7七に上げた形(角が引いただけでは付けない。監査で見つけた)。
-  { name: '飯島流引き角戦法', maxPly: 40, variants: [{ own: ['79B', '77S'], oppRook: 'static' }] },
+  // 矢倉(6七金)を組む途中で角が7九を通る形には付けない(矢倉は7九角→6八角で玉の道を空ける。docs/formation-detect-design.mdの19章)。
+  { name: '飯島流引き角戦法', maxPly: 40, variants: [{ own: ['79B', '77S'], ownNot: ['67G'], oppRook: 'static' }] },
   { name: 'ツノ銀雁木', variants: [{ own: ['67S', '47S'], ownAny: [['78G', '58G']], ownNot: ['58R'] }] },
   // 対振り飛車(相手の飛車が振られてから)
   { name: '4六銀右急戦', maxPly: 50, variants: [{ own: ['46S', '28R'], ownAny: [['77S', '68S', '79S', '78S']], oppRook: 'ranging' }] },

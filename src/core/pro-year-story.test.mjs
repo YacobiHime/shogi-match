@@ -384,3 +384,38 @@ describe('羽音から取った夜・羽音の挑戦を退けた夜(docs/pro-yea
     expect(text).toContain('3局、一度も勝たせてもらえなかった。');
   });
 });
+
+describe('羽音に取られた夜・羽音に挑んで届かなかった夜(docs/pro-year-design.mdの35章)', async () => {
+  const { hananeLostId, HANANE_LOST_ROTATION, HANANE_MISS_ROTATION } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_HANANE_LOST_SCENES } = await import('./pro-year-story-more.mjs');
+  const { storyEpisode } = await import('./story-mode.mjs');
+
+  it('取られた：取り返された＞はじめて＞無冠＞長く守った＞流れ＞回す', () => {
+    expect(hananeLostId({ kind: 'lost', shape: 'sweep', losses: 0, retaken: true })).toBe('pro-lost-hanane-retaken');
+    expect(hananeLostId({ kind: 'lost', shape: 'sweep', losses: 0, mukan: true })).toBe('pro-lost-hanane-lost-first');
+    expect(hananeLostId({ kind: 'lost', shape: 'sweep', losses: 1, mukan: true, longHeld: true })).toBe('pro-lost-hanane-mukan');
+    expect(hananeLostId({ kind: 'lost', shape: 'sweep', losses: 1, longHeld: true })).toBe('pro-lost-hanane-lost-long');
+    for (const shape of ['collapse', 'sweep', 'fullset']) expect(hananeLostId({ kind: 'lost', shape, losses: 1 })).toBe(`pro-lost-hanane-lost-${shape}`);
+    expect([1, 2, 3, 4].map((losses) => hananeLostId({ kind: 'lost', shape: 'plain', losses }))).toEqual([...HANANE_LOST_ROTATION]);
+  });
+
+  it('届かなかった：はじめて＞続けて届かない＞流れ＞回す。5度目の番勝負からは「何度目か」も回しに入る', () => {
+    expect(hananeLostId({ kind: 'miss', shape: 'sweep', losses: 0, missRun: 3 })).toBe('pro-lost-hanane-miss-first');
+    expect(hananeLostId({ kind: 'miss', shape: 'sweep', losses: 2, missRun: 2 })).toBe('pro-lost-hanane-miss-again');
+    for (const shape of ['collapse', 'sweep', 'fullset']) expect(hananeLostId({ kind: 'miss', shape, losses: 1, missRun: 1 })).toBe(`pro-lost-hanane-miss-${shape}`);
+    expect([1, 2, 3, 4].map((losses) => hananeLostId({ kind: 'miss', shape: 'plain', losses, missRun: 1 }))).toEqual([...HANANE_MISS_ROTATION]);
+    expect(hananeLostId({ kind: 'miss', shape: 'plain', losses: 5, series: 4, missRun: 1 })).toBe('pro-lost-hanane-long');
+  });
+
+  it('台本: 羽音は慰めも応援も言わず、百花は笑顔を使わず、差し込みが残らず、物語のサブで読み直せる', () => {
+    expect(Object.keys(PRO_YEAR_HANANE_LOST_SCENES).length).toBeGreaterThanOrEqual(15);
+    for (const id of Object.keys(PRO_YEAR_HANANE_LOST_SCENES)) {
+      expect(storyEpisode(`pro:${id}`)?.scene, id).toBe(id);
+      const plain = proYearScene(id, { playerName: 'やこび' });
+      expect(plain.title, id).not.toMatch(/\{/);
+      expect(plain.lines.map((entry) => `${entry.name ?? ''}${entry.text}`).join(''), id).not.toMatch(/\{[a-zA-Z]+\}/);
+      for (const entry of plain.lines.filter((line) => line.who === 'hanane')) expect(entry.text, id).not.toMatch(/応援|がんば|！|です|ます/);
+      for (const entry of plain.lines.filter((line) => line.who === 'momoka')) expect(entry.face, id).not.toBe('smile');
+    }
+  });
+});

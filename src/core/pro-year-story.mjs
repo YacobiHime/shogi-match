@@ -7,7 +7,7 @@ import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
 import { bondLevel } from './pro-bonds.mjs';
-import { PRO_YEAR_HANANE_SCENES, PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
+import { PRO_YEAR_HANANE_LOST_SCENES, PRO_YEAR_HANANE_SCENES, PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -568,6 +568,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
   ...PRO_YEAR_LIFE_SCENES,
   // 羽音から取った夜・羽音の挑戦を退けた夜(34章)。
   ...PRO_YEAR_HANANE_SCENES,
+  // 羽音に取られた夜・羽音に挑んで届かなかった夜(35章)。
+  ...PRO_YEAR_HANANE_LOST_SCENES,
 });
 
 /**
@@ -899,6 +901,40 @@ export function hananeBeatId({ kind, shape, beats = 0, series = 0, retake = fals
   if (shape === 'fullset') return defend ? 'pro-beat-hanane-defend-fullset' : 'pro-beat-hanane-take-fullset';
   const pool = [...(defend ? HANANE_DEFEND_ROTATION : HANANE_TAKE_ROTATION), ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-beat-hanane-long'] : [])];
   return pool[(beats - 1) % pool.length];
+}
+
+/** 羽音に取られた夜の、流れで決まらないときに回す台本(35章)。 */
+export const HANANE_LOST_ROTATION = Object.freeze(['pro-lost-hanane', 'pro-lost-hanane-2', 'pro-lost-hanane-lost-3', 'pro-lost-hanane-lost-4']);
+/** 羽音に挑んで届かなかった夜の、流れで決まらないときに回す台本(35章)。 */
+export const HANANE_MISS_ROTATION = Object.freeze(['pro-lost-hanane', 'pro-lost-hanane-2', 'pro-lost-hanane-miss-3', 'pro-lost-hanane-miss-4']);
+
+/**
+ * 羽音との番勝負に敗れた夜の台本のid(35章)。kindは'lost'(羽音に取られた)か'miss'(羽音に挑んで届かなかった)。
+ * 順：取られた…取り返された＞はじめて＞無冠になった＞長く守った＞あと1勝からの逆転＞ストレート＞フルセット＞回す。
+ *     届かなかった…はじめて＞同じ棋戦で続けて届かない＞あと1勝からの逆転＞ストレート＞フルセット＞回す。
+ * @param {{ kind: string, shape: string, losses?: number, series?: number, retaken?: boolean, mukan?: boolean, longHeld?: boolean, missRun?: number }} input
+ *   lossesは前に羽音との番勝負に負けた回数(失冠と挑戦で別に数える)、seriesは前に羽音とタイトル戦の番勝負を指した回数、
+ *   retakenは前に羽音から取ったタイトルを取り返されたか、mukanはあなたのタイトルがなくなったか、longHeldは3期以上守っていたか、
+ *   missRunはこの棋戦で羽音に続けて届かなかった回数(今回を入れる)。
+ * @returns {string}
+ */
+export function hananeLostId({ kind, shape, losses = 0, series = 0, retaken = false, mukan = false, longHeld = false, missRun = 0 }) {
+  const lost = kind === 'lost';
+  if (lost) {
+    if (retaken) return 'pro-lost-hanane-retaken';
+    if (losses === 0) return 'pro-lost-hanane-lost-first';
+    if (mukan) return 'pro-lost-hanane-mukan';
+    if (longHeld) return 'pro-lost-hanane-lost-long';
+  } else {
+    if (losses === 0) return 'pro-lost-hanane-miss-first';
+    if (missRun >= 2) return 'pro-lost-hanane-miss-again';
+  }
+  const prefix = lost ? 'pro-lost-hanane-lost' : 'pro-lost-hanane-miss';
+  if (shape === 'collapse') return `${prefix}-collapse`;
+  if (shape === 'sweep') return `${prefix}-sweep`;
+  if (shape === 'fullset') return `${prefix}-fullset`;
+  const pool = [...(lost ? HANANE_LOST_ROTATION : HANANE_MISS_ROTATION), ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-lost-hanane-long'] : [])];
+  return pool[(losses - 1) % pool.length];
 }
 
 /**

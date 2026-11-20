@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { hananeBeatId, isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
+import { hananeBeatId, hananeLostId, isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -888,10 +888,10 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
     const base = `pro-${won ? 'beat' : 'lost'}-${rival}`;
     let id = base;
     let streakWord = '';
+    const log = state.user.seriesLog ?? [];
+    const withHanane = log.filter((entry) => proYearRival(state.players[entry.opponentId]) === 'hanane');
     if (rival === 'hanane' && won) {
       // 羽音に勝った夜は、奪取か防衛か・流れ・何度目か・取り返したか・無冠にしたかで分ける(34章)。
-      const log = state.user.seriesLog ?? [];
-      const withHanane = log.filter((entry) => proYearRival(state.players[entry.opponentId]) === 'hanane');
       const defend = kind === 'defend';
       const beats = withHanane.filter((entry) => entry.won && (entry.kind === 'defend') === defend).length;
       let defendRun = defend ? 1 : 0;
@@ -910,8 +910,25 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
       });
       streakWord = String(id === 'pro-beat-hanane-long' ? withHanane.length + 1 : defendRun);
     } else if (rival === 'hanane') {
-      // 羽音に敗れた夜は、1回目と2回目からの台本を回す(docs/pro-year-design.mdの31-3)。
-      id = rotateScene([base, `${base}-2`], (state.scenes ?? []).filter((mark) => mark.startsWith(`${base}`)).length);
+      // 羽音に敗れた夜は、取られたか届かなかったか・流れ・何度目か・取り返されたか・無冠になったかで分ける(35章)。
+      const lostKind = kind === 'lost';
+      const losses = withHanane.filter((entry) => !entry.won && (entry.kind === 'lost') === lostKind).length;
+      let missRun = lostKind ? 0 : 1;
+      if (!lostKind) {
+        const sameEvent = log.filter((entry) => entry.event === event.id);
+        for (let index = sameEvent.length - 1; index >= 0; index -= 1) {
+          const entry = sameEvent[index];
+          if (entry.kind !== 'miss' || proYearRival(state.players[entry.opponentId]) !== 'hanane') break;
+          missRun += 1;
+        }
+      }
+      id = hananeLostId({
+        kind, shape, losses, series: withHanane.length, missRun,
+        retaken: lostKind && withHanane.some((entry) => entry.event === event.id && (entry.kind === 'take' || entry.kind === 'retake')),
+        mukan: lostKind && !TITLE_EVENTS.some((titleId) => titleId !== event.id && state.titles[titleId] === PRO_USER_ID),
+        longHeld: lostKind && (before.streak ?? 0) >= 3,
+      });
+      streakWord = String(id === 'pro-lost-hanane-long' ? withHanane.length + 1 : missRun);
     }
     queueProYearScene(state, {
       key: `${id}:${event.id}:${state.fy}`,

@@ -114,3 +114,39 @@ describe('上の囲い(14-5)', async () => {
     expect(after.unlocked.has('castle:big4')).toBe(true);
   });
 });
+
+describe('矢倉を組んでも飯島流引き角戦法と付けない(docs/formation-detect-design.mdの19章)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { createFormationState, detectFormationSnapshot, formationMove, formedNamesFromState, updateFormationState } = await import('./formation-tracker.mjs');
+  const master = JSON.parse(await readFile(new URL('../data/hiragana_suisho_formations.json', import.meta.url), 'utf8'));
+
+  /** 先手の手と後手の待つ手を交互に指して、先手に付いた名前。 */
+  function namesAlong(blackMoves, whiteMoves) {
+    let record = createGameRecord(START);
+    let state = createFormationState();
+    let ply = 0;
+    const play = (usi) => {
+      expect(appendUsiMove(record, usi), usi).toBeTruthy();
+      ply += 1;
+      state = updateFormationState(state, detectFormationSnapshot(record.position.sfen, master), formationMove(record.position.sfen, ply));
+    };
+    blackMoves.forEach((usi, index) => {
+      play(usi);
+      if (whiteMoves[index]) play(whiteMoves[index]);
+    });
+    return formedNamesFromState(state, 'black');
+  }
+
+  it('相手が居飛車でも、矢倉の7九角では付かない', () => {
+    const yagura = OPENING_CASTLES.find(({ id }) => id === 'yagura').blackMoves;
+    const white = ['8c8d', '7a6b', '8d8e', '6c6d', '6b6c', '5a4b', '4a5b', '3a3b', '4b3a', '5c5d', '1c1d', '9c9d', '1d1e'];
+    const names = namesAlong(yagura, white);
+    expect(names).toContain('金矢倉');
+    expect(names).not.toContain('飯島流引き角戦法');
+  });
+
+  it('金矢倉を組まずに角を7九へ引いた形には付く', () => {
+    const names = namesAlong(['7g7f', '7i7h', '7h7g', '8h7i', '6i7h'], ['8c8d', '7a6b', '8d8e', '6c6d', '6b6c']);
+    expect(names).toContain('飯島流引き角戦法');
+  });
+});
