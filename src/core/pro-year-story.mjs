@@ -6,7 +6,7 @@
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
-import { PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
+import { PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -561,6 +561,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
   }),
   // 場合分けを増やした台本(docs/pro-year-design.mdの31章)。
   ...PRO_YEAR_MORE_SCENES,
+  // 勝ち方・負け方と調子で分かれる台本(32章)。
+  ...PRO_YEAR_MOOD_SCENES,
 });
 
 /**
@@ -579,9 +581,17 @@ export function proYearRival(opponent) {
  * defenseは保持者として指す防衛戦(防衛戦の3本。docs/pro-year-design.mdの20-3の3)。
  * rivalは相手が羽音・善彦のとき(22-3の3)。羽音は挑戦でも防衛でも星で3本、善彦は1本(星は`sealSeriesText`の1行で言う)。
  * 同じ場合の中では、番勝負の何局目か(星の数)と種(棋戦と年度)で台本を回す(docs/pro-year-design.mdの31-3)。王手(あと1勝)と最終局も分ける。
- * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean, rival?: string, seed?: string }} series
+ * recentは番勝負のこれまでの局の勝ち負け(あなたが勝ったらtrue。局の順)。
+ * @param {{ winsUser?: number, winsOpponent?: number, need?: number, defense?: boolean, rival?: string, seed?: string, recent?: boolean[] }} series
  */
-export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false, rival = '', seed = '' } = {}) {
+export function proYearSealSceneId({ winsUser = 0, winsOpponent = 0, need = 0, defense = false, rival = '', seed = '', recent = [] } = {}) {
+  // 番勝負の中の流れ(32-3)。2連敗・2連勝して迎えたタイ・リードの夜(羽音・善彦が相手のときは、相手ごとの夜のまま)。
+  const kind = sealKind({ winsUser, winsOpponent, need });
+  const lastTwo = recent.slice(-2);
+  if (!rival && (kind === 'tie' || kind === 'lead') && lastTwo.length === 2) {
+    if (lastTwo.every((won) => !won)) return 'pro-seal-after-losses';
+    if (lastTwo.every(Boolean)) return 'pro-seal-momentum';
+  }
   const rotation = SEAL_ROTATIONS[/** @type {keyof typeof SEAL_ROTATIONS} */ (rival === 'yoshihiko' ? 'yoshihiko' : `${rival || (defense ? 'defense' : '')}${rival || defense ? '-' : ''}${sealKind({ winsUser, winsOpponent, need })}`)];
   // 同じ番勝負の続く夜は、局ごとに次の台本へ(31-3)。種がなければ今までの台本(いちばん前)。
   return seed ? rotateScene(rotation, winsUser + winsOpponent, seed) : rotation[0];
@@ -678,6 +688,8 @@ const DEFAULT_VARS = Object.freeze({
   series: '番勝負は、まだ続いている。', result: 'タイトル戦の番勝負が終わった。', record: '',
   // 場合分けを増やした台本の差し込み(31-3)。読み直しのときは、どの季節にも読める1行と、決まった数。
   scenery: '窓の外は、もう暗い。', crowns: '2', total: '3',
+  // 勝ち方・負け方と調子(32-3)。
+  score: '4勝2敗', won: '獲得', run: '4', played: '6',
   // 研究会で指したことがあるかで変える羽音の1行(23章。研究会に出ていないのに「何度も指した」と言わない)。
   study: STUDY_LINES.pro.studied, studyBig: STUDY_LINES.big.studied,
 });
@@ -687,14 +699,14 @@ const DEFAULT_VARS = Object.freeze({
  * 棋戦の言葉を先に入れ、名前をあとで入れる(言葉の中に{name}を書けるように。22-3の6)。中身が空になった行は出さない(`{record}`だけの行)。
  * 声だけの人(善彦)の名前の札は、行の名前を使う。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string, scenery?: string, crowns?: string, total?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string, scenery?: string, crowns?: string, total?: string, score?: string, won?: string, run?: string, played?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
   const fill = (text) => sceneText(
-    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig|scenery|crowns|total)\}/g, (_, key) => words[key]),
+    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig|scenery|crowns|total|score|won|run|played)\}/g, (_, key) => words[key]),
     playerName,
     momokaCall,
   );
@@ -759,10 +771,14 @@ export function proYearSceneDue(state) {
   const fy = String(state.fy ?? '');
   const crowns = Object.entries(state.titles ?? {}).filter(([id, holder]) => holder === 'user' && id !== event).length;
   const total = state.user?.titleRecord?.[event]?.total ?? state.user?.titleCounts?.[event] ?? 0;
+  // 公式戦の連勝・連敗(32-3。正は連勝、負は連敗)と、これまでの番勝負の記録(雪辱・同じ挑戦者)。
+  const run = Number(state.user?.form?.run) || 0;
+  /** @type {{ event: string, opponentId: string, won: boolean }[]} */
+  const seriesLog = Array.isArray(state.user?.seriesLog) ? state.user.seriesLog : [];
   const vars = {
     title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '',
     study: studied ? STUDY_LINES.pro.studied : STUDY_LINES.pro.fresh, studyBig: studied ? STUDY_LINES.big.studied : STUDY_LINES.big.fresh,
-    scenery: sceneryText(pending.date, `${event}:${fy}`), crowns: String(crowns), total: String(total),
+    scenery: sceneryText(pending.date, `${event}:${fy}`), crowns: String(crowns), total: String(total), run: String(Math.abs(run)),
   };
   const due = (key, id, extra = {}) => (seenProYearScene(state, key) ? null : { key, id, vars: { ...vars, ...extra } });
   if (rival) {
@@ -793,36 +809,102 @@ export function proYearSceneDue(state) {
     if (eternal && !eternal.reached && eternal.left === 1 && !seenProYearScene(state, eternalKey)) {
       return { key: eternalKey, id: 'pro-defense-eternal', vars: { ...defenseVars, eternal: eternal.name } };
     }
-    const id = defenseEveId({ streak, crowns });
+    const rematch = seriesLog.some((entry) => entry.event === event && entry.opponentId === pending.opponentId);
+    const id = defenseEveId({ streak, crowns, rematch, run });
     const key = `${id}:${event}:${fy}`;
     return seenProYearScene(state, key) ? null : { key, id, vars: defenseVars };
   }
   const challengedHere = (state.scenes ?? []).some((mark) => mark.startsWith('pro-title-eve') && mark.split(':')[1] === event);
   const challengedAny = (state.scenes ?? []).some((mark) => /^pro-(title|defense)-eve/.test(mark));
-  const id = titleEveId({ heldBefore: total > 0, challengedHere, crowns, challengedAny });
+  const revenge = seriesLog.some((entry) => entry.event === event && entry.opponentId === pending.opponentId && !entry.won);
+  const id = titleEveId({ heldBefore: total > 0, challengedHere, crowns, challengedAny, revenge, run });
   const key = `${id}:${event}:${fy}`;
   if (!seenProYearScene(state, key)) return { key, id, vars };
   return null;
 }
 
+/** 前夜を「連敗のあと」にする連敗の数と、「連勝中」にする連勝の数(32-3)。 */
+export const SLUMP_EVE_RUN = 3;
+export const HOT_EVE_RUN = 6;
+
 /**
- * タイトル戦(挑戦)の前夜の場合分け(31-3)。奪還＞2度目の挑戦＞冠を持って挑む＞ほかのタイトルの挑戦の経験あり＞はじめて。
- * @param {{ heldBefore?: boolean, challengedHere?: boolean, crowns?: number, challengedAny?: boolean }} input
+ * 番勝負の流れ(32-3)。sweep=負けた側が0勝、comeback=勝った側があと1勝と迫られてから勝ち切った、
+ * collapse=負けた側が先にあと1勝としてから負けた、fullset=負けた側があと1勝まで来た、plain=そのほか。
+ * @param {boolean[]} games 局の順の勝ち負け(あなたが勝ったらtrue)
+ * @param {number} need 勝ち抜けに要る勝ち数
+ * @returns {'sweep' | 'comeback' | 'collapse' | 'fullset' | 'plain'}
  */
-export function titleEveId({ heldBefore = false, challengedHere = false, crowns = 0, challengedAny = false }) {
+export function seriesShape(games, need) {
+  let user = 0;
+  let opponent = 0;
+  let userNearFirst = false;
+  let opponentNearFirst = false;
+  for (const won of games) {
+    if (won) user += 1; else opponent += 1;
+    // 先にあと1勝としたのは、どちらか(両者そろってあと1勝のときは数えない)。
+    if (user === need - 1 && opponent < need - 1 && !opponentNearFirst) userNearFirst = true;
+    if (opponent === need - 1 && user < need - 1 && !userNearFirst) opponentNearFirst = true;
+  }
+  const userWon = user > opponent;
+  const loser = userWon ? opponent : user;
+  if (loser === 0) return 'sweep';
+  if (userWon && opponentNearFirst) return 'comeback';
+  if (!userWon && userNearFirst) return 'collapse';
+  if (need > 1 && loser === need - 1) return 'fullset';
+  return 'plain';
+}
+
+/**
+ * 番勝負のあとの夜(羽音・善彦が相手でないとき。31-3・32-3)。取ったとき、初タイトル・永世称号・連覇の節目の夜は別に積むのでnull。
+ * @param {{ kind: string, shape: string, special?: boolean, longHeld?: boolean, crownsOther?: number }} input
+ *   kindは19章の結果(take・retake・defend・lost・miss)、specialは初タイトル・永世称号・連覇の節目の夜を積んだか。
+ * @returns {string | null}
+ */
+export function seriesNightId({ kind, shape, special = false, longHeld = false, crownsOther = 0 }) {
+  if (kind === 'take' || kind === 'retake' || kind === 'defend') {
+    if (special) return null;
+    if (shape === 'sweep') return 'pro-series-sweep-win';
+    if (shape === 'comeback') return 'pro-series-comeback-win';
+    if (shape === 'fullset') return 'pro-series-fullset-win';
+    return 'pro-series-win';
+  }
+  if (shape === 'sweep') return 'pro-series-sweep-loss';
+  if (shape === 'collapse') return 'pro-series-collapse-loss';
+  if (kind === 'lost') {
+    if (longHeld) return 'pro-title-lost-long';
+    if (shape === 'fullset') return 'pro-series-close-loss';
+    return crownsOther > 0 ? 'pro-title-lost-still' : 'pro-title-lost';
+  }
+  return shape === 'fullset' ? 'pro-series-close-loss' : 'pro-series-miss';
+}
+
+/**
+ * タイトル戦(挑戦)の前夜の場合分け(31-3・32-3)。奪還＞雪辱＞連敗のあと＞2度目の挑戦＞連勝中＞冠を持って挑む＞ほかのタイトルの挑戦の経験あり＞はじめて。
+ * revengeは前の番勝負で負けた相手か、runは公式戦の連勝(正)・連敗(負)の数。
+ * @param {{ heldBefore?: boolean, challengedHere?: boolean, crowns?: number, challengedAny?: boolean, revenge?: boolean, run?: number }} input
+ */
+export function titleEveId({ heldBefore = false, challengedHere = false, crowns = 0, challengedAny = false, revenge = false, run = 0 }) {
   if (heldBefore) return 'pro-title-eve-retake';
+  // 雪辱・連敗のあと・連勝中(32-3)。
+  if (revenge) return 'pro-title-eve-revenge';
+  if (run <= -SLUMP_EVE_RUN) return 'pro-title-eve-slump';
   if (challengedHere) return 'pro-title-eve-again';
+  if (run >= HOT_EVE_RUN) return 'pro-eve-hot';
   if (crowns > 0) return 'pro-title-eve-crowned';
   if (challengedAny) return 'pro-title-eve-next';
   return 'pro-title-eve';
 }
 
 /**
- * 防衛戦の前夜の場合分け(31-3。永世称号がかかる夜は先に決める)。ほかに2つ以上持っている＞2期以上続けて守った＞はじめての防衛。
- * @param {{ streak?: number, crowns?: number }} input streakはいままで続けて持った期数、crownsはほかに持っているタイトルの数。
+ * 防衛戦の前夜の場合分け(31-3・32-3。永世称号がかかる夜は先に決める)。同じ挑戦者ともう一度＞連敗のあと＞ほかに2つ以上持っている＞連勝中＞2期以上続けて守った＞はじめての防衛。
+ * @param {{ streak?: number, crowns?: number, rematch?: boolean, run?: number }} input streakはいままで続けて持った期数、crownsはほかに持っているタイトルの数。
  */
-export function defenseEveId({ streak = 0, crowns = 0 }) {
+export function defenseEveId({ streak = 0, crowns = 0, rematch = false, run = 0 }) {
+  // 同じ挑戦者ともう一度・連敗のあと(32-3)。
+  if (rematch) return 'pro-defense-eve-rematch';
+  if (run <= -SLUMP_EVE_RUN) return 'pro-defense-eve-slump';
   if (crowns >= 2) return 'pro-defense-eve-crowns';
+  if (run >= HOT_EVE_RUN) return 'pro-eve-hot';
   if (streak >= 2) return 'pro-defense-eve-again';
   return 'pro-defense-eve';
 }

@@ -312,8 +312,8 @@ describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
     expect(due.vars.challenger).toBe(challenger);
     const scene = proYearScene(due.id, { playerName: 'やこび', vars: due.vars });
     const text = scene.lines.map((entry) => entry.text).join('\n');
-    expect(text).toContain(`${challenger}が`);
-    expect(text).toMatch(/挑んでくる/);
+    // 同じ挑戦者ともう一度の夜(32-3)もあるので、挑戦者の名前が入っていることだけを見る。
+    expect(text).toContain(challenger);
     expect(text).not.toMatch(/に挑む。/);
     // 一度見たら、同じタイトルの防衛戦では出さない。
     expect(proYearSceneDue(markProYearScene(state, due.key))).toBeNull();
@@ -348,7 +348,8 @@ describe('防衛戦の夜(docs/pro-year-design.mdの20章)', async () => {
     expect(queuedProYearScene(seen)).toBeNull();
     const lostYear = playYear(startNextYear(plainYear1.state), (state) => (state.pending.defense ? 'loss' : 'win'));
     // 失冠の夜は、ほかのタイトルを持ったままか・長く守ったかで台本が分かれる(31-3)。
-    expect(lostYear.state.sceneQueue.some((item) => item.id.startsWith('pro-title-lost') && item.vars.challenger)).toBe(true);
+    // 負け方(ストレート・王手から逆転された・フルセット)でも分かれる(32-3)。
+    expect(lostYear.state.sceneQueue.some((item) => /^pro-(title-lost|series-)/.test(item.id) && item.vars.challenger)).toBe(true);
   });
 
   it('物語のサブで読み直せる(差し込みがなくても読める文)', () => {

@@ -198,3 +198,88 @@ describe('場合分けを増やした夜(docs/pro-year-design.mdの31章)', asyn
     throw new Error('タイトル戦の第1局に届かなかった');
   });
 });
+
+describe('勝ち方・負け方と調子で分かれる夜(docs/pro-year-design.mdの32章)', async () => {
+  const { seriesShape, seriesNightId, proYearSealSceneId, titleEveId, defenseEveId, proYearScene } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_MOOD_SCENES } = await import('./pro-year-story-more.mjs');
+  const W = true;
+  const L = false;
+
+  it('番勝負の流れ: ストレート・カド番からの逆転・王手から逆転された・フルセット', () => {
+    expect(seriesShape([W, W, W, W], 4)).toBe('sweep');
+    expect(seriesShape([L, L, L, L], 4)).toBe('sweep');
+    expect(seriesShape([L, L, L, W, W, W, W], 4)).toBe('comeback');
+    expect(seriesShape([W, W, W, L, L, L, L], 4)).toBe('collapse');
+    expect(seriesShape([W, L, W, L, W, L, W], 4)).toBe('fullset');
+    expect(seriesShape([W, L, W, W, W], 4)).toBe('plain');
+    expect(seriesShape([W, L, W, L, W], 3)).toBe('fullset');
+  });
+
+  it('番勝負のあとの夜: 取ったら流れで、節目の夜があればなし。負けたら流れと歩みで', () => {
+    expect(seriesNightId({ kind: 'take', shape: 'sweep' })).toBe('pro-series-sweep-win');
+    expect(seriesNightId({ kind: 'defend', shape: 'comeback' })).toBe('pro-series-comeback-win');
+    expect(seriesNightId({ kind: 'retake', shape: 'plain' })).toBe('pro-series-win');
+    expect(seriesNightId({ kind: 'take', shape: 'sweep', special: true })).toBeNull();
+    expect(seriesNightId({ kind: 'lost', shape: 'sweep', longHeld: true })).toBe('pro-series-sweep-loss');
+    expect(seriesNightId({ kind: 'lost', shape: 'plain', longHeld: true })).toBe('pro-title-lost-long');
+    expect(seriesNightId({ kind: 'lost', shape: 'fullset', crownsOther: 2 })).toBe('pro-series-close-loss');
+    expect(seriesNightId({ kind: 'lost', shape: 'plain', crownsOther: 2 })).toBe('pro-title-lost-still');
+    expect(seriesNightId({ kind: 'miss', shape: 'collapse' })).toBe('pro-series-collapse-loss');
+    expect(seriesNightId({ kind: 'miss', shape: 'plain' })).toBe('pro-series-miss');
+  });
+
+  it('封じ手の夜: 2連敗・2連勝して迎えたタイ・リードの夜。カド番と羽音の夜は今までどおり', () => {
+    expect(proYearSealSceneId({ winsUser: 2, winsOpponent: 2, need: 4, recent: [W, W, L, L] })).toBe('pro-seal-after-losses');
+    expect(proYearSealSceneId({ winsUser: 2, winsOpponent: 0, need: 4, recent: [W, W] })).toBe('pro-seal-momentum');
+    expect(proYearSealSceneId({ winsUser: 1, winsOpponent: 3, need: 4, recent: [W, L, L, L] })).toBe('pro-seal-kado');
+    expect(proYearSealSceneId({ winsUser: 2, winsOpponent: 2, need: 4, recent: [W, W, L, L], rival: 'hanane' })).toBe('pro-seal-hanane-tie');
+  });
+
+  it('前夜: 雪辱・連敗のあと・連勝中・同じ挑戦者', () => {
+    expect(titleEveId({ revenge: true, challengedHere: true })).toBe('pro-title-eve-revenge');
+    expect(titleEveId({ heldBefore: true, revenge: true })).toBe('pro-title-eve-retake');
+    expect(titleEveId({ run: -3, challengedHere: true })).toBe('pro-title-eve-slump');
+    expect(titleEveId({ run: 6, crowns: 1 })).toBe('pro-eve-hot');
+    expect(defenseEveId({ rematch: true, run: -5 })).toBe('pro-defense-eve-rematch');
+    expect(defenseEveId({ run: -3, crowns: 3 })).toBe('pro-defense-eve-slump');
+    expect(defenseEveId({ run: 6, streak: 3 })).toBe('pro-eve-hot');
+  });
+
+  it('台本は差し込みがなくても読め、局の数を決めて書かない', () => {
+    for (const id of Object.keys(PRO_YEAR_MOOD_SCENES)) {
+      const scene = proYearScene(id, { playerName: 'やこび' });
+      expect(scene.title, id).not.toMatch(/\{/);
+      const text = scene.lines.map((entry) => entry.text).join('');
+      expect(text, id).not.toMatch(/\{[a-zA-Z]+\}/);
+      expect(text, id).not.toMatch(/[47]局/);
+    }
+  });
+
+  it('公式戦の連敗で調子の夜、連敗を抜けた勝ちで抜けた夜を積む', () => {
+    let state = markProYearScene(start(), 'pro-debut');
+    const queued = [];
+    const results = ['loss', 'loss', 'loss', 'loss', 'win'];
+    for (const outcome of results) {
+      state = advanceToNextGame(state);
+      if (state.yearDone) break;
+      state = recordProGame(state, outcome).state;
+      for (const item of state.sceneQueue ?? []) if (!queued.includes(item.id)) queued.push(item.id);
+    }
+    expect(state.user.form.run).toBe(1);
+    expect(state.user.form.recent).toEqual([0, 0, 0, 0, 1]);
+    expect(queued.some((id) => id === 'pro-slump' || id === 'pro-slump-2')).toBe(true);
+    expect(queued).toContain('pro-slump-end');
+  });
+});
+
+describe('調子と番勝負の記録の保存(32-3)', async () => {
+  const { packProYear, unpackProYear } = await import('./pro-year.mjs');
+  it('保存から戻しても、連勝・連敗と番勝負の記録が残る', () => {
+    const state = start();
+    state.user.form = { run: -3, recent: [1, 0, 0, 0] };
+    state.user.seriesLog = [{ event: 'kio', fy: 2026, opponentId: 'p1', won: false, kind: 'miss', score: [1, 3], shape: 'plain' }];
+    const back = unpackProYear(packProYear(state));
+    expect(back.user.form).toEqual(state.user.form);
+    expect(back.user.seriesLog).toEqual(state.user.seriesLog);
+  });
+});

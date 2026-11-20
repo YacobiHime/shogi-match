@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, rotateScene } from './pro-year-story.mjs';
+import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -897,7 +897,15 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   // ほかに持っているタイトルの数(失冠の夜の場合分け。31-3)。
   const crownsOther = TITLE_EVENTS.filter((id) => id !== event.id && state.titles[id] === PRO_USER_ID).length;
   // はじめてタイトルを取った夜(31-3。羽音・善彦から取ったときは、相手ごとの場面が言う)。
-  if (kind === 'take' && firstEver && !rival) queueProYearScene(state, { key: 'pro-first-title', id: 'pro-first-title', vars: { title: event.short } });
+  const firstTitleNight = kind === 'take' && firstEver && !rival;
+  if (firstTitleNight) queueProYearScene(state, { key: 'pro-first-title', id: 'pro-first-title', vars: { title: event.short } });
+  // 番勝負の流れ(32-3。ストレート・カド番からの逆転・王手から逆転された・フルセット)と、番勝負の記録(雪辱・同じ挑戦者を見る)。
+  const played = stage.rounds.flat().map((id) => state.games[id]).filter((entry) => entry?.winner);
+  const games = played.map((entry) => (entry.winner === 'a' ? entry.a : entry.b) === PRO_USER_ID);
+  const shape = seriesShape(games, series.need ?? 0);
+  state.user.seriesLog = [...(state.user.seriesLog ?? []), {
+    event: event.id, fy: state.fy, opponentId: opponentId ?? '', won: isTitleWin(kind), kind, score, shape,
+  }].slice(-40);
   if (isTitleWin(kind)) {
     state.user.titleCounts = { ...counts, [event.id]: after.total };
     state.user.crowns = (state.user.crowns ?? 0) + 1;
@@ -917,13 +925,20 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   } else if (kind === 'lost') {
     noteEvent(state, { kind: 'lostTitle', short: event.short, winner: opponent });
     seedFormerHolder(state, cycle, event);
-    // 失冠の夜(20-3の4)。棋戦と年度ごとに1回。
-    // 3期以上続けて守ったあと＞ほかのタイトルを持ったまま＞そのほか(31-3)。
-    const id = (before.streak ?? 0) >= 3 ? 'pro-title-lost-long' : crownsOther > 0 ? 'pro-title-lost-still' : 'pro-title-lost';
-    if (!rival) {
+  }
+  // 番勝負のあとの夜(羽音・善彦でないとき。31-3・32-3)。失冠の夜もここで選ぶ(棋戦と年度ごとに1回)。
+  if (!rival) {
+    const special = firstTitleNight || eternalNow || (kind === 'defend' && isStreakSceneMark(after.streak));
+    const night = seriesNightId({ kind, shape, special, longHeld: (before.streak ?? 0) >= 3, crownsOther });
+    if (night) {
+      const wonWord = kind === 'defend' ? '防衛' : kind === 'retake' ? '奪還' : '獲得';
+      const resultText = kind === 'lost' ? `${event.short}戦の番勝負が終わった。${event.short}の座は、${opponent}に移った。` : `${event.short}戦の番勝負が終わった。${event.short}には、届かなかった。`;
       queueProYearScene(state, {
-        key: `${id}:${event.id}:${state.fy}`, id,
-        vars: { title: event.short, challenger: opponent, total: String(before.total ?? 0), crowns: String(crownsOther) },
+        key: `${night}:${event.id}:${state.fy}`, id: night,
+        vars: {
+          title: event.short, challenger: opponent, total: String(before.total ?? 0), crowns: String(crownsOther),
+          score: `${score[0]}勝${score[1]}敗`, won: wonWord, played: String(games.length), result: resultText,
+        },
       });
     }
   }
@@ -1444,6 +1459,33 @@ export function retuneProYearWorld(source, { difficulty, world }) {
   return state;
 }
 
+/** 調子の夜を出す連敗の数と、連勝の数(32-3)。 */
+export const SLUMP_NIGHT_RUN = 4;
+export const HOT_NIGHT_RUN = 10;
+
+/**
+ * 公式戦の調子を記録し、調子の夜を積む(docs/pro-year-design.mdの32-3)。runは連勝(正)・連敗(負)の数、recentは最近10局。
+ * 連敗の夜は連敗が4になったとき1回(師匠と羽音の2本を回す)、連敗を勝ちで抜けた夜、10連勝・20連勝…の夜。
+ * @param {any} state
+ * @param {boolean} won
+ * @param {string} gameId
+ */
+function noteForm(state, won, gameId) {
+  const before = Number(state.user.form?.run) || 0;
+  const run = won ? Math.max(0, before) + 1 : Math.min(0, before) - 1;
+  const recent = [...(Array.isArray(state.user.form?.recent) ? state.user.form.recent : []), won ? 1 : 0].slice(-10);
+  state.user.form = { run, recent };
+  const seen = (prefix) => (state.scenes ?? []).filter((mark) => mark.split(':')[0] === prefix || mark.split(':')[0] === `${prefix}-2`).length;
+  if (run === -SLUMP_NIGHT_RUN) {
+    const id = rotateScene(['pro-slump', 'pro-slump-2'], seen('pro-slump'));
+    queueProYearScene(state, { key: `${id}:${state.fy}:${gameId}`, id, vars: { run: String(SLUMP_NIGHT_RUN) } });
+  } else if (won && before <= -SLUMP_NIGHT_RUN) {
+    queueProYearScene(state, { key: `pro-slump-end:${state.fy}:${gameId}`, id: 'pro-slump-end', vars: { run: String(-before) } });
+  } else if (won && run >= HOT_NIGHT_RUN && run % HOT_NIGHT_RUN === 0) {
+    queueProYearScene(state, { key: `pro-hot-streak:${state.fy}:${gameId}`, id: 'pro-hot-streak', vars: { run: String(run) } });
+  }
+}
+
 /** プレイヤーの対局の相手・Lv・先後・戦法。 */
 function setPending(state, game, rng) {
   const opponentId = game.a === PRO_USER_ID ? game.b : game.a;
@@ -1614,6 +1656,8 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
   }
   state.pending = null;
   state.lastGame = { id: game.id, won, auto: outcome === 'auto' };
+  // 公式戦の調子(連勝・連敗と最近10局)と、調子の夜(32-3)。分身に任せた局も棋士としての成績なので数える。
+  noteForm(state, won, game.id);
   // 公式戦で当たった同期・兄弟子との絆(15-3の2)。羽音と会って足した閃きは、この1局で使い切る。
   if (roleOf(state.people, pending.opponentId) && roleOf(state.people, pending.opponentId) !== 'mentor') bond(state, pending.opponentId, BOND_SMALL);
   if (state.players[pending.opponentId]?.story === HANANE) state.user.hananeHint = 0;
