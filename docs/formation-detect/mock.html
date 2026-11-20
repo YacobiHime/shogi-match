@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>戦型の演出 見本</title>
+<style>
+  :root { --bg: #172632; --wood: #e2b86b; --line: #6b4a1f; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: #fffcf4; font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  h1 { font-size: 1.1rem; color: #f1a54c; margin: 0 0 4px; }
+  p.lead { margin: 0 0 14px; font-size: 0.8rem; color: #cfd8de; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  figure { margin: 0; display: grid; gap: 6px; align-content: start; }
+  .settings { justify-self: start; }
+  figcaption { font-size: 0.78rem; color: #cfd8de; }
+  figcaption b { color: #f1a54c; }
+  .board { position: relative; aspect-ratio: 1; background: var(--wood); border: 3px solid #4a3214; border-radius: 4px; overflow: hidden; }
+  .cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); }
+  .cells i { border-right: 1px solid rgba(107, 74, 31, 0.55); border-bottom: 1px solid rgba(107, 74, 31, 0.55); display: grid; place-items: center; font-style: normal; font-weight: 900; font-size: 13px; color: #1d1d1d; position: relative; }
+  .cells i.w { transform: rotate(180deg); }
+  /* 形を作る駒の光(白い縁と系統の色の輪。黄色の面は使わない) */
+  .cells i.glow::after { content: ""; position: absolute; inset: 8%; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 3px var(--fam, #6bc7ff), 0 0 10px 2px var(--fam, #6bc7ff); opacity: 0.95; }
+  .board.edge { box-shadow: inset 0 0 0 4px transparent; }
+  .board.edge::before { content: ""; position: absolute; inset: 0; border: 4px solid; border-image: linear-gradient(90deg, #ff7a7a, #ffd36b, #7dffa8, #6bc7ff, #c18bff) 1; z-index: 3; }
+  .cutin { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: grid; justify-items: center; z-index: 4; }
+  .band { --edge: #c9d6e6; --text: #fffcf4; position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; width: 100%; box-sizing: border-box; padding: 6px 10px 8px; border-block: 3px solid var(--edge); background: linear-gradient(90deg, rgba(15,24,40,0) 0%, rgba(15,24,40,.93) 10%, rgba(15,24,40,.93) 90%, rgba(15,24,40,0) 100%); overflow: hidden; }
+  .band.r4 { --edge: #f1c75b; --text: #ffe7a3; }
+  .band.r5 { border-image: linear-gradient(90deg, #ff7a7a, #ffd36b, #7dffa8, #6bc7ff, #c18bff) 1; }
+  .kind { padding: 0 7px; border: 1px solid var(--edge); border-radius: 999px; color: var(--edge); font-size: 11px; font-weight: 900; letter-spacing: .15em; }
+  .mon { width: 22px; height: 22px; flex: none; }
+  .bigmon { position: absolute; right: 6%; top: 50%; width: 64px; height: 64px; transform: translateY(-50%); opacity: .22; }
+  .name { color: var(--text); font-size: 26px; font-weight: 900; letter-spacing: .06em; text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 14px var(--edge); white-space: nowrap; }
+  .band.r5 .name { background: linear-gradient(90deg, #ff9b9b, #ffe08a, #9dffbe, #8fd6ff, #d6a8ff); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+  .stars { color: var(--edge); font-size: 13px; }
+  .badge { padding: 0 6px; border-radius: 5px; background: #f1a54c; color: #172632; font-size: 11px; font-weight: 900; font-style: normal; }
+  .badge.evo { background: #86d4a9; }
+  .prev { flex-basis: 100%; text-align: center; color: #cfd8de; font-size: 12px; }
+  .prev s { opacity: .8; }
+  .small { position: absolute; left: 8px; right: 8px; top: 6px; z-index: 4; display: flex; gap: 6px; align-items: center; justify-content: center; padding: 3px 8px; border: 2px solid #e5735b; border-radius: 6px; background: rgba(15,24,40,.9); font-size: 13px; font-weight: 900; }
+  .small small { color: #e5735b; font-size: 11px; }
+  .settings { display: inline-flex; gap: 6px; margin-top: 4px; }
+  .settings span { padding: 3px 10px; border: 1px solid #c9d6e6; border-radius: 999px; font-size: 12px; }
+  .settings span.on { background: #f1a54c; color: #172632; border-color: #f1a54c; font-weight: 900; }
+</style>
+</head>
+<body>
+<h1>戦型の演出 見本（docs/formation-detect-design.md 5・6章）</h1>
+<p class="lead">盤は見本の配置。形を作る駒が白い縁と系統の色の輪で光る（黄色の面は使わない）。★の数で帯の色・紋・光が変わる。</p>
+<div class="grid" id="grid"></div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- 穴熊：熊の足あと -->
+    <symbol id="mon-anaguma" viewBox="0 0 32 32"><g fill="currentColor"><ellipse cx="16" cy="21" rx="8" ry="7"/><circle cx="7" cy="12" r="3"/><circle cx="13" cy="8" r="3"/><circle cx="19" cy="8" r="3"/><circle cx="25" cy="12" r="3"/></g></symbol>
+    <!-- 美濃：扇 -->
+    <symbol id="mon-mino" viewBox="0 0 32 32"><path fill="currentColor" d="M16 28 L3 10 A16 16 0 0 1 29 10 Z"/><path fill="none" stroke="#172632" stroke-width="1.5" d="M16 28 L10 7 M16 28 L16 5 M16 28 L22 7"/></symbol>
+    <!-- 銀冠：冠 -->
+    <symbol id="mon-kanmuri" viewBox="0 0 32 32"><path fill="currentColor" d="M4 24 L6 10 L12 17 L16 6 L20 17 L26 10 L28 24 Z"/><rect x="4" y="25" width="24" height="3" fill="currentColor"/></symbol>
+    <!-- 矢倉：櫓 -->
+    <symbol id="mon-yagura" viewBox="0 0 32 32"><g fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 10 H26 L22 4 H10 Z"/><path d="M9 10 V28 M23 10 V28 M9 16 L23 28 M23 16 L9 28 M7 28 H25"/></g></symbol>
+    <!-- 振り飛車：筋の数字 -->
+    <symbol id="mon-furi" viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/><text x="16" y="23" text-anchor="middle" font-size="18" font-weight="900" fill="currentColor">四</text></symbol>
+  </defs>
+</svg>
+
+<script>
+  // 先手の駒の配置(筋1〜9・段1〜9)と光らせるマス。後手の駒は少しだけ置く。
+  const BASE_WHITE = { '91': '香', '81': '桂', '71': '銀', '61': '金', '51': '玉', '41': '金', '31': '銀', '21': '桂', '11': '香', '82': '飛', '22': '角', '93': '歩', '83': '歩', '73': '歩', '63': '歩', '53': '歩', '43': '歩', '33': '歩', '23': '歩', '13': '歩' };
+  const frames = [
+    {
+      cap: '<b>★2 本美濃</b>（帯・応手の止め0.4秒）',
+      pieces: { '28': '玉', '38': '銀', '39': '桂', '19': '香', '58': '金', '49': '金', '48': '飛', '17': '歩', '27': '歩', '37': '歩', '47': '歩', '56': '歩', '67': '歩', '76': '歩', '87': '歩', '97': '歩', '88': '角', '79': '銀', '89': '桂', '99': '香' },
+      glow: [], fam: '#8fd6ff',
+      band: { cls: '', kind: '囲い', mon: 'mino', name: '本美濃', stars: 2 },
+    },
+    {
+      cap: '<b>★4 銀冠穴熊</b>（金の帯・紋・形を作る駒が玉から順に光る）',
+      pieces: { '99': '玉', '98': '香', '89': '桂', '87': '銀', '78': '金', '68': '金', '86': '歩', '97': '歩', '76': '歩', '66': '歩', '56': '歩', '47': '歩', '37': '歩', '27': '歩', '17': '歩', '28': '飛', '39': '桂', '19': '香', '57': '銀' },
+      glow: ['99', '98', '89', '87', '78', '86'], fam: '#c18bff',
+      band: { cls: 'r4', kind: '囲い', mon: 'anaguma', name: '銀冠穴熊', stars: 4, big: true },
+    },
+    {
+      cap: '<b>★5 ビッグ4</b>（虹の帯・大きな紋・盤の縁が一周光る）',
+      pieces: { '99': '玉', '98': '香', '89': '桂', '88': '金', '78': '金', '87': '銀', '77': '銀', '86': '歩', '97': '歩', '76': '歩', '66': '歩', '56': '歩', '47': '歩', '37': '歩', '27': '歩', '17': '歩', '28': '飛', '39': '桂', '19': '香' },
+      glow: ['99', '98', '89', '88', '78', '87', '77'], fam: '#c18bff', edge: true,
+      band: { cls: 'r4 r5', kind: '囲い', mon: 'anaguma', name: 'ビッグ4', stars: 5, big: true, badge: 'はじめて！' },
+    },
+    {
+      cap: '<b>進化 高美濃 → 銀冠</b>（前の名前に消し線と「進化！」）',
+      pieces: { '28': '玉', '27': '銀', '38': '金', '49': '金', '39': '桂', '19': '香', '26': '歩', '17': '歩', '36': '歩', '46': '歩', '56': '歩', '67': '歩', '76': '歩', '87': '歩', '97': '歩', '58': '飛', '79': '銀', '89': '桂', '99': '香', '77': '角' },
+      glow: ['28', '27', '38', '26'], fam: '#8fd6ff',
+      band: { cls: 'r4', kind: '囲い', mon: 'kanmuri', name: '銀冠', stars: 4, badge: '進化！', evo: true, prev: '高美濃' },
+    },
+    {
+      cap: '<b>相手の形</b>（盤の上の端の小さな帯・朱の縁・止めない）',
+      pieces: { '59': '玉', '69': '金', '49': '金', '79': '銀', '39': '銀', '89': '桂', '29': '桂', '99': '香', '19': '香', '88': '角', '28': '飛', '97': '歩', '87': '歩', '77': '歩', '67': '歩', '57': '歩', '47': '歩', '37': '歩', '27': '歩', '17': '歩' },
+      whiteOverride: { '82': '', '62': '飛', '22': '角' }, glow: [], fam: '#8fd6ff',
+      small: '<small>相手の戦法</small> ノーマル四間飛車 ★1',
+    },
+  ];
+  const grid = document.getElementById('grid');
+  for (const frame of frames) {
+    const fig = document.createElement('figure');
+    const board = document.createElement('div');
+    board.className = 'board' + (frame.edge ? ' edge' : '');
+    board.style.setProperty('--fam', frame.fam);
+    const cells = document.createElement('div');
+    cells.className = 'cells';
+    const white = { ...BASE_WHITE, ...(frame.whiteOverride ?? {}) };
+    for (let rank = 1; rank <= 9; rank += 1) {
+      for (let file = 9; file >= 1; file -= 1) {
+        const sq = `${file}${rank}`;
+        const cell = document.createElement('i');
+        if (frame.pieces[sq]) cell.textContent = frame.pieces[sq];
+        else if (white[sq]) { cell.textContent = white[sq]; cell.className = 'w'; }
+        if (frame.glow.includes(sq)) cell.classList.add('glow');
+        cells.appendChild(cell);
+      }
+    }
+    board.appendChild(cells);
+    if (frame.band) {
+      const b = frame.band;
+      const cut = document.createElement('div');
+      cut.className = 'cutin';
+      cut.innerHTML = `<div class="band ${b.cls}">${b.big ? `<svg class="bigmon" style="color:var(--edge)"><use href="#mon-${b.mon}"/></svg>` : ''}${b.prev ? `<span class="prev"><s>${b.prev}</s> →</span>` : ''}<span class="kind">${b.kind}</span><svg class="mon" style="color:var(--edge)"><use href="#mon-${b.mon}"/></svg><strong class="name">${b.name}</strong><span class="stars">${'★'.repeat(b.stars)}</span>${b.badge ? `<em class="badge ${b.evo ? 'evo' : ''}">${b.badge}</em>` : ''}</div>`;
+      board.appendChild(cut);
+    }
+    if (frame.small) {
+      const s = document.createElement('div');
+      s.className = 'small';
+      s.innerHTML = frame.small;
+      board.appendChild(s);
+    }
+    fig.appendChild(board);
+    const cap = document.createElement('figcaption');
+    cap.innerHTML = frame.cap;
+    fig.appendChild(cap);
+    grid.appendChild(fig);
+  }
+  const fig = document.createElement('figure');
+  fig.innerHTML = '<figcaption><b>表示補助「技の演出」</b>（棋桜の簡易表示にならう）</figcaption><div class="settings"><span class="on">全部</span><span>かんたん</span><span>なし</span></div><figcaption>かんたん：どの★も小さな帯だけ（紋と駒の光なし）</figcaption>';
+  grid.appendChild(fig);
+</script>
+</body>
+</html>
