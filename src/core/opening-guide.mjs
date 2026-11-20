@@ -888,6 +888,7 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "早囲い",
     detectionNames: ["早囲い"],
     strictOrder: true,
+    // 早囲いは7九の角が形の一部(角を先に引いて玉を入れる)。金矢倉と見分けるため、角を完成の条件に残す。
     completionSquares: [
       ["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"], ["7i", "B"],
     ],
@@ -901,11 +902,16 @@ const OPENING_CASTLE_DEFINITIONS = [
     label: "金矢倉",
     detectionNames: ["矢倉", "金矢倉", "銀矢倉", "総矢倉"],
     strictOrder: true,
+    // 矢倉は7七銀・7八金・6七金の3枚と入城した8八の玉で完成(角・桂は入れない。docs/opening-guide-ux-design.mdの14-2)。
     completionSquares: [["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"]],
+    // よくある手順(14-8)。角道を開け、7八銀→7七銀、7八金・5八金→6七金(6六歩を先に)、5六歩、6九玉、
+    // 角を7九から6八へ引いて玉の通り道を空け、7九玉→8八玉で入城。角換わりで角がいなければ角の手は飛ばす。
     blackMoves: [
-      "7g7f", "6g6f", "7i6h", "6h7g", "8h7i",
-      "4i5h", "5h6g", "5i6h", "6h7h", "7h8h", "6i7h",
+      "7g7f", "7i7h", "7h7g", "6i7h", "4i5h", "6g6f", "5h6g",
+      "5g5f", "5i6i", "8h7i", "7i6h", "6i7i", "7i8h",
     ],
+    // 相手が角道を開けていたら(3四歩・3五歩)、7八銀のあとすぐ6六歩で角道を閉じる。
+    earlyMoves: { "6g6f": [{ alternatives: [{ square: "3d", owner: "opponent", kind: "P" }, { square: "3e", owner: "opponent", kind: "P" }] }] },
   },
   {
     id: "doi-yagura",
@@ -956,7 +962,8 @@ const OPENING_CASTLE_DEFINITIONS = [
     detectionNames: ["左美濃", "居角左美濃", "天守閣美濃"],
     strictOrder: true,
     // 角は7七に上がり、4九の金を5八へ寄せて完成。6九の金は動かさない。
-    completionSquares: [["8h", "K"], ["7h", "S"], ["6i", "G"], ["5h", "G"], ["7g", "B"]],
+    // 完成の条件に角は入れない(角換わりのあとも組める。14-2)。角の手は角がいるときだけ指す。
+    completionSquares: [["8h", "K"], ["7h", "S"], ["6i", "G"], ["5h", "G"]],
     blackMoves: ["7g7f", "8h7g", "7i7h", "5i6h", "6h7i", "7i8h", "4i5h"],
   },
   {
@@ -1462,7 +1469,8 @@ export function trackPlanPieces(moves) {
  * @returns {{ steps: { usi: string, phase: "strategy" | "castle" }[], conflicts: string[] }}
  */
 export function composeOpeningPlan({ strategy, castle, strategyMoves = strategy?.blackMoves ?? [] }) {
-  const strategyUsis = new Set(strategyMoves);
+  // 同じ手は一度だけ。ただし同じ升の手でも動かす駒が違えば別の手(戦法の銀の7九→6八と、矢倉の角の7九→6八。14-8)。
+  const strategyUsis = new Set(trackPlanPieces(strategyMoves).map(({ usi, piece }) => `${usi}:${piece ?? ""}`));
   const continuation = Boolean(castle) && strategy?.integratedCastle === castle;
   // 戦法の手のあとの、駒ごとのいる場所(初めのマスで呼ぶ)。
   const where = new Map(INITIAL_BLACK_PIECES.map(([square]) => [square, square]));
@@ -1477,8 +1485,14 @@ export function composeOpeningPlan({ strategy, castle, strategyMoves = strategy?
     where.set(piece, usi.slice(2, 4));
   }
   const castleSteps = [];
+  // 戦法が動かした駒の行き先。囲いの歩の手(矢倉の5六歩)の行き先を戦法の駒(腰掛け銀の5六銀)がふさぐなら、その歩の手は外す
+  // (歩は囲いの完成の条件に入らない。14-8)。
+  const strategySquares = new Set([...where].filter(([piece, square]) => piece !== square).map(([, square]) => square));
+  const castleKinds = new Map(INITIAL_BLACK_PIECES);
   for (const { usi, piece } of trackPlanPieces(castle?.blackMoves ?? [])) {
-    if (strategyUsis.has(usi)) continue;
+    if (piece && !continuation && castleKinds.get(piece) === "P" && strategySquares.has(usi.slice(2, 4))) continue;
+    const sameUsi = [...strategyUsis].some((key) => key.startsWith(`${usi}:`));
+    if (strategyUsis.has(`${usi}:${piece ?? ""}`) || ((continuation || !piece) && sameUsi)) continue;
     // 囲いの駒が、戦法の手のあとでもこの手の移動元にいるときだけ指す。
     // 戦法に組み込みの囲い(森下システムの金矢倉など)は、戦法の手のあとから続けて書いてあるので、そのまま続ける。
     if (piece && !continuation && !usi.includes("*") && !usi.startsWith("@")) {
@@ -1609,6 +1623,12 @@ function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
     .map((entry, index) => ({ ...entry, index }));
   const counts = new Map();
   for (const move of playedMoves) counts.set(move, (counts.get(move) ?? 0) + 1);
+  // 手順で先に並ぶほかの段の同じ升の手(別の駒の手)が使った分は数えない(戦法の銀の7i6hと矢倉の角の7i6h。14-8)。
+  const all = planStepsWithKinds(steps, color);
+  const firstOwn = all.findIndex((entry) => entry.phase === phase);
+  all.slice(0, Math.max(0, firstOwn)).forEach((entry) => {
+    if (entry.phase !== phase && counts.get(entry.usi)) counts.set(entry.usi, counts.get(entry.usi) - 1);
+  });
   const consumed = new Set();
   entries.forEach((entry, index) => {
     const remaining = counts.get(entry.usi) ?? 0;
@@ -1644,7 +1664,18 @@ function pendingPlanSteps(steps, phase, playedMoves, currentSfen, color) {
       }
     }
   }
+  // 角換わりなどで自分の角が盤にないときは、囲いの角の手(矢倉の7九角・6八角など)を指したことにする(14-2)。
+  // 角は囲いの完成の条件に入れないので、飛ばしても囲いは組める。
+  if (currentSfen && !ownBishopOnBoard(currentSfen, color)) {
+    entries.forEach((entry, index) => {
+      if (entry.phase === "castle" && (entry.sourceKind ?? entry.expectedKind) === "B") consumed.add(index);
+    });
+  }
   return entries.filter((_, index) => !consumed.has(index));
+}
+
+function ownBishopOnBoard(currentSfen, color) {
+  return [...parseSfenBoard(currentSfen).values()].some(({ color: owner, kind }) => owner === color && (kind === "B" || kind === "+B"));
 }
 
 function alternativePlanMove(entry, legalMoves, board, color) {
@@ -2830,6 +2861,14 @@ export function openingPlanCandidates({
         .map(({ usi, distance }) => ({ usi, phase: "strategy", distance }));
     };
     if (definition.strictOrder && !definition.adaptiveOrder) {
+      // 局面の条件がそろったら先に指す手(矢倉の、相手が角道を開けたときの6六歩。docs/opening-guide-ux-design.mdの14-8)。
+      for (const [move, condition] of Object.entries(definition.earlyMoves ?? {})) {
+        const entry = pending.find((item) => item.usi === convert(move));
+        if (!entry || entry === pending[0]) continue;
+        if (!matchesMovePositionPrerequisites(condition, { pieceAt: (square) => board.get(square), convertSquare: convert, color, opponentColor })) continue;
+        const early = availableMove(entry);
+        if (early) return [early];
+      }
       const next = pending[0];
       // 条件手より前にある準備手を待機分岐にすると、準備手を進めながら
       // 毎手条件を再確認できる。成立した時点で条件手を優先して本線へ合流する。
