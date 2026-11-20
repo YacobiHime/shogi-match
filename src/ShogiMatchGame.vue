@@ -798,6 +798,15 @@
             @click="closeSettings(); suspendConfirmOpen = true"
           >対局を中断する</button>
         </template>
+        <button
+          v-if="matchStarted && !pregameOpen"
+          type="button"
+          role="menuitem"
+          class="shogi-game__menu-item"
+          data-kifu-export
+          @click="exportCurrentKifu"
+        >{{ KIFU_EXPORT_TEXT.button }}</button>
+        <p v-if="kifuExportNotice" class="shogi-game__menu-notice" role="status" data-kifu-export-notice>{{ kifuExportNotice }}</p>
         <!-- 盤の反転は操作列からも切り替えられる。見出しのメニューにも同じ状態を表示する。 -->
         <button
           type="button"
@@ -2815,6 +2824,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch, type Ref } from "vue";
 import { Color, Move, PieceType, Position, Record, Square, promotedPieceType, reverseColor } from "tsshogi";
+import { currentKifuFile, KIFU_EXPORT_TEXT } from "./core/kifu-export.mjs";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import WazaCutin, { type WazaCutinView } from "./WazaCutin.vue";
 import { createWazaAudio } from "./waza-audio";
@@ -3388,7 +3398,7 @@ const props = defineProps({
   exhibit: { type: Boolean, default: false },
 });
 // Googleアカウントでの同期(docs/cloud-sync-design.md)。各画面が保存を書く前の記録で「この端末が変わったか」を決めるため、準備の最初に呼ぶ。
-const cloudSync = useCloudSync({ enabled: props.showHome, onChoose: () => openCloudChoice() });
+const cloudSync = useCloudSync({ enabled: props.showHome, onChoose: () => openCloudChoice(), canApply: () => canApplyCloudSave() });
 const { status: cloudSyncStatus, statusText: cloudSyncStatusText, toast: cloudSyncToast, signedIn: cloudSyncSignedIn } = cloudSync;
 
 const emit = defineEmits(["match-ready", "match-move", "match-end", "match-error"]);
@@ -6410,12 +6420,39 @@ function normalizePlayerColor(value: string): "black" | "white" {
   return value === "white" ? "white" : "black";
 }
 
+const kifuExportNotice = ref("");
+
 function toggleSettings() {
+  kifuExportNotice.value = "";
   settingsOpen.value = !settingsOpen.value;
 }
 
 function closeSettings() {
   settingsOpen.value = false;
+}
+
+/** メニューを押した瞬間の確定済みの棋譜を保存する。対局や検討のカーソルは動かさない。 */
+function exportCurrentKifu() {
+  let url = "";
+  let link: HTMLAnchorElement | null = null;
+  try {
+    const file = currentKifuFile(record.value, {
+      blackName: effectiveBlackPlayerName.value,
+      whiteName: effectiveWhitePlayerName.value,
+    });
+    url = URL.createObjectURL(new Blob([file.text], { type: "text/plain;charset=utf-8" }));
+    link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    kifuExportNotice.value = KIFU_EXPORT_TEXT.exported(file.ply);
+  } catch {
+    kifuExportNotice.value = KIFU_EXPORT_TEXT.failed;
+  } finally {
+    link?.remove();
+    if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 
 const learningFormationResult = computed(() => {
@@ -9552,21 +9589,26 @@ function closeSaveTransfer() {
 }
 /** どちらの記録を使うか聞く(docs/cloud-sync-design.mdの6章)。ホームならすぐ開き、対局中などはホームへ戻ったときに開く。 */
 let cloudChoicePending = false;
+function canApplyCloudSave() {
+  return homeOpen.value && !nameDialogOpen.value && !tournamentOpen.value && !tutorialOpen.value
+    && !problemSetOpen.value && !brainTrainingOpen.value && !storyOpen.value
+    && !yakobiNoteOpen.value && !dexOpen.value && !referenceDexKind.value && !exhibitResetOpen.value;
+}
 function openCloudChoice() {
-  if (homeOpen.value && !saveTransferOpen.value) openSaveTransfer();
+  if (canApplyCloudSave() && !saveTransferOpen.value) openSaveTransfer();
   else cloudChoicePending = true;
 }
-watch(homeOpen, (open) => {
-  if (open && cloudChoicePending && cloudSync.status.value === "choose") {
-    cloudChoicePending = false;
-    openSaveTransfer();
-  }
-});
 
 // ===== データリセット(展示モードの「最初から」と、種類を選んで消す。docs/data-reset-design.md) =====
 const exhibitResetOpen = ref(false);
 const exhibitResetCancel = ref<HTMLButtonElement | null>(null);
 const resetConfirmCancel = ref<HTMLButtonElement | null>(null);
+watch(canApplyCloudSave, (open) => {
+  if (open && cloudChoicePending && cloudSync.status.value === "choose") {
+    cloudChoicePending = false;
+    openSaveTransfer();
+  }
+});
 /** 選んだ消す種類(確認の窓を出しているあいだ)。空なら種類を選ぶ札。 */
 const resetChoice = ref("");
 /** 「大会の進み具合」を押したときの、大会ごとの選ぶ札(6章)。 */

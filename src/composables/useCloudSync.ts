@@ -8,7 +8,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { applySave, collectSave, decodeSave, encodeSave, summarizeSave } from "../core/save-transfer.mjs";
 import {
-  CLOUD_SYNC_TEXT, CloudSyncError, HIDDEN_PUSH_INTERVAL_MS, PAUSE_MS, PUSH_INTERVAL_MS, RETURN_CHECK_MS, TICK_MS,
+  CLOUD_SYNC_KEY, CLOUD_SYNC_TEXT, CloudSyncError, HIDDEN_PUSH_INTERVAL_MS, PAUSE_MS, PUSH_INTERVAL_MS, RETURN_CHECK_MS, TICK_MS,
   canUseCloudSync, clearCloudState, decideSync, deleteCloudSave, downloadCloudSave, headSummary, headSummaryLines, isFreshSave,
   loadCloudState, localSummaryLines, readCloudHead, refreshSession, saveCloudState, saveFingerprint, syncStatusText, uploadCloudSave,
 } from "../core/cloud-sync.mjs";
@@ -21,6 +21,8 @@ type CloudHead = NonNullable<Awaited<ReturnType<typeof readCloudHead>>>;
 type Session = Awaited<ReturnType<typeof refreshSession>>;
 export type CloudSyncStatus = "off" | "idle" | "syncing" | "choose" | "paused" | "offline";
 export type CloudChoice = { first: boolean; head: CloudHead; localLines: string[]; cloudLines: string[]; cloudBroken: boolean };
+/** ログアウト・アカウント変更・画面の終了で、古い通信結果を破棄する。 */
+class SyncInterrupted extends Error {}
 
 function storage(): Storage | null {
   try {
@@ -34,7 +36,7 @@ function storage(): Storage | null {
  * @param options.enabled ホームのある表示(単体のページ)だけで同期する。小説などに埋め込んだときは動かない。
  * @param options.onChoose どちらを使うか聞く必要ができたとき(ホームならシートを開く)。
  */
-export function useCloudSync(options: { enabled: boolean; onChoose?: () => void }) {
+export function useCloudSync(options: { enabled: boolean; onChoose?: () => void; canApply?: () => boolean }) {
   const hasWindow = typeof window !== "undefined";
   const initial = hasWindow && options.enabled ? loadCloudState(storage()) : null;
   const hostname = hasWindow ? window.location.hostname : "";
@@ -58,6 +60,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
   let hiddenAt = 0;
   let timer = 0;
   let toastTimer = 0;
+  let disposed = false;
 
   const signedIn = computed(() => Boolean(state.value));
   const savedAt = computed(() => state.value?.base?.at ?? 0);
@@ -85,17 +88,29 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     if (text) showToast(text);
   }
 
+  function assertCurrent(current: CloudState) {
+    const stored = loadCloudState(storage());
+    if (disposed || state.value?.uid !== current.uid || state.value?.device !== current.device
+      || stored?.uid !== current.uid || stored?.device !== current.device) throw new SyncInterrupted();
+  }
+
   async function ensureSession(): Promise<Session> {
     const current = state.value;
     if (!current) throw new CloudSyncError("signed-out");
+    assertCurrent(current);
     if (session && session.expiresAt > Date.now()) return session;
     const before = current.refreshToken;
-    session = await refreshSession(current);
+    const refreshed = await refreshSession(current);
+    assertCurrent(current);
+    session = refreshed;
     if (current.refreshToken !== before) persist(current);
     return session;
   }
 
   function handleError(cause: unknown) {
+    if (cause instanceof SyncInterrupted) return;
+    if (!state.value || disposed) return;
+    try { assertCurrent(state.value); } catch { return; }
     const reason = cause instanceof CloudSyncError ? cause.reason : "offline";
     const text = (CLOUD_SYNC_TEXT.errors as Record<string, string>)[reason] ?? CLOUD_SYNC_TEXT.errors.offline;
     if (reason === "signed-out") {
@@ -116,6 +131,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     const current = state.value;
     if (!current) return;
     const live = await ensureSession();
+    assertCurrent(current);
     const bundle = collectSave(storage());
     const hash = saveFingerprint(bundle.entries);
     const saved = await uploadCloudSave(current, live, {
@@ -124,6 +140,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
       summary: headSummary(summarizeSave(bundle)),
       expect,
     });
+    assertCurrent(current);
     lastPushAt = Date.now();
     const notice = current.notice;
     persist({ ...current, base: { rev: saved.rev, updateTime: saved.updateTime, hash, at: saved.at, parts: saved.parts }, notice: "" });
@@ -137,8 +154,16 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
   async function pull(head: CloudHead) {
     const current = state.value;
     if (!current) return;
+    const before = saveFingerprint(collectSave(storage()).entries);
     const live = await ensureSession();
+    assertCurrent(current);
     const got = await downloadCloudSave(current, live, head);
+    assertCurrent(current);
+    // 受信中に進んだ端末の記録や、いま指している対局を消して読み直さない。
+    if (before !== saveFingerprint(collectSave(storage()).entries) || options.canApply?.() === false) {
+      askChoice(got.head, !current.base);
+      return;
+    }
     const decoded = decodeSave(got.text);
     if (decoded.ok === false) throw new CloudSyncError("broken");
     const result = applySave(storage(), decoded.bundle);
@@ -180,17 +205,21 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     if (reason !== "manual" && Date.now() < pausedUntil) return Promise.resolve();
     running = (async () => {
       const before = status.value;
+      const beforeHash = saveFingerprint(collectSave(storage()).entries);
       status.value = "syncing";
       try {
         const live = await ensureSession();
         const current = state.value;
         if (!current) return;
         const head = await readCloudHead(current, live);
+        assertCurrent(current);
         const entries = reason === "start" && startEntries ? startEntries : collectSave(storage()).entries;
         const localHash = saveFingerprint(entries);
         let action = decideSync({ head, base: current.base, localHash, localFresh: isFreshSave(entries) });
         // 読み込んだ直後にまた受け取ることになったら(指紋が合わないなど)、繰り返さずに聞く。
         if (action === "pull" && Date.now() - (current.pulledAt ?? 0) < 20_000) action = "choose";
+        if (action === "pull" && (options.canApply?.() === false
+          || beforeHash !== saveFingerprint(collectSave(storage()).entries))) action = "choose";
         if (action === "gone") {
           signOutLocally(CLOUD_SYNC_TEXT.gone);
           return;
@@ -286,8 +315,25 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     }
   }
 
+  function onStorage(event: StorageEvent) {
+    if (event.key !== null && event.key !== CLOUD_SYNC_KEY) return;
+    const stored = loadCloudState(storage());
+    if (stored?.uid === state.value?.uid && stored?.device === state.value?.device) {
+      if (stored && state.value) state.value = { ...state.value, refreshToken: stored.refreshToken };
+      return;
+    }
+    // 別のタブの新しいログイン状態を消さず、古い画面の通信だけ止める。
+    state.value = null;
+    session = null;
+    choice.value = null;
+    status.value = "off";
+    if (stored) window.location.reload();
+    else { message.value = CLOUD_SYNC_TEXT.signedOut; showToast(CLOUD_SYNC_TEXT.signedOut); }
+  }
+
   onMounted(() => {
     if (!hasWindow || !options.enabled) return;
+    if (usable) window.addEventListener("storage", onStorage);
     // 受け取られなかった引き継ぎコードの預け物を消す(docs/save-transfer-design.mdの6章)。開いた直後の通信と重ねない。
     if (canUseSaveCloud({ hostname, secure })) window.setTimeout(() => { void sweepTransferCodes(storage()).catch(() => 0); }, 5000);
     if (!state.value) return;
@@ -301,9 +347,13 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     document.addEventListener("visibilitychange", onVisibility);
   });
   onBeforeUnmount(() => {
+    disposed = true;
     window.clearInterval(timer);
     window.clearTimeout(toastTimer);
-    if (hasWindow) document.removeEventListener("visibilitychange", onVisibility);
+    if (hasWindow) {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("storage", onStorage);
+    }
   });
 
   /** ログインのページへ移る(戻り先は今のページ)。 */
@@ -322,7 +372,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
   }
 
   /** どちらを使うかの答え。 */
-  async function useLocal() {
+  async function useLocalTask() {
     const asked = choice.value;
     if (!asked) return;
     status.value = "syncing";
@@ -332,6 +382,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
       if (cause instanceof CloudSyncError && cause.reason === "conflict") {
         // 聞いているあいだに、ほかの端末がまた保存した。見直して聞き直す。
         status.value = "idle";
+        running = null;
         await check("return");
         return;
       }
@@ -340,7 +391,7 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
     }
   }
 
-  async function useCloud() {
+  async function useCloudTask() {
     const asked = choice.value;
     if (!asked || asked.cloudBroken) return;
     status.value = "syncing";
@@ -353,19 +404,31 @@ export function useCloudSync(options: { enabled: boolean; onChoose?: () => void 
   }
 
   /** クラウドの記録を消して、ログアウトする。 */
-  async function deleteCloud() {
+  async function deleteCloudTask() {
     const current = state.value;
     if (!current) return;
     status.value = "syncing";
     try {
       const live = await ensureSession();
+      assertCurrent(current);
       await deleteCloudSave(current, live);
+      assertCurrent(current);
       signOutLocally(CLOUD_SYNC_TEXT.deleted);
     } catch (cause) {
       handleError(cause);
       if (status.value === "syncing") status.value = "idle";
     }
   }
+
+  function exclusive(task: () => Promise<void>): Promise<void> {
+    if (running) return running;
+    const job = task().finally(() => { if (running === job) running = null; });
+    running = job;
+    return job;
+  }
+  const useLocal = () => exclusive(useLocalTask);
+  const useCloud = () => exclusive(useCloudTask);
+  const deleteCloud = () => exclusive(deleteCloudTask);
 
   return {
     usable,

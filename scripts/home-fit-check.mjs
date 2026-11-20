@@ -93,7 +93,7 @@ function measure() {
 }
 
 const { chromium } = loadPlaywright();
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined });
 let failed = 0;
 for (const mode of ['real', 'stress']) {
   for (const [name, width, height] of SIZES) {

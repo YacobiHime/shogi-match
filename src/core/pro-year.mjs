@@ -5,22 +5,23 @@
 
 import { createRng, pick } from './ryuo-random.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
+import { proAutoChance, simulateProAutoGame } from './pro-auto-game.mjs';
 import { matchBracket } from './ryuo-stages.mjs';
 import { stageVenue } from './match-stage.mjs';
 import { pickGameStyle } from './ryuo-repertoire.mjs';
 import { HANANE, YOSHIHIKO, hananeBeforeLine } from './ryuo-story.mjs';
-import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, winProbability, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
+import { MAX_CPU_LEVEL, isRealWorld, recommendedWorldLevel, worldCpuLevel, worldRating } from './ryuo-strength.mjs';
 import { CLASS_RULES } from './meijin.mjs';
 import { GEAR, STUDY_SIZE, STUDY_TEXT, gameFee, gearPrep, nextGear, prizeOf, studyDaysBetween, studyDaysOfMonth, studyHananeLine } from './pro-life.mjs';
 import { repertoireText } from './ryuo-repertoire.mjs';
 import {
-  CONDITION_DEFAULT, CONDITION_LABELS, WEEK_ACTIONS, autoActions, autoRatingBonus, clampCondition, conditionAfterGame, conditionHintBonus,
+  CONDITION_DEFAULT, CONDITION_LABELS, WEEK_ACTIONS, autoActions, clampCondition, conditionAfterGame, conditionHintBonus,
   GOAL_DEFS, GOAL_PICK, WEIGHTS, goalStamp, prepCap, researched, starsFor, weekNumber, weekRange, weekSlots,
 } from './pro-week.mjs';
 import {
   FESTIVAL_EVENTS, KIGOU_BOOK_MAX, KIGOU_FANS, SHIDOU_FANS, SIMUL_FANS, festivalDays, festivalFee, kigouWords, shidouGuest, simulGuests, simulPartners, talkFans,
 } from './pro-festival.mjs';
-import { AVATAR_GAINS, avatarEdge, avatarView, emptyAvatar, gainAvatar, gainsText, mergeGains } from './pro-avatar.mjs';
+import { AVATAR_GAINS, avatarView, emptyAvatar, gainAvatar, gainsText, mergeGains } from './pro-avatar.mjs';
 import { KAISETSU_FANS, WORKS, workDef, workOffers, workReward, workScoreText } from './pro-work.mjs';
 import {
   INTERVIEW_FANS, NEWS_WEIGHT, RECORD_KINDS, buildNews, fanLettersBetween, interviewFor, isStreakMark, isWinsMark, nextLetter, recordRanking, recordValueText, yearHeadlines,
@@ -483,7 +484,10 @@ function startStage(state, cycle, index, rng) {
     openLeagueRound(state, cycle, stage);
   } else if (def.type === 'series') {
     // タイトル戦は保持者(a)と挑戦者(b)。挑戦者が保持者と同じなら、前の段階の決勝の相手を繰り上げる(19-3の2)。
-    const [a, b] = def.title ? [cycle.holder, challengerOf(state, previousStage, cycle.holder)] : previous.slice(0, 2);
+    // 王位戦の挑戦者決定戦など、番勝負からの直接シードも出場者へ加える（28章）。
+    const directSeed = !def.title && cycle.withUser && cycle.entry === index && !userHolds;
+    const finalists = directSeed ? [PRO_USER_ID, ...previous.filter((id) => id !== PRO_USER_ID)] : previous;
+    const [a, b] = def.title ? [cycle.holder, challengerOf(state, previousStage, cycle.holder)] : finalists.slice(0, 2);
     stage.series = { a, b, need: def.need, wins: { [a]: 0, [b]: 0 }, twoDay: Boolean(def.twoDay) };
     stage.entrants = [a, b].filter(Boolean);
     stage.user = stage.entrants.includes(PRO_USER_ID);
@@ -500,6 +504,40 @@ function startStage(state, cycle, index, rng) {
     openSeriesGame(state, cycle, stage);
   } else if (def.type === 'junni') {
     startJunni(state, cycle, stage, rng);
+  }
+}
+
+/**
+ * 直接シードが出場者から抜けた前の保存を直す（28章）。実施済みの結果には触らない。
+ * 未実施の1局目だけを修復し、ほかの対局と重ならない日へ移す。
+ */
+function restoreDirectSeriesSeeds(state) {
+  for (const cycle of Object.values(state.cycles ?? {})) {
+    if (cycle.done || !cycle.withUser) continue;
+    const event = proEvent(cycle.event);
+    const index = cycle.entry;
+    const def = event?.stages[index];
+    let stage = cycle.stages[index];
+    if (def?.type !== 'series' || def.title || !stage || stage.done || stage.user
+      || state.titles[event.id] === PRO_USER_ID) continue;
+    const games = stage.rounds.flat().map((id) => state.games[id]);
+    if (games.length !== 1 || !games[0] || games[0].round !== 0 || games[0].winner || games[0].user) continue;
+    const previous = cycle.stages[index - 1]?.winners ?? [];
+    const opponent = previous.find((id) => id && id !== PRO_USER_ID);
+    if (!opponent) continue;
+    // packProYearの戻り値を直接読む場合も、元の保存や年の状態へ変更を漏らさない。
+    stage = structuredClone(stage);
+    state.cycles = { ...state.cycles, [cycle.id]: { ...cycle, stages: cycle.stages.map((entry, i) => i === index ? stage : entry) } };
+    stage.series = { ...stage.series, a: PRO_USER_ID, b: opponent, wins: { [PRO_USER_ID]: 0, [opponent]: 0 } };
+    stage.entrants = [PRO_USER_ID, opponent];
+    stage.user = true;
+    const game = games[0];
+    game.a = PRO_USER_ID;
+    game.b = opponent;
+    // game.userを付ける前に日を決める（自分自身を予定の衝突と数えない）。
+    game.date = roundDate(state, stage, 0, { withUser: true, twoDay: Boolean(game.twoDay) });
+    game.user = true;
+    game.label = gameLabel(state, game);
   }
 }
 
@@ -1541,10 +1579,10 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
   const game = state.games[pending.gameId];
   let won = outcome === 'win';
   if (outcome === 'auto') {
-    // 分身の強さに、調子と対策を足す(13-3の3・4)。
-    const me = state.players[PRO_USER_ID];
-    const bonus = autoRatingBonus(state.condition ?? CONDITION_DEFAULT, pending.prep?.stars ?? 0) + avatarEdge(state.avatar);
-    won = simulateMemberGame(rng, { ...me, rating: me.rating + bonus }, state.players[pending.opponentId]).aWins;
+    // 表示と同じ補正と先後で抽選する(30章)。実際の乱数を渡して、ここでだけ進める。
+    const simulated = simulateProAutoGame(state, rng);
+    if (!simulated) throw new Error('分身の対局相手が見つかりません');
+    won = simulated.aWins;
     game.auto = true;
   }
   game.winner = (game.a === PRO_USER_ID) === won ? 'a' : 'b';
@@ -3268,6 +3306,7 @@ function userStatus(state, cycle) {
     if (stage.type === 'junni') return { text: `${CLASS_NAMES[stage.cls]} ${stage.result?.place ?? ''}位`, alive: false };
     return { text: `${stage.label}で敗退`, alive: false };
   }
+  if (cycle.done) return { text: '今期の棋戦は終了', alive: false };
   const first = event.stages[cycle.entry ?? 0];
   const start = stageWindow(cycle, first).start;
   return { text: `${first.label}から ${Number(start.slice(5, 7))}/${Number(start.slice(8))}〜`, alive: true, waiting: true };
@@ -3313,10 +3352,8 @@ export function proYearView(state) {
     prep: official ? gearPrep(state.user.gear ?? 0, state.players[state.pending.opponentId], state.pending.style) : null,
     // 週の研究で積んだ対策の★と、作戦が当たったか(13-3の3)。
     stars: official ? state.pending.prep?.stars ?? 0 : 0,
-    // 分身に任せたときの勝つ見込み(調子と対策を足した分身の強さ。13-3の5。選ぶ材料で、決めるのは自動対局)。
-    autoChance: official && state.players[PRO_USER_ID] && state.players[state.pending.opponentId]
-      ? winProbability(state.players[PRO_USER_ID].rating + autoRatingBonus(state.condition ?? CONDITION_DEFAULT, state.pending.prep?.stars ?? 0) + avatarEdge(state.avatar), state.players[state.pending.opponentId].rating)
-      : null,
+    // 世界の乱数の写しで、勝敗確定と同じ補正・先後・戦型の確率を表示する(30章)。
+    autoChance: proAutoChance(state),
     starsHit: official ? Boolean(state.pending.prep?.hit) : false,
     studyMate: official ? studyMate(state, state.pending.opponentId) : null,
   } : null;
@@ -4101,6 +4138,7 @@ export function unpackProYear(packed, roster) {
   if (restored.work === undefined) restored.work = null;
   // 結果の札のない前の保存(19-3の7)。
   if (!Array.isArray(restored.results)) restored.results = [];
+  restoreDirectSeriesSeeds(restored);
   return restored;
 }
 

@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider, browserPopupRedirectResolver, connectAuthEmulator, inMemoryPersistence, initializeAuth, signInWithPopup,
 } from "firebase/auth";
 import { FIREBASE_EMULATORS, FIREBASE_WEB_CONFIG, isLocalHost } from "../core/firebase-config.mjs";
-import { CLOUD_SYNC_KEY, newCloudState, saveCloudState } from "../core/cloud-sync.mjs";
+import { rememberLogin } from "./login-state.mjs";
 import { loginErrorText, safeReturnPath } from "./login-text.mjs";
 
 const params = new URLSearchParams(location.search);
@@ -49,14 +49,13 @@ async function signIn() {
     const { user } = await signInWithPopup(auth, provider);
     const store = storage();
     if (!store) throw Object.assign(new Error("storage"), { code: "app/storage" });
-    saveCloudState(store, newCloudState({
+    rememberLogin(store, {
       uid: user.uid,
       email: user.email,
       name: user.displayName,
       refreshToken: user.refreshToken,
       emulator,
-    }));
-    if (!store.getItem(CLOUD_SYNC_KEY)) throw Object.assign(new Error("storage"), { code: "app/storage" });
+    });
     say("ログインしたよ。ゲームに戻るね…");
     location.replace(back);
   } catch (cause) {

@@ -387,7 +387,11 @@ async function deleteCloud() {
 }
 
 // どちらを使うかの答えが出たら(クラウドに保存できた)、メニューへ戻す。読み込むときはページを読み直す。
-watch(() => props.sync?.status.value, (status) => {
+watch(() => [props.sync?.status.value, step.value] as const, ([status]) => {
+  if (status === "choose" && props.sync?.choice.value && step.value === "menu") {
+    step.value = "cloud-choice";
+    void nextTick(() => firstFocus.value?.focus());
+  }
   if (step.value === "cloud-choice" && status !== "choose" && status !== "syncing" && !props.sync?.choice.value) toMenu();
 });
 
