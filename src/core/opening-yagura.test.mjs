@@ -81,3 +81,36 @@ describe('左美濃(14-2)', () => {
     expect(OPENING_CASTLES.find(({ id }) => id === 'left-mino').completionSquares.some(([, kind]) => kind === 'B')).toBe(false);
   });
 });
+
+describe('上の囲い(14-5)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { createFormationState, detectFormationSnapshot, formationMove, formedNamesFromState, updateFormationState } = await import('./formation-tracker.mjs');
+  const { openingUnlocks } = await import('./opening-unlocks.mjs');
+  const master = JSON.parse(await readFile(new URL('../data/hiragana_suisho_formations.json', import.meta.url), 'utf8'));
+  const UPPER = ['silver-crown-anaguma', 'big4', 'yagura-anaguma', 'ibisha-silver-crown', 'half-silver-crown', 'four-mino', 'hishi-yagura', 'gintachi-yagura', 'hayamino', 'kimura-mino', 'amano-yagura'];
+
+  it('案内どおり組むと、形の判定が同じ名前を付ける(先手・後手)', () => {
+    for (const castleId of UPPER) {
+      const label = OPENING_CASTLES.find(({ id }) => id === castleId).label;
+      for (const color of ['black', 'white']) {
+        const { complete, sfen } = follow({ castleId, color, start: color === 'white' ? START.replace(' b ', ' w ') : START });
+        expect(complete, `${castleId} ${color}`).toBe(true);
+        const snapshot = detectFormationSnapshot(sfen, master);
+        const state = updateFormationState(createFormationState(), snapshot, formationMove(sfen, 1));
+        expect([snapshot[color].castle, ...formedNamesFromState(state, color)], `${castleId} ${color}`).toContain(label);
+      }
+    }
+  });
+
+  it('進化のもとの囲いを1回完成させると使える', () => {
+    const before = openingUnlocks({ formations: {} });
+    expect(before.unlocked.has('castle:big4')).toBe(false);
+    // 応用の段が開いていても、銀冠穴熊を組むまでビッグ4は使えない。
+    const advanced = openingUnlocks({ formations: { 原始棒銀: { count: 1 }, 居飛車: { count: 1 }, 早繰り銀: { count: 1 }, 腰掛け銀: { count: 1 } } });
+    expect(advanced.unlocked.has('castle:big4')).toBe(false);
+    expect(advanced.unlocked.has('castle:hayamino')).toBe(true);
+    expect(advanced.condition('castle:big4')).toContain('銀冠穴熊');
+    const after = openingUnlocks({ formations: { 原始棒銀: { count: 1 }, 居飛車: { count: 1 }, 早繰り銀: { count: 1 }, 腰掛け銀: { count: 1 }, 銀冠穴熊: { count: 1 } } });
+    expect(after.unlocked.has('castle:big4')).toBe(true);
+  });
+});

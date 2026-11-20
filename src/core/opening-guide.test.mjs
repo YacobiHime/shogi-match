@@ -469,12 +469,14 @@ describe("opening guide", () => {
     expect(groups.static?.map(({ label }) => label)).toEqual([
       "舟囲い", "箱入り娘", "早囲い", "金矢倉", "土居矢倉", "菊水矢倉", "エルモ囲い",
       "雁木", "左美濃", "天守閣美濃", "居飛車穴熊", "松尾流穴熊",
-      "右玉", "大隅囲い", "中住まい", "中原囲い", "カニ囲い", "ボナンザ囲い",
+      "右玉", "大隅囲い", "中住まい", "中原囲い", "カニ囲い",
+      "銀冠穴熊", "ビッグ4", "矢倉穴熊", "居飛車銀冠", "菱矢倉", "銀立ち矢倉", "天野矢倉", "ボナンザ囲い",
     ]);
     expect(groups.ranging?.map(({ label }) => label)).toEqual([
       "片美濃", "本美濃", "高美濃", "ダイヤモンド美濃", "連盟美濃",
       "振り飛車銀冠", "振り飛車穴熊", "振り飛車エルモ",
       "金無双", "片金無双", "右矢倉",
+      "片銀冠", "四枚美濃", "早美濃", "木村美濃",
     ]);
     expect(groups.both?.map(({ label }) => label)).toEqual(["ミレニアム"]);
   });
@@ -1569,7 +1571,8 @@ describe("opening guide", () => {
 
   it.each(OPENING_CASTLES)("uses a legal castle sequence for $label", ({ id }) => {
     const style = openingDefinitionRookStyle(id, "castle");
-    const strategyId = style === "ranging" ? (id === "right-yagura" ? "mukai" : "shiken") : "";
+    // 四枚美濃は4六銀の道(6八・5七)を四間飛車の飛車がふさぐので、三間飛車と組む(14-5)。
+    const strategyId = style === "ranging" ? (id === "right-yagura" ? "mukai" : id === "four-mino" ? "sangen" : "shiken") : "";
     expectPlanLegal(strategyId, id, "black");
     expectPlanLegal(strategyId, id, "white");
   });
@@ -1597,7 +1600,7 @@ describe("opening guide", () => {
   )))("reaches the exact registered shape for $label", ({ id: castleId }) => {
     const style = openingDefinitionRookStyle(castleId, "castle");
     const strategyId = style === "ranging"
-      ? (castleId === "right-yagura" ? "mukai" : "shiken")
+      ? (castleId === "right-yagura" ? "mukai" : castleId === "four-mino" ? "sangen" : "shiken")
       : "";
     const moves = openingPlanSteps(strategyId, castleId).map(({ usi }) => usi);
     expect(isOpeningPlanComplete({

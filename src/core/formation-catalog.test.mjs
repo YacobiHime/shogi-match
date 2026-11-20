@@ -75,12 +75,13 @@ describe('目録', () => {
     }
   });
 
-  test('作戦カードのない名前を足し、銀冠穴熊・ビッグ4もカードになる', () => {
+  test('作戦カードのない名前を足し、銀冠穴熊・ビッグ4もカードになる(ビッグ4は14-5から作戦カードの囲い)', () => {
     const labels = catalog.map((entry) => entry.label);
     expect(new Set(labels).size).toBe(labels.length);
     expect(catalog.length).toBeGreaterThan(planCatalog.length + 60);
     for (const name of ['銀冠穴熊', 'ビッグ4', '四枚美濃', '菱矢倉', '棒銀', '石田流']) expect(labels).toContain(name);
-    expect(catalog.find((entry) => entry.label === 'ビッグ4')).toMatchObject({ kind: 'castle', rook: 'static', catalogOnly: true, rarity: 5 });
+    expect(catalog.find((entry) => entry.label === 'ビッグ4')).toMatchObject({ kind: 'castle', id: 'big4', rook: 'static', rarity: 5 });
+    expect(catalog.find((entry) => entry.label === 'ビッグ4').catalogOnly).toBeFalsy();
   });
 
   test('作戦カードのない囲いには、小さな盤に描ける形がある', () => {

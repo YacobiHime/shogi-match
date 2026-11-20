@@ -5,6 +5,7 @@ import {
   mirrorUsiMove,
   nextOpeningPlanMove,
   openingDefinitionRookStyle,
+  rangingRookStrategyChoices,
   openingPlanInterruption,
 } from "./opening-guide.mjs";
 import { parseSfenBoard } from "./sfen-board.mjs";
@@ -96,7 +97,10 @@ function planFor(plans, color) {
   const plan = plans[color];
   if (!plan || !(plan.strategyId || plan.castleId)) return null;
   if (!plan.strategyId && openingDefinitionRookStyle(plan.castleId, "castle") === "ranging") {
-    return { ...plan, strategyId: DEFAULT_RANGING_STRATEGY };
+    // 四間飛車と組めない囲い(四枚美濃)は、組める振り先のいちばん目に振る。
+    const choices = rangingRookStrategyChoices(plan.castleId);
+    const strategyId = choices.some(({ id }) => id === DEFAULT_RANGING_STRATEGY) ? DEFAULT_RANGING_STRATEGY : choices[0]?.id ?? DEFAULT_RANGING_STRATEGY;
+    return { ...plan, strategyId };
   }
   return plan;
 }

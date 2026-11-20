@@ -107,6 +107,9 @@ export const OPENING_CASTLE_PLAN_IDS = Object.freeze([
   "ibisha-anaguma", "left-mino", "elmo", "gangi", "nakazumai", "kinmusou", "kanigakoi",
   "early-castle", "doi-yagura", "tenshukaku-mino", "matsuo-anaguma",
   "hakoiri-musume", "osumi", "nakahara", "bonanza", "millennium", "furibisha-elmo", "half-kinmusou",
+  // 上の囲い(docs/opening-guide-ux-design.mdの14-5)。進化のもとがある囲いは、もとの囲いを1回完成させると使える(opening-unlocks.mjs)。
+  "silver-crown-anaguma", "big4", "yagura-anaguma", "ibisha-silver-crown", "half-silver-crown", "four-mino",
+  "hishi-yagura", "gintachi-yagura", "hayamino", "kimura-mino", "amano-yagura",
 ]);
 
 /**

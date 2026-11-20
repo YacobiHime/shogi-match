@@ -74,6 +74,18 @@ export const OPENING_EXPLANATIONS = Object.freeze({
   nakahara: { overview: "玉を低く構えて、横歩取りの乱戦に強い！", weakness: "持久戦に弱いよ。早めに決着をつけよう。", development: "なし（これが完成形）", compatibleStrategies: "横歩取り・横歩取り3三角型" },
   kanigakoi: { overview: "どの戦型にも組み替えやすい！", weakness: "堅さは控えめだよ。", development: "金矢倉・雁木", compatibleStrategies: "棒銀" },
   bonanza: { overview: "角が守りに加わって、守備範囲が広い！", weakness: "組む順番を間違えると急戦を受けるよ。", development: "なし（これが完成形）", compatibleStrategies: "相掛かり・角換わり" },
+  // 上の囲い(docs/opening-guide-ux-design.mdの14-5)。
+  "silver-crown-anaguma": { overview: "穴熊の銀を8七に上げて、上からの攻めにも強くした穴熊！", weakness: "組むのに手数がかかるよ。急戦に気をつけよう。", development: "ビッグ4", compatibleStrategies: "対 振り飛車の持久戦" },
+  big4: { overview: "金銀4枚がくっついた、いちばん堅い穴熊のひとつ！", weakness: "攻めに使える駒が少なくなるよ。", development: "なし（これが完成形）", compatibleStrategies: "対 振り飛車の持久戦" },
+  "yagura-anaguma": { overview: "矢倉から玉を9九へ潜らせた、とても堅い形！", weakness: "組み替えに手数がかかるよ。相手の速い攻めに注意しよう。", development: "なし（これが完成形）", compatibleStrategies: "相矢倉の持久戦" },
+  "ibisha-silver-crown": { overview: "左美濃の銀を8七に上げて、玉頭を厚くした形！", weakness: "端攻めに注意しよう。", development: "なし（これが完成形）", compatibleStrategies: "対 振り飛車の持久戦" },
+  "half-silver-crown": { overview: "片美濃の銀を2七に上げた、上に強い形！", weakness: "金が1枚で横からの攻めに弱いよ。", development: "銀冠", compatibleStrategies: "振り飛車の持久戦" },
+  "four-mino": { overview: "高美濃に銀をもう1枚足した、厚い美濃！", weakness: "組むのに手数がかかるよ。", development: "なし（これが完成形）", compatibleStrategies: "三間飛車" },
+  "hishi-yagura": { overview: "金矢倉の上に銀をもう1枚重ねた、菱形の矢倉！", weakness: "組むのに手数がかかるよ。", development: "なし（これが完成形）", compatibleStrategies: "相矢倉の持久戦" },
+  "gintachi-yagura": { overview: "7七の銀を7六に立たせた、上に強い矢倉！", weakness: "玉のななめが少し薄くなるよ。", development: "なし（これが完成形）", compatibleStrategies: "相矢倉" },
+  hayamino: { overview: "3手で組める、いちばん速い美濃！", weakness: "まだ薄いよ。片美濃・本美濃へ進めよう。", development: "片美濃・本美濃", compatibleStrategies: "振り飛車の急戦" },
+  "kimura-mino": { overview: "銀を4七に上げた、昔ながらの美濃！", weakness: "玉の横が少し薄いよ。", development: "なし（これが完成形）", compatibleStrategies: "振り飛車" },
+  "amano-yagura": { overview: "江戸時代の名人が指した、古い形の矢倉！", weakness: "玉が7八で、今の矢倉より少し浅いよ。", development: "金矢倉", compatibleStrategies: "相矢倉" },
 });
 
 export function openingExplanation(id) {

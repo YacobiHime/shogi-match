@@ -1684,6 +1684,20 @@
             <button type="button" data-castle-switch-dismiss @click="dismissCastleSwitch">このまま</button>
           </div>
         </div>
+        <!-- この先の形(docs/opening-guide-ux-design.mdの14-5)。囲いが完成したら、上の囲いへ続けられる。 -->
+        <div v-if="castleEvolveOffer" class="shogi-game__plan-interrupt shogi-game__castle-evolve" data-castle-evolve role="status">
+          <p><b>この先の形</b>{{ castleEvolveOffer.from }}から、もっと堅い形へ組めるよ。</p>
+          <div>
+            <button
+              v-for="option in castleEvolveOffer.options"
+              :key="option.id"
+              type="button"
+              data-castle-evolve-accept
+              @click="acceptCastleEvolve(option.id)"
+            >{{ option.label }}へ続ける<small>あと{{ option.distance }}手</small></button>
+            <button type="button" data-castle-evolve-dismiss @click="castleEvolveOffer = null">このまま</button>
+          </div>
+        </div>
         <!--
           タイトル戦の勝負メシ(docs/title-match-day-design.mdの2章と8章)。20手を越えたら、対局場の名物から選ぶ。
           強さには関係しない。選ばずに6手指すと「おまかせ」(1品目)が運ばれる。前にこの対局場で勝った品(勝ちメシ)には★。
@@ -6921,7 +6935,7 @@ const planCardShown = computed(() => {
 const openingGuideContent = computed(() => (
   openingGuideCollapsed.value
   || planCardShown.value
-  || Boolean(planInterruption.value || coachPlanOffer.value || castleSwitchOffer.value || lunchOffer.value || dayBreakOffer.value)
+  || Boolean(planInterruption.value || coachPlanOffer.value || castleSwitchOffer.value || castleEvolveOffer.value || lunchOffer.value || dayBreakOffer.value)
   || rangingRookChoiceRequired.value
   || strategyCompletionChoiceRequired.value
   || Boolean(nearCompletionPrompt.value)
@@ -11939,7 +11953,30 @@ watch(moveCount, () => {
   // 相手が指して、あなたの手番になったときだけ見る。
   if (record.value.position.color === humanColor.value) checkCastleAdvice();
 });
-watch([reviewMode, active], () => { castleSwitchOffer.value = null; });
+watch([reviewMode, active], () => { castleSwitchOffer.value = null; castleEvolveOffer.value = null; });
+/** この先の形の札(14-5)。囲いが完成したとき、使える上の囲い(進化のもとがこの囲い)を、残り手数つきで並べる。 */
+const castleEvolveOffer = ref<null | { from: string; options: { id: string; label: string; distance: number }[] }>(null);
+watch(castlePhaseComplete, (done, before) => {
+  if (!done || before || !active.value || reviewMode.value || !selectedCastle.value || !openingGuideAvailable.value) return;
+  const from = OPENING_CASTLES.find(({ id }) => id === selectedCastle.value);
+  const color = humanColor.value === Color.WHITE ? "white" : "black";
+  const options = OPENING_CASTLES
+    .filter((castle) => castle.evolvesFrom === selectedCastle.value && planUnlocks.value.unlocked.has(`castle:${castle.id}`))
+    .map((castle) => ({ castle, distance: openingCastleDistance({ castleId: castle.id, color, currentSfen: currentSfen.value }) }))
+    .filter(({ distance }) => distance && !distance.unreachable && distance.distance <= distance.limit)
+    .map(({ castle, distance }) => ({ id: castle.id, label: castle.label, distance: distance!.distance }))
+    .sort((left, right) => left.distance - right.distance)
+    .slice(0, 3);
+  if (from && options.length) castleEvolveOffer.value = { from: from.label, options };
+});
+function acceptCastleEvolve(castleId: string) {
+  const label = OPENING_CASTLES.find(({ id }) => id === castleId)?.label ?? "";
+  castleEvolveOffer.value = null;
+  selectedCastle.value = castleId;
+  castleAuto.value = false;
+  announceOpeningGuide();
+  if (coachLevel.value !== "off") guideText.value = `${label}へ続けよう！ 盤の矢印と薄い駒を目指して指そう。`;
+}
 /** 「◯◯にする」。作戦カードに入れ、まだ使えない段でも使えるようにする。 */
 function acceptCoachPlanOffer() {
   const offer = coachPlanOffer.value;

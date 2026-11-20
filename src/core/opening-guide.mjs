@@ -852,7 +852,7 @@ const OPENING_CASTLE_DEFINITIONS = [
   {
     id: "furibisha-anaguma",
     label: "振り飛車穴熊",
-    detectionNames: ["振り飛車穴熊", "四枚穴熊", "銀冠穴熊"],
+    detectionNames: ["振り飛車穴熊", "四枚穴熊"],
     strictOrder: true,
     completionSquares: [["1i", "K"], ["2h", "S"], ["3i", "G"], ["3h", "G"]],
     blackMoves: [
@@ -1094,6 +1094,129 @@ const OPENING_CASTLE_DEFINITIONS = [
     completionSquares: [["6i", "K"], ["7h", "G"], ["6h", "S"], ["5h", "G"]],
     blackMoves: ["6i7h", "7i6h", "5i6i", "4i5h"],
   },
+  // ---- 上の囲い(docs/opening-guide-ux-design.mdの14-5)。完成の条件は形の判定の規則(formation-rules.mjs・ひらがなすいしょう)と同じ駒の位置。
+  // evolvesFromは進化のもと(もとの囲いを1回完成させると使え、もとの囲いの完成のあとに「この先」で続けられる)。
+  {
+    id: "silver-crown-anaguma",
+    label: "銀冠穴熊",
+    detectionNames: ["銀冠穴熊"],
+    strictOrder: true,
+    evolvesFrom: "ibisha-anaguma",
+    completionSquares: [["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "G"], ["8g", "S"], ["7h", "G"]],
+    blackMoves: [
+      "7g7f", "8h6f", "9i9h", "5i6h", "6h7h", "7h8h", "8h9i",
+      "8g8f", "7i8h", "8h8g", "6i7h", "7h8h", "4i5h", "5h6h", "6h7h",
+    ],
+  },
+  {
+    id: "big4",
+    label: "ビッグ4",
+    detectionNames: ["ビッグ4"],
+    strictOrder: true,
+    evolvesFrom: "silver-crown-anaguma",
+    completionSquares: [["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "G"], ["7h", "G"], ["8g", "S"], ["7g", "S"]],
+    blackMoves: [
+      "7g7f", "8h6f", "9i9h", "5i6h", "6h7h", "7h8h", "8h9i",
+      "8g8f", "7i8h", "8h8g", "6i7h", "7h8h", "4i5h", "5h6h", "6h7h",
+      "3i4h", "5g5f", "4h5g", "5g6h", "6h7g",
+    ],
+  },
+  {
+    id: "yagura-anaguma",
+    label: "矢倉穴熊",
+    distanceLimit: 18,
+    detectionNames: ["矢倉穴熊"],
+    strictOrder: true,
+    evolvesFrom: "yagura",
+    completionSquares: [["9i", "K"], ["9h", "L"], ["8i", "N"], ["8h", "S"], ["7h", "G"], ["7g", "S"], ["6g", "G"], ["7f", "P"]],
+    blackMoves: [
+      "7g7f", "7i7h", "7h7g", "6i7h", "4i5h", "6g6f", "5h6g",
+      "5g5f", "5i6i", "8h7i", "7i6h", "6i7i", "7i8h",
+      "9i9h", "8h9i", "6h4f", "3i4h", "4h5g", "5g6h", "6h7i", "7i8h",
+    ],
+  },
+  {
+    id: "ibisha-silver-crown",
+    label: "居飛車銀冠",
+    detectionNames: ["居飛車銀冠"],
+    strictOrder: true,
+    evolvesFrom: "left-mino",
+    completionSquares: [["8h", "K"], ["8g", "S"], ["7h", "G"], ["6g", "G"]],
+    blackMoves: ["7g7f", "8h7g", "7i7h", "5i6h", "6h7i", "7i8h", "4i5h", "8g8f", "7h8g", "6i7h", "6g6f", "5h6g"],
+  },
+  {
+    id: "half-silver-crown",
+    label: "片銀冠",
+    detectionNames: ["片銀冠"],
+    strictOrder: true,
+    evolvesFrom: "half-mino",
+    completionSquares: [["2h", "K"], ["2g", "S"], ["3h", "G"], ["2f", "P"]],
+    blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i3h", "2g2f", "3h2g", "4i3h"],
+  },
+  {
+    id: "four-mino",
+    label: "四枚美濃",
+    detectionNames: ["四枚美濃"],
+    strictOrder: true,
+    evolvesFrom: "high-mino",
+    completionSquares: [["2h", "K"], ["3h", "S"], ["4i", "G"], ["4g", "G"], ["4f", "S"]],
+    blackMoves: [
+      "2h7h", "5i4h", "4h3h", "3h2h", "3i3h", "6i5h", "4g4f", "5h4g",
+      "4f4e", "5g5f", "7i6h", "6h5g", "5g4f",
+    ],
+  },
+  {
+    id: "hishi-yagura",
+    label: "菱矢倉",
+    detectionNames: ["菱矢倉"],
+    strictOrder: true,
+    evolvesFrom: "yagura",
+    completionSquares: [["8h", "K"], ["7g", "S"], ["7h", "G"], ["6g", "G"], ["6f", "S"], ["6e", "P"]],
+    blackMoves: [
+      "7g7f", "7i7h", "7h7g", "6i7h", "4i5h", "6g6f", "5h6g",
+      "5g5f", "5i6i", "8h7i", "7i6h", "6i7i", "7i8h",
+      "6f6e", "3i4h", "4h5g", "5g6f",
+    ],
+    earlyMoves: { "6g6f": [{ alternatives: [{ square: "3d", owner: "opponent", kind: "P" }, { square: "3e", owner: "opponent", kind: "P" }] }] },
+  },
+  {
+    id: "gintachi-yagura",
+    label: "銀立ち矢倉",
+    detectionNames: ["銀立ち矢倉"],
+    strictOrder: true,
+    evolvesFrom: "yagura",
+    completionSquares: [["8h", "K"], ["7f", "S"], ["7e", "P"], ["7h", "G"], ["6g", "G"]],
+    blackMoves: [
+      "7g7f", "7i7h", "7h7g", "6i7h", "4i5h", "6g6f", "5h6g",
+      "5g5f", "5i6i", "8h7i", "7i6h", "6i7i", "7i8h",
+      "7f7e", "7g7f",
+    ],
+    earlyMoves: { "6g6f": [{ alternatives: [{ square: "3d", owner: "opponent", kind: "P" }, { square: "3e", owner: "opponent", kind: "P" }] }] },
+  },
+  {
+    id: "hayamino",
+    label: "早美濃",
+    detectionNames: ["早美濃"],
+    strictOrder: true,
+    completionSquares: [["3h", "K"], ["4h", "S"], ["4i", "G"]],
+    blackMoves: ["5i4h", "4h3h", "3i4h"],
+  },
+  {
+    id: "kimura-mino",
+    label: "木村美濃",
+    detectionNames: ["木村美濃"],
+    strictOrder: true,
+    completionSquares: [["2h", "K"], ["3h", "G"], ["4g", "S"], ["2g", "P"]],
+    blackMoves: ["2h6h", "5i4h", "4h3h", "3h2h", "3i4h", "4g4f", "4h4g", "4i3h"],
+  },
+  {
+    id: "amano-yagura",
+    label: "天野矢倉",
+    detectionNames: ["天野矢倉"],
+    strictOrder: true,
+    completionSquares: [["7h", "K"], ["6h", "G"], ["6g", "G"], ["7g", "S"]],
+    blackMoves: ["7g7f", "6g6f", "7i7h", "7h7g", "4i5h", "5h6g", "6i6h", "5i6i", "6i7h"],
+  },
   {
     id: "bonanza",
     label: "ボナンザ囲い",
@@ -1149,6 +1272,17 @@ const CASTLE_CLASSIFICATION = {
   nakahara: { family: "nakazumai", contexts: ["aibisha"], menuGroup: "aibisha-nakazumai" },
   kanigakoi: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
   bonanza: { family: "balance", contexts: ["aibisha"], menuGroup: "aibisha-balance" },
+  "silver-crown-anaguma": { family: "anaguma", contexts: ["anti-ranging-static"], menuGroup: "static-anaguma" },
+  big4: { family: "anaguma", contexts: ["anti-ranging-static"], menuGroup: "static-anaguma" },
+  "yagura-anaguma": { family: "anaguma", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  "ibisha-silver-crown": { family: "left-mino", contexts: ["anti-ranging-static"], menuGroup: "static-left-mino" },
+  "half-silver-crown": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "four-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "hishi-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  "gintachi-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
+  hayamino: { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "kimura-mino": { family: "mino", contexts: ["anti-static-ranging", "double-ranging"], menuGroup: "ranging-mino" },
+  "amano-yagura": { family: "yagura", contexts: ["aibisha"], menuGroup: "aibisha-yagura" },
 };
 
 // 実戦でよく止まる「ほぼ完成形」。達したら完全形まで続けるか選ばせる。升は先手基準。
@@ -1230,10 +1364,12 @@ const STATIC_ROOK_CASTLES = new Set([
   "funagakoi", "hakoiri-musume", "early-castle", "yagura", "doi-yagura", "kikusui-yagura", "elmo",
   "gangi", "left-mino", "tenshukaku-mino", "ibisha-anaguma", "matsuo-anaguma",
   "right-king", "osumi", "nakazumai", "nakahara", "kanigakoi", "bonanza",
+  "silver-crown-anaguma", "big4", "yagura-anaguma", "ibisha-silver-crown", "hishi-yagura", "gintachi-yagura", "amano-yagura",
 ]);
 const RANGING_ROOK_CASTLES = new Set([
   "half-mino", "mino", "high-mino", "diamond-mino", "renmei-mino", "silver-crown",
   "furibisha-anaguma", "furibisha-elmo", "kinmusou", "half-kinmusou", "right-yagura",
+  "half-silver-crown", "four-mino", "hayamino", "kimura-mino",
 ]);
 
 export function openingDefinitionRookStyle(id, kind) {
@@ -1283,9 +1419,10 @@ export function rangingRookStrategyChoices(castleId, availableStrategyIds) {
       : ["mino", "high-mino", "silver-crown", "furibisha-anaguma", "kinmusou"].includes(castleId)
         ? ["nakabisha"] : [],
   );
+  // 四枚美濃は4六銀の道(6八・5七)を四間飛車・中飛車の飛車がふさぐ(docs/opening-guide-ux-design.mdの14-5)。
   const compatibleIds = castleId === "right-yagura"
     ? new Set(["mukai"])
-    : null;
+    : castleId === "four-mino" ? new Set(["sangen", "mukai"]) : null;
   const available = Array.isArray(availableStrategyIds)
     ? new Set(availableStrategyIds)
     : null;
@@ -1749,7 +1886,8 @@ function castleDistanceLimit(castle) {
     const initial = formationDistance(INITIAL_BOARD, "black", completionVariantsOf(castle));
     castleDistanceLimits.set(
       castle.id,
-      Math.max(OPENING_GUIDE_MAX_DISTANCE, initial.unreachable ? 0 : initial.distance),
+      // 手順が遠回りして初めの距離より遠くなる囲い(矢倉穴熊は7八銀で1手遠くなる)は、定義のdistanceLimitまで中断しない。
+      Math.max(OPENING_GUIDE_MAX_DISTANCE, initial.unreachable ? 0 : initial.distance, castle.distanceLimit ?? 0),
     );
   }
   return castleDistanceLimits.get(castle.id);

@@ -58,10 +58,16 @@ export function openingUnlocks(records = {}) {
     advanced: basicDone >= ADVANCED_UNLOCK_BASIC_PLANS,
     surprise: ryuoPlayed,
   };
+  // 上の囲いは、応用の段に加えて、進化のもとの囲いを1回完成させると使える(docs/opening-guide-ux-design.mdの14-5)。
+  const parentOf = (plan) => (!plan.strategyId ? OPENING_CASTLES.find(({ id }) => id === plan.castles[0])?.evolvesFrom ?? "" : "");
+  const parentDone = (plan) => {
+    const parent = parentOf(plan);
+    return !parent || (formations[castleLabel(parent)]?.count ?? 0) > 0;
+  };
   const unlocked = new Set();
   for (const plan of ALL_OPENING_PLANS) {
     const lesson = OPENING_PLAN_LESSONS[plan.id];
-    if (all || open[plan.tier] || completed(plan) || extraIds.includes(plan.id) || (lesson && lessonPassed(tutorialProgress, lesson))) {
+    if (all || (open[plan.tier] && parentDone(plan)) || completed(plan) || extraIds.includes(plan.id) || (lesson && lessonPassed(tutorialProgress, lesson))) {
       unlocked.add(plan.id);
     }
   }
@@ -71,6 +77,7 @@ export function openingUnlocks(records = {}) {
     if (!plan) return "";
     const lesson = OPENING_PLAN_LESSONS[plan.id] ? "（教室の第4巻で練習しても使えるよ）" : "";
     if (plan.tier === "basic") return `入門の作戦を、対局で1回完成させると使えるよ${lesson}`;
+    if (plan.tier === "advanced" && open.advanced && parentOf(plan)) return `${castleLabel(parentOf(plan))}を、対局で1回完成させると使えるよ`;
     if (plan.tier === "advanced") return `基本の作戦を${ADVANCED_UNLOCK_BASIC_PLANS}種類、対局で完成させると使えるよ`;
     if (plan.tier === "surprise") return "竜王戦に出ると使えるよ";
     return "";
