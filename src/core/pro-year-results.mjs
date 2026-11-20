@@ -153,6 +153,8 @@ function pageOf(item) {
       return { kind: 'promote', tone: 'good', seal: '昇', stamp: 'title', eyebrow: '昇級', heading: item.text, sub: item.sub ?? '', lines: [], facts: [], coach: '次の舞台でも、いつもの将棋でいこう！' };
     case 'goal':
       return { kind: 'goal', tone: 'good', seal: '達', stamp: 'nameplate', eyebrow: '今年の目標', heading: '目標達成', sub: `「${item.label}」`, lines: [], facts: [], coach: '' };
+    case 'career':
+      return { kind: 'career', tone: 'good', seal: '誉', stamp: 'title', eyebrow: '棋士人生の目標', heading: `${item.label}達成`, sub: '', lines: [], facts: [], coach: item.line ?? '' };
     default: return null;
   }
 }

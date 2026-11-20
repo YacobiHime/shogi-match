@@ -147,6 +147,11 @@ export const GOAL_DEFS = Object.freeze({
   rate: Object.freeze({ label: '勝率6割', note: '年度の終わりに10局以上で', level: 2 }),
   hanane: Object.freeze({ label: '羽音に勝ち越す', note: '今年度の公式戦の直接対決', level: 2 }),
   money: Object.freeze({ label: '賞金ランキング30位以内', note: '対局料と賞金の合計', level: 2 }),
+  // 強くなってからの目標(docs/pro-year-design.mdの27章)。
+  defend: Object.freeze({ label: 'タイトル防衛', note: '持っているタイトルを1つ以上守る', level: 2 }),
+  crownsUp: Object.freeze({ label: '冠を増やす', note: 'タイトルを同時に持つ数を増やす', level: 3 }),
+  eternal: Object.freeze({ label: '永世称号に届く', note: 'あと少しの永世称号', level: 3 }),
+  titleTake: Object.freeze({ label: 'タイトル獲得', note: 'どれか1つの番勝負に勝つ', level: 3 }),
 });
 
 /**

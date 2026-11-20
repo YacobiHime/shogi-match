@@ -26,6 +26,7 @@ import {
   INTERVIEW_FANS, NEWS_WEIGHT, RECORD_KINDS, buildNews, fanLettersBetween, interviewFor, isStreakMark, isWinsMark, nextLetter, recordRanking, recordValueText, yearHeadlines,
 } from './pro-news.mjs';
 import { careerRoad, danFor, nextDanHint, ryuoGroupAfter } from './pro-career.mjs';
+import { careerCoachLine, careerGoalsFrom, crossedTiers } from './pro-milestones.mjs';
 import { originText } from './pro-year-origin.mjs';
 import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
@@ -1630,6 +1631,8 @@ export function recordProGame(source, outcome, { way = 'full' } = {}) {
   // この1局で達成した今年の目標(その場で判子。13-3の7)。
   const goalsDone = markGoals(state);
   for (const goal of goalsDone) pushResult(state, { type: 'goal', label: goal.label });
+  // 棋士人生の目標の新しい段(27章)。
+  for (const tier of markCareerGoals(state)) pushResult(state, { type: 'career', label: tier.label, line: careerCoachLine(tier.id, tier.target) });
   // 「この1局」の札に、番勝負の星・小さな節目(突破・敗退)・賞金・年度の成績を書き足す。
   const item = (state.results ?? []).find((entry) => entry.type === 'game' && entry.gameId === game.id);
   if (item) {
@@ -2182,7 +2185,7 @@ export function createProYear({ seed, fiscalYear, roster, settings = {}, userLev
     players,
     titles,
     junni: junniWorld,
-    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0, crowns: 0, sinceWins: 0, titleCounts: {}, danAtStart: '四段' },
+    user: { cls: userClass, group: clamp(Math.round(userGroup), 1, 6), seeds: {}, money: 0, gear: 0, fans: 0, crowns: 0, sinceWins: 0, titleCounts: {}, danAtStart: '四段', careerMarks: {} },
     cycles: {},
     games: {},
     nextGame: 1,
@@ -2991,6 +2994,50 @@ function winsTarget(state) {
   return last ? Math.min(40, Math.max(15, (last.wins ?? 0) + 3)) : 15;
 }
 
+/** いま持っているタイトル。 */
+const heldTitles = (state) => TITLE_EVENTS.filter((id) => state.titles?.[id] === PRO_USER_ID);
+/** タイトルの通算期数(前の版の保存はtitleCounts)。 */
+const titleTotal = (state, id) => Number(state.user?.titleRecord?.[id]?.total ?? state.user?.titleCounts?.[id] ?? 0) || 0;
+/** 「二冠」「八冠」(1つなら「タイトル保持」)。 */
+const crownsGoalLabel = (count) => (count >= TITLE_EVENTS.length ? '八冠' : crownsLabel(count) || 'タイトル保持');
+
+/** 永世称号まで あと2期以内のいちばん近いもの(年度の目標に出す)。持っているタイトルだけ。 */
+function nearEternal(state) {
+  return heldTitles(state)
+    .map((id) => ({ id, ...(eternalProgress(id, state.user.titleRecord?.[id] ?? legacyTitleRecord(state, id)) ?? {}) }))
+    .filter((item) => item.name && !item.reached && item.left <= 2)
+    .sort((a, b) => a.left - b.left)[0] ?? null;
+}
+
+/**
+ * 棋士人生の目標(27章)。通算勝数・タイトル通算・○冠・棋戦優勝・段位の道と、いちばん上の永世八冠。
+ * @param {any} state
+ */
+export function careerGoals(state) {
+  if (!state) return null;
+  // 通算は棋士の通算(年度の替わりに足す。25章)と今の年度。前の版の保存は年度のまとめから。
+  const past = state.players?.[PRO_USER_ID]?.career?.w ?? (state.history ?? []).reduce((sum, item) => sum + (item.wins ?? 0), 0);
+  const year = state.year?.records?.[PRO_USER_ID] ?? { w: 0 };
+  const titles = TITLE_EVENTS.reduce((sum, id) => sum + titleTotal(state, id), 0);
+  const cups = Object.values(state.user?.cupCounts ?? {}).reduce((sum, count) => sum + (Number(count) || 0), 0);
+  const crowns = Math.max(Number(state.user?.bestCrowns) || 0, heldTitles(state).length);
+  const eternal = TITLE_EVENTS.map((id) => {
+    const record = state.user?.titleRecord?.[id] ?? (state.user?.titleCounts?.[id] ? legacyTitleRecord(state, id) : null);
+    const progress = eternalProgress(id, record);
+    return { id, short: proEvent(id).short, name: ETERNAL_RULES[id]?.name ?? '', reached: Boolean(progress?.reached), text: progress?.reached ? '資格あり' : progress ? `あと${progress.left}期` : '' };
+  });
+  return careerGoalsFrom({ wins: past + (year.w ?? 0), titles, crowns, cups, dan: state.players?.[PRO_USER_ID]?.dan ?? '四段', eternal });
+}
+
+/** 棋士人生の目標の新しく越えた段に印を付けて返す(結果の札)。 */
+function markCareerGoals(state) {
+  const goals = careerGoals(state);
+  if (!goals) return [];
+  const { marks, fresh } = crossedTiers(state.user.careerMarks, goals.tracks);
+  state.user.careerMarks = marks;
+  return fresh;
+}
+
 /**
  * 年度の始めに選ぶ目標の候補(13-3の7)。おすすめに印(はじめての年度は易しめ)。
  * @param {any} state
@@ -3003,22 +3050,41 @@ export function goalChoices(state) {
   // 順位戦は、この年度の順位戦に出ているときだけ(秋のデビューの半年は出ない。18章)。
   const junni = state.cycles[`meijin-${state.fy}`];
   if (!junni || junni.withUser) {
-    add('junniPromote', { note: `${CLASS_NAMES[state.user.cls] ?? ''}で上位に入る` });
+    // A級の上位は名人への挑戦なので、昇級の目標は出さない(挑戦はタイトルの目標で)。
+    if (state.user.cls !== 'A') add('junniPromote', { note: `${CLASS_NAMES[state.user.cls] ?? ''}で上位に入る` });
     add('junniWinning');
   }
   if (shinjin?.withUser) {
     add('shinjinBest4');
     add('shinjinWin');
   }
-  add('mainStage');
-  add('challenge');
+  // 強くなったら目標も上へ(27章)。持っているタイトル・前に持ったことがあるか・永世称号の近さで足す。
+  const holding = heldTitles(state).length;
+  const everHeld = TITLE_EVENTS.some((id) => titleTotal(state, id) > 0);
+  if (holding) add('defend');
+  if (holding && holding < TITLE_EVENTS.length) add('crownsUp', { target: holding + 1, label: `${crownsGoalLabel(holding + 1)}になる`, note: `タイトルを同時に${holding + 1}つ持つ` });
+  const near = nearEternal(state);
+  if (near) add('eternal', { note: near.text });
+  if (!holding) {
+    if (everHeld) add('titleTake');
+    add('mainStage');
+    add('challenge');
+  }
   add('wins', { target: winsTarget(state), label: `年間${winsTarget(state)}勝` });
   add('rate');
   if (Object.values(state.players).some((member) => member.story === HANANE)) add('hanane');
   add('money');
   // はじめての1年度(秋のデビューの半年の年度は数えない)。
   const first = !(state.history ?? []).some((entry) => !entry?.half);
-  const recommended = first ? ['junniPromote', shinjin?.withUser ? 'shinjinBest4' : 'junniWinning', 'wins'] : ['junniPromote', 'mainStage', 'wins'];
+  const offered = new Set(list.map((goal) => goal.id));
+  const firstOf = (...ids) => ids.find((id) => offered.has(id)) ?? null;
+  const recommended = first
+    ? ['junniPromote', shinjin?.withUser ? 'shinjinBest4' : 'junniWinning', 'wins']
+    : holding
+      ? ['defend', ...['eternal', 'crownsUp', 'wins'].filter((id) => offered.has(id)).slice(0, 2)]
+      : everHeld
+        ? ['titleTake', 'challenge', 'wins']
+        : [firstOf('junniPromote', 'junniWinning'), 'mainStage', 'wins'];
   return list.map((goal) => ({ ...goal, recommended: recommended.includes(goal.id) }));
 }
 
@@ -3032,7 +3098,7 @@ export function setYearGoals(source, ids) {
   const choices = goalChoices(state);
   const picked = [...new Set(ids)].filter((id) => choices.some((goal) => goal.id === id)).slice(0, GOAL_PICK);
   if (picked.length !== GOAL_PICK || state.goals?.fy === state.fy) return state;
-  state.goals = { fy: state.fy, ids: picked, target: { wins: winsTarget(state) }, done: {} };
+  state.goals = { fy: state.fy, ids: picked, target: { wins: winsTarget(state), crowns: heldTitles(state).length + 1 }, done: {} };
   return state;
 }
 
@@ -3101,12 +3167,31 @@ export function goalProgress(state) {
       text = `${hw}勝${hanane.length - hw}敗`;
       ratio = hanane.length ? (hw > hanane.length - hw ? 1 : hw * 2 === hanane.length ? 0.75 : 0.5) : 0;
       done ||= end && hw > hanane.length - hw;
+    } else if (id === 'defend' || id === 'titleTake') {
+      const kinds = id === 'defend' ? ['defend'] : ['take', 'retake'];
+      const won = (state.year?.titleLog ?? []).filter((entry) => kinds.includes(entry.kind));
+      text = won.length ? won.map((entry) => entry.short).join('・') : id === 'defend' ? (heldTitles(state).length ? '防衛戦はこれから' : 'タイトルなし') : challenged ? 'タイトル挑戦' : 'まだ';
+      ratio = won.length ? 1 : challenged ? 0.5 : 0;
+      done ||= won.length > 0;
+    } else if (id === 'crownsUp') {
+      const target = goals.target?.crowns ?? 2;
+      const now = heldTitles(state).length;
+      text = `いま${now}つ／${target}つ`;
+      ratio = Math.min(1, now / target);
+      done ||= now >= target;
+    } else if (id === 'eternal') {
+      const reached = TITLE_EVENTS.filter((event) => state.user.titleRecord?.[event]?.eternal === state.fy);
+      const near = nearEternal(state);
+      text = reached.length ? reached.map((event) => ETERNAL_RULES[event]?.name ?? event).join('・') : near?.text ?? 'まだ';
+      ratio = reached.length ? 1 : near ? Math.max(0, 1 - near.left / 3) : 0;
+      done ||= reached.length > 0;
     } else if (id === 'money') {
       text = ranking.rank ? `${ranking.rank}位（${ranking.amount}万円）` : 'まだ';
       ratio = ranking.rank ? Math.min(1, 30 / ranking.rank) : 0;
       done ||= end && ranking.rank > 0 && ranking.rank <= 30;
     }
-    return { id, label: id === 'wins' ? `年間${goals.target?.wins ?? 15}勝` : def.label, text, ratio, done };
+    const label = id === 'wins' ? `年間${goals.target?.wins ?? 15}勝` : id === 'crownsUp' ? `${crownsGoalLabel(goals.target?.crowns ?? 2)}になる` : def.label;
+    return { id, label, text, ratio, done };
   });
 }
 
@@ -3282,7 +3367,8 @@ export function proYearView(state) {
     dan: state.players[PRO_USER_ID]?.dan ?? '四段',
     nextDan: nextDanHint({ dan: state.players[PRO_USER_ID]?.dan ?? '四段', group: state.user.group, cls: state.user.cls, sinceWins: state.user.sinceWins ?? 0 }),
     road: {
-      ...careerRoad(state.history ?? [], state.yearDone ? null : {
+      // 年度を終えても、次の年度を始めるまでは年度のまとめに入らないので、今の年度の行として足す。
+      ...careerRoad(state.history ?? [], (state.history ?? []).some((item) => item?.fy === state.fy) ? null : {
         fy: state.fy, wins: record.w, losses: record.l, dan: state.players[PRO_USER_ID]?.dan ?? '四段', clsText: CLASS_NAMES[state.user.cls] ?? '', group: state.user.group,
         titles: TITLE_EVENTS.filter((id) => state.titles[id] === PRO_USER_ID).map((id) => proEvent(id).short), champions: [],
         headlines: yearHeadlines((state.news ?? []).filter((item) => item.fy === state.fy)),

@@ -324,6 +324,31 @@
               <p><small>順位戦</small><b>{{ view.cls }}</b></p>
               <p><small>タイトル</small><b>{{ view.titles.length ? `${view.crowns ? `${view.crowns}・` : ""}${view.titles.join("・")}` : "なし" }}</b></p>
             </div>
+            <!-- 棋士人生の目標(27章)。いちばん上は永世八冠、その下に道ごとの次の段(D:5-2 目の前に吊られたごほうび)。 -->
+            <template v-if="career">
+              <h3 class="pro-year__subhead">棋士人生の目標</h3>
+              <div class="pro-year__career" data-pro-career>
+                <div class="pro-year__career-top" :class="{ 'pro-year__career-top--done': career.ultimate.done }" data-pro-career-ultimate>
+                  <p><small>いちばん上の目標</small><b>{{ career.ultimate.label }}</b><span>{{ career.ultimate.text }}</span></p>
+                  <ul aria-label="永世称号">
+                    <li v-for="item in career.ultimate.titles" :key="item.id" :class="{ 'pro-year__career-eternal--done': item.reached }" :title="item.name">
+                      <b>{{ item.short }}</b><small>{{ item.text }}</small>
+                    </li>
+                  </ul>
+                </div>
+                <ul class="pro-year__career-tracks">
+                  <li v-for="track in career.tracks" :key="track.id" :class="{ 'pro-year__career-track--done': track.done }" :data-pro-career-track="track.id">
+                    <span class="pro-year__career-name"><small>{{ track.label }}</small><b>{{ track.valueText }}</b></span>
+                    <span class="pro-year__career-next">
+                      <template v-if="track.next">次は<b>{{ track.next.label }}</b><small>{{ track.next.leftText }}</small></template>
+                      <template v-else><b>すべて達成</b></template>
+                    </span>
+                    <span class="pro-year__career-stamps" :aria-label="`${track.tiers}段のうち${track.cleared}段`">{{ "●".repeat(track.cleared) }}<i>{{ "○".repeat(track.tiers - track.cleared) }}</i></span>
+                    <span class="pro-year__goal-bar" aria-hidden="true"><i :style="{ width: `${Math.round(track.ratio * 100)}%` }"></i></span>
+                  </li>
+                </ul>
+              </div>
+            </template>
             <!-- 棋士の歩み(15-3の5・7)。年度ごとの行と通算、次の昇段まで。 -->
             <h3 class="pro-year__subhead">棋士の歩み<small>（{{ view.dan }}）</small></h3>
             <div class="pro-year__road" data-pro-road>
@@ -734,6 +759,9 @@
         <div class="shogi-tournament__sheet-panel shogi-tournament__detail pro-year__sheet">
           <h2>{{ view.fy }}年度の目標を3つ選ぼう</h2>
           <p class="shogi-tournament__text">年度の終わりに、達成した目標に判子を押すよ。◎はやこび姫のおすすめ。</p>
+          <p v-if="career" class="pro-year__career-line" data-pro-career-line>
+            <small>棋士人生の目標</small>{{ career.ultimate.label }}（{{ career.ultimate.text }}）<template v-if="career.nearest">・次は{{ career.nearest.next?.label }}（{{ career.nearest.next?.leftText }}）</template>
+          </p>
           <ul class="pro-year__goal-choices">
             <li v-for="goal in goalChoiceList" :key="goal.id">
               <button
@@ -998,7 +1026,7 @@ import { BYOYOMI_CHOICES, byoyomiLabel } from "./core/byoyomi.mjs";
 import { GROUP_MEAN_RATING, WORLD_BASE_RATING } from "./core/ryuo-strength.mjs";
 import { STUDY_TEXT, moneyText } from "./core/pro-life.mjs";
 import {
-  CLASS_NAMES, PLAYER_SORTS, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, dayView, playerCareerView, playersView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, seriesRivalIds, weekView,
+  CLASS_NAMES, PLAYER_SORTS, PRO_EVENTS, PRO_USER_ID, PRO_YEAR_TEXT, careerGoals, dayView, playerCareerView, playersView, eventView, goalChoices, goalProgress, monthView, nextBigGame, previewNextGame, proEvent, proYearRelayGame, proYearTalk, proYearView, seriesRivalIds, weekView,
   yearEnd, yearStart,
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
@@ -1346,6 +1374,7 @@ const STAMP_TEXT = { done: "達成", near: "あと一歩", miss: "届かず" } a
 
 // ---- 今年の目標と次の大一番(13-3の7・8)
 const goals = computed(() => (props.state ? goalProgress(props.state) : []));
+const career = computed(() => (props.state ? careerGoals(props.state) : null));
 const bigGame = computed(() => (props.state ? nextBigGame(props.state) : null));
 const goalChoiceList = computed(() => (props.state ? goalChoices(props.state) : []));
 const goalSheetOpen = computed(() => Boolean(props.state && !props.state.yearDone && !props.state.pending && !props.state.festival && !props.state.work && props.state.goals?.fy !== props.state.fy));
@@ -1849,6 +1878,30 @@ defineExpose({ goBack });
 .shogi-game .pro-year__season-over { display: grid; gap: 0.15rem; padding: 0.5rem 0.65rem; border: 0.12rem solid #e7c15a; border-radius: 0.7rem; background: rgba(231, 193, 90, 0.14); }
 .shogi-game .pro-year__season-over b { font-size: 0.95rem; }
 .shogi-game .pro-year__season-over small { color: #cfd8de; font-size: 0.74rem; font-weight: 700; }
+.shogi-game .pro-year__career { display: grid; gap: 0.35rem; }
+.shogi-game .pro-year__career-top { display: grid; gap: 0.3rem; padding: 0.4rem 0.5rem; border: 0.08rem solid rgba(241, 165, 76, 0.55); border-radius: 0.55rem; background: rgba(241, 165, 76, 0.1); }
+.shogi-game .pro-year__career-top--done { border-color: #86d4a9; background: rgba(39, 174, 96, 0.18); }
+.shogi-game .pro-year__career-top p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.5rem; margin: 0; }
+.shogi-game .pro-year__career-top p small { flex-basis: 100%; color: #cfd8de; font-size: 0.66rem; }
+.shogi-game .pro-year__career-top p b { color: var(--amber, #f1a54c); font-size: 1.05rem; letter-spacing: 0.08em; }
+.shogi-game .pro-year__career-top p span { font-size: 0.74rem; }
+.shogi-game .pro-year__career-top ul { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.2rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__career-top li { display: grid; justify-items: center; padding: 0.12rem 0; border: 0.06rem solid rgba(255, 255, 255, 0.16); border-radius: 0.35rem; line-height: 1.15; }
+.shogi-game .pro-year__career-top li b { font-size: 0.72rem; }
+.shogi-game .pro-year__career-top li small { color: #cfd8de; font-size: 0.6rem; }
+.shogi-game .pro-year__career-top li.pro-year__career-eternal--done { border-color: #f1a54c; background: rgba(241, 165, 76, 0.28); }
+.shogi-game .pro-year__career-tracks { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__career-tracks li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); align-items: center; gap: 0.05rem 0.4rem; padding: 0.25rem 0.45rem; border: 0.06rem solid rgba(255, 255, 255, 0.14); border-radius: 0.45rem; background: rgba(23, 38, 50, 0.6); }
+.shogi-game .pro-year__career-track--done { border-color: #86d4a9; }
+.shogi-game .pro-year__career-name { display: grid; min-width: 0; line-height: 1.2; }
+.shogi-game .pro-year__career-name small, .shogi-game .pro-year__career-next small { color: #cfd8de; font-size: 0.64rem; }
+.shogi-game .pro-year__career-name b { font-size: 0.8rem; }
+.shogi-game .pro-year__career-next { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.3rem; min-width: 0; font-size: 0.72rem; }
+.shogi-game .pro-year__career-next b { color: var(--amber, #f1a54c); }
+.shogi-game .pro-year__career-stamps { grid-column: 1 / -1; overflow: hidden; color: #f1a54c; font-size: 0.55rem; letter-spacing: 0.08em; white-space: nowrap; }
+.shogi-game .pro-year__career-stamps i { color: rgba(255, 255, 255, 0.3); font-style: normal; }
+.shogi-game .pro-year__career-line { display: grid; margin: 0 0 0.3rem; padding: 0.3rem 0.45rem; border-radius: 0.45rem; background: rgba(241, 165, 76, 0.12); font-size: 0.74rem; line-height: 1.3; }
+.shogi-game .pro-year__career-line small { color: var(--amber, #f1a54c); font-size: 0.64rem; }
 .shogi-game .pro-year__road { display: grid; gap: 0.35rem; }
 .shogi-game .pro-year__road p { margin: 0; }
 .shogi-game .pro-year__road-total { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.8rem; }
