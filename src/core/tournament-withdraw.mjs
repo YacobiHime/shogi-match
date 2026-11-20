@@ -85,7 +85,7 @@ export function withdrawOptions({ ryuoSeason = null, meijinSeason = null, shorei
   if (proYear) {
     options.push({
       id: 'pro-year', label: '棋士の1年', action: 'やめる',
-      note: 'この1年と、これまでの年度の記録が消えます。次はデビューからです。賞状帳の賞状は残ります。',
+      note: 'いま遊んでいる記録の、この1年とこれまでの年度が消えます。ほかの記録の枠と、賞状帳の賞状は残ります。',
     });
   }
   return options;

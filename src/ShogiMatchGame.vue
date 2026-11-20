@@ -575,6 +575,7 @@
       :pro-year-suspended-moves="suspendedProYearMoves"
       :pro-year-cut-busy="proYearCutBusy"
       :pro-year-write-back="proYearWriteBackItems"
+      :pro-year-slots="proYearSlotCards"
       :world-difficulty="tournamentWorldDifficulty"
       @world-change="changeTournamentWorld"
       @pro-year-enter="enterProYear"
@@ -586,6 +587,7 @@
       @pro-year-auto="autoProYearGame"
       @pro-year-next-year="nextProYear"
       @pro-year-life="proYearLife"
+      @pro-year-slot="proYearSlot"
       :ryuo-season="playedBoard?.event === 'ryuo' ? playedBoard.before : ryuoSeason"
       :ryuo-watch="ryuoWatch"
       :avatar-profile="avatarProfile"
@@ -3154,6 +3156,7 @@ import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDayLabel, stageSealPly } from "./core/match-stage.mjs";
 import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
 import { proYearProfileTitles } from "./core/pro-year-note.mjs";
+import { bestTitles, deleteSlot, loadSlotIndex, otherSlotTitles, slotCards, switchSlot } from "./core/pro-year-slots.mjs";
 import { originDebut, shoreikaiOrigin } from "./core/pro-year-origin.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
 import { loadTipUses, mateTipMoments, noteTipUse, startTipMoments, tipCalloutDue, tipMoments } from "./core/tip-moments.mjs";
@@ -8724,6 +8727,33 @@ function setProYear(state: any) {
   if (proYearState.value?.settings) proYearLastSettings.value = proYearState.value.settings;
   proYearState.value = state;
   saveProYear(browserStorage(), state);
+  proYearSlotsTick.value += 1;
+}
+// ---- 記録の枠(docs/pro-year-design.mdの37章)。遊んでいる枠はpro-year:v1、ほかはpro-year-slots:v1にしまう。
+const proYearSlotsTick = ref(0);
+/** 遊んでいる枠に中断した対局があるか(あればほかの枠は開けない。中断した対局は今の枠の相手と結びついている)。 */
+const proYearSuspended = computed(() => suspendedMatch.value?.event === "pro-year" && Boolean(suspendedMatch.value?.ryuoOpponentId));
+const proYearSlotCards = computed(() => {
+  void proYearSlotsTick.value;
+  return slotCards(browserStorage(), { suspended: proYearSuspended.value });
+});
+function proYearSlot({ kind, index }: { kind: "open" | "delete"; index: number }) {
+  const storage = browserStorage();
+  const active = loadSlotIndex(storage).active;
+  if (kind === "delete") {
+    // 遊んでいる枠を消すのは「やめる」と同じ(中断した対局も消す)。
+    if (index === active) withdrawTournament("pro-year");
+    else deleteSlot(storage, index);
+    proYearSlotsTick.value += 1;
+    return;
+  }
+  if (index === active || proYearSuspended.value) return;
+  cancelProYearCut();
+  if (!switchSlot(storage, index)) return;
+  if (proYearState.value?.settings) proYearLastSettings.value = proYearState.value.settings;
+  proYearState.value = loadProYear(storage, ryuoRoster.value);
+  proYearResultLine.value = "";
+  proYearSlotsTick.value += 1;
 }
 /**
  * 棋士の1年のタイトル・冠・棋戦優勝を、やこびノートの「所属と称号」に入れる(docs/pro-year-design.mdの17章)。
@@ -8732,7 +8762,8 @@ function setProYear(state: any) {
 function syncProYearTitles(state: any) {
   let profile = profileState.value;
   let changed = false;
-  for (const title of proYearProfileTitles(state)) {
+  // どの記録の枠で取った称号も残す(同じ称号は、いちばん上の記録のもの。37-3)。
+  for (const title of bestTitles([...proYearProfileTitles(state), ...otherSlotTitles(browserStorage())])) {
     const current = profile.titles.find((entry: { id: string }) => entry.id === title.id);
     if (current && current.label === title.label && current.detail === title.detail && current.rank === title.rank) continue;
     profile = grantTitle(profile, title);

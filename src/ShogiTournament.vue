@@ -209,6 +209,8 @@
           @world-change="emit('world-change', { event: 'pro-year', difficulty: $event })"
           ref="proYearEl"
           :state="proYearState"
+          :slots="proYearSlots"
+          :slot-pick="proYearPick"
           :last-settings="proYearSettings"
           :default-difficulty="defaultDifficulty"
           :world="world"
@@ -230,6 +232,7 @@
           @resume="emit('pro-year-resume')"
           @auto="emit('pro-year-auto')"
           @next-year="emit('pro-year-next-year')"
+          @slot="proYearPick = false; emit('pro-year-slot', $event)"
           @life="emit('pro-year-life', $event)"
           @watch="relayEntry = $event"
           @measure="emit('measure', 'pro-year')"
@@ -1236,6 +1239,9 @@ const props = defineProps({
   proYearSuspendedMoves: { type: Number as PropType<number | null>, default: null },
   /** 「勝負どころから指す」の局面を作っているあいだ(docs/pro-year-design.mdの13-3の6)。 */
   proYearCutBusy: { type: Boolean, default: false },
+  /** 記録の枠の札(core/pro-year-slots.mjsのslotCards。docs/pro-year-design.mdの37章)。 */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  proYearSlots: { type: Array as PropType<any[]>, default: () => [] },
   /** 大会ごとの、期・挑戦の途中のいまの難易度の番号(途中で変える札。docs/tournament-strength-spread-design.mdの11章)。 */
   worldDifficulty: { type: Object as PropType<Record<string, number | null> | null>, default: null },
   /** 年度のまとめの「棋士の世界に残す」の札の中身(docs/pro-year-design.mdの15-3の8)。 */
@@ -1318,6 +1324,8 @@ const emit = defineEmits<{
   "pro-year-resume": [];
   "pro-year-auto": [];
   "pro-year-next-year": [];
+  /** 記録の枠を開く・消す(37章)。 */
+  "pro-year-slot": [payload: { kind: "open" | "delete"; index: number }];
   /** 棋士の暮らしの操作(研究の道具・研究会・将棋まつり。docs/pro-year-design.mdの10章)。 */
   "pro-year-life": [action: { kind: string; [key: string]: unknown }];
   /** relayKeyの中継を開いた(対局画面は鍵を消す)。 */
@@ -1396,7 +1404,10 @@ const proYearCardNote = computed(() => {
   const record = state.year?.records?.user ?? { w: 0, l: 0 };
   return `${state.fy}年度・${record.w}勝${record.l}敗`;
 });
+/** 大会の選択から入った(中身の入った枠があれば、記録の一覧を先に出す。37章)。対局から戻ったときは出さない。 */
+const proYearPick = ref(false);
 function chooseProYear() {
+  proYearPick.value = true;
   screen.value = "pro-year";
 }
 // ---- 研修会(docs/kenshukai-design.md)
@@ -1530,6 +1541,7 @@ function goBack() {
 }
 function backToSelect() {
   if (screen.value === "result") emit("result-seen");
+  proYearPick.value = false;
   screen.value = "select";
   reEntry.value = false;
   viewStage.value = null;

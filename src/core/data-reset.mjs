@@ -26,7 +26,7 @@ export const RESET_GROUPS = Object.freeze([
       `${Y}ryuo-season`, `${Y}ryuo-career`, `${Y}ryuo-roster`, `${Y}ryuo-counter:v1`, `${Y}ryuo-oshi`, `${Y}ryuo-prediction`,
       `${Y}ryuo-watch:v1`, `${Y}meijin-season`, `${Y}meijin-career`, `${Y}shoreikai:v1`, `${Y}kenshukai:v1`,
       `${Y}tournament-world:v1`, `${Y}engine-game:v1`, `${Y}relay:v1`, `${Y}relay-view:v1`, `${Y}relay-predict:v1`, `${Y}relay-quiz:v1`,
-      `${Y}team-battle:v1`, `${Y}pro-year:v1`,
+      `${Y}team-battle:v1`, `${Y}pro-year:v1`, `${Y}pro-year-slots:v1`,
     ]),
     snapshots: "tournament",
   }),
@@ -149,8 +149,8 @@ export const TOURNAMENT_PARTS = Object.freeze([
   }),
   Object.freeze({
     id: "tournament:pro-year", label: "棋士の1年", summary: "棋士の1年の暦と記録",
-    erases: "棋士の1年の暦・対局・賞金と暮らしの記録、棋士の1年の中断した対局", keeps: PART_KEEPS,
-    keys: Object.freeze([`${Y}pro-year:v1`]), snapshots: "tournament", events: Object.freeze(["pro-year"]),
+    erases: "棋士の1年の暦・対局・賞金と暮らしの記録（すべての記録の枠）、棋士の1年の中断した対局", keeps: PART_KEEPS,
+    keys: Object.freeze([`${Y}pro-year:v1`, `${Y}pro-year-slots:v1`]), snapshots: "tournament", events: Object.freeze(["pro-year"]),
   }),
 ]);
 

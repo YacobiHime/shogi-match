@@ -5,10 +5,63 @@
     上に月のカレンダー・棋戦の一覧・成績のタブ。日のマスを押すとその日の対局、棋戦を押すと段階ごとの表。年度の終わりはまとめと「次の年度へ」。
   -->
   <div class="shoreikai pro-year" data-pro-year>
-    <!-- 入口 -->
-    <div v-if="!state" class="shogi-tournament__stage shogi-tournament__stage--entry shoreikai__framed" data-pro-year-screen="entry">
+    <!-- 記録の枠(37章)。中身の入った枠があるとき、大会の選択から入ったら最初に出す。 -->
+    <div v-if="slotsShown" class="shogi-tournament__stage shogi-tournament__stage--entry shoreikai__framed" data-pro-year-screen="slots">
       <header class="shogi-tournament__topbar shoreikai__topbar">
         <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-pro-back @click="emit('back')">
+          <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
+        </button>
+        <span class="shogi-tournament__seal" aria-hidden="true">棋</span>
+        <div class="shogi-tournament__topbar-title">
+          <h1 id="shogi-tournament-title">棋士の1年</h1>
+          <p class="shogi-tournament__topbar-sub">{{ PRO_YEAR_SLOT_TEXT.title }}</p>
+        </div>
+      </header>
+      <div class="shogi-tournament__mapwrap pro-year__mapwrap">
+        <ul class="pro-year__saves" :aria-label="PRO_YEAR_SLOT_TEXT.title" data-pro-slots>
+          <li v-for="card in slots" :key="card.index" class="pro-year__save" :class="{ 'pro-year__save--active': card.active && !card.empty, 'pro-year__save--empty': card.empty }">
+            <button type="button" class="pro-year__save-main" :data-pro-slot="card.index" :disabled="card.locked" @click="pickSlot(card)">
+              <span class="pro-year__save-no">{{ card.label }}</span>
+              <template v-if="card.summary">
+                <b class="pro-year__save-head">{{ card.summary.head }}</b>
+                <span class="pro-year__save-line">{{ card.summary.record }}<template v-if="card.summary.career">・{{ card.summary.career }}</template></span>
+                <span v-if="card.summary.titles" class="pro-year__save-titles">{{ card.summary.titles }}</span>
+                <small v-if="card.suspended" class="pro-year__save-tag pro-year__save-tag--suspended">{{ PRO_YEAR_SLOT_TEXT.suspended }}</small>
+                <small v-else-if="card.active" class="pro-year__save-tag">{{ PRO_YEAR_SLOT_TEXT.playing }}</small>
+              </template>
+              <template v-else>
+                <b class="pro-year__save-head">{{ PRO_YEAR_SLOT_TEXT.empty }}</b>
+                <span class="pro-year__save-line">{{ PRO_YEAR_SLOT_TEXT.emptyNote }}</span>
+              </template>
+            </button>
+            <div v-if="deleteAsk === card.index" class="pro-year__confirm" role="group" :aria-label="PRO_YEAR_SLOT_TEXT.deleteTitle(card.index)" data-pro-slot-confirm>
+              <p>{{ PRO_YEAR_SLOT_TEXT.deleteTitle(card.index) }}<small>{{ PRO_YEAR_SLOT_TEXT.deleteNote }}</small></p>
+              <button ref="deleteCancel" type="button" class="shogi-tournament__sub" data-pro-slot-keep @click="deleteAsk = -1">{{ PRO_YEAR_SLOT_TEXT.deleteKeep }}</button>
+              <button type="button" class="shogi-tournament__start pro-year__save-delete-do" data-pro-slot-delete-ok @click="deleteSlotNow(card)">{{ PRO_YEAR_SLOT_TEXT.deleteDo }}</button>
+            </div>
+            <button
+              v-else-if="!card.empty && !card.suspended && !card.locked"
+              type="button"
+              class="pro-year__save-delete"
+              :aria-label="`${card.label}を${PRO_YEAR_SLOT_TEXT.delete}`"
+              :data-pro-slot-delete="card.index"
+              @click="askDelete(card.index)"
+            >{{ PRO_YEAR_SLOT_TEXT.delete }}</button>
+          </li>
+        </ul>
+      </div>
+      <section class="shogi-tournament__hud" :aria-label="PRO_YEAR_SLOT_TEXT.title">
+        <p class="shogi-tournament__tip-line shoreikai__tip" data-pro-slot-talk>
+          <img class="shogi-tournament__tip-face pro-year__sprite" :src="hananeSprite" alt="" draggable="false">
+          <span class="shogi-tournament__tip-text">{{ slots.some((card) => card.locked) ? PRO_YEAR_SLOT_TEXT.locked : PRO_YEAR_SLOT_TEXT.hanane }}</span>
+        </p>
+      </section>
+    </div>
+
+    <!-- 入口 -->
+    <div v-else-if="!state" class="shogi-tournament__stage shogi-tournament__stage--entry shoreikai__framed" data-pro-year-screen="entry">
+      <header class="shogi-tournament__topbar shoreikai__topbar">
+        <button type="button" class="shogi-tournament__topbar-back" :aria-label="backLabel" data-pro-back @click="entryBack">
           <span aria-hidden="true">←</span><span class="shogi-tournament__topbar-back-text">{{ backLabel }}</span>
         </button>
         <span class="shogi-tournament__seal" aria-hidden="true">棋</span>
@@ -1031,9 +1084,14 @@ import {
 } from "./core/pro-year.mjs";
 import { CONDITION_LABELS, GOAL_PICK, WEIGHTS } from "./core/pro-week.mjs";
 import { originText, shoreikaiOrigin } from "./core/pro-year-origin.mjs";
+import { PRO_YEAR_SLOT_TEXT } from "./core/pro-year-slots.mjs";
 
 /** originは、奨励会から四段になってデビューするとき'shoreikai'(18章)。 */
 type Settings = { difficulty: number; coachLevel: string; hintLimit: number; undoLimit: number; byoyomi: number; origin?: string };
+type SlotCard = {
+  index: number; label: string; active: boolean; empty: boolean; suspended: boolean; locked: boolean;
+  summary: { head: string; record: string; titles: string; career: string; date: string; yearDone: boolean } | null;
+};
 type Card = { id: string; name: string; dan?: string; you?: boolean } | null | undefined;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Cell = { date: string; day: number; inMonth: boolean; today: boolean; past: boolean; items: any[] };
@@ -1065,6 +1123,10 @@ const props = defineProps({
   /** 奨励会で四段になった記録(shoreikai.mjsのcareer.pro)。あれば入口で「奨励会から」デビューできる(18章)。 */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   shoreikaiPro: { type: Object as PropType<any>, default: null },
+  /** 記録の枠の札(core/pro-year-slots.mjsのslotCards。37章)。 */
+  slots: { type: Array as PropType<SlotCard[]>, default: () => [] },
+  /** 大会の選択から入った(中身の入った枠があれば、最初に枠の一覧を出す)。 */
+  slotPick: { type: Boolean, default: false },
 });
 const worldChip = ref<{ goBack: () => boolean } | null>(null);
 /** 棋力スカウター(docs/power-scouter-design.md)。戻る操作で先に閉じる。 */
@@ -1082,6 +1144,8 @@ const emit = defineEmits<{
   resume: [];
   auto: [];
   "next-year": [];
+  /** 記録の枠を開く・消す(37章)。 */
+  slot: [payload: { kind: "open" | "delete"; index: number }];
   /** 暮らしの操作(研究の道具を買う・研究会・将棋まつり。10章)。 */
   life: [action: { kind: string; [key: string]: unknown }];
   /** 中継で観戦する対局(relay-games.mjsの項目と同じ形)。大会の画面が中継を開く。 */
@@ -1093,6 +1157,35 @@ const emit = defineEmits<{
 const hananeSprite = computed(() => `${props.assetBaseUrl}/characters/hanane-mini.webp?v=1`);
 const yakobiSprite = computed(() => `${props.assetBaseUrl}/characters/yakobihime-mini.webp?v=4`);
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+// ---- 記録の枠(37章)。大会の選択から入ったら一覧を先に出し、選んだら閉じる。
+const slotsShown = ref(props.slotPick && props.slots.some((card) => !card.empty));
+watch(() => props.slotPick, (next) => {
+  if (next && props.slots.some((card) => !card.empty)) slotsShown.value = true;
+});
+/** 消す確認を出している枠の番号(-1なら出していない)。確認はその札の中に出す(16-3の3と同じ形)。 */
+const deleteAsk = ref(-1);
+const deleteCancel = ref<HTMLButtonElement[] | null>(null);
+function pickSlot(card: SlotCard) {
+  if (card.locked) return;
+  deleteAsk.value = -1;
+  emit("slot", { kind: "open", index: card.index });
+  slotsShown.value = false;
+}
+function askDelete(index: number) {
+  deleteAsk.value = index;
+  // 取り消せない操作なので、はじめは「やめる」に合わせる(UD:5-2)。
+  void nextTick(() => deleteCancel.value?.[0]?.focus());
+}
+function deleteSlotNow(card: SlotCard) {
+  deleteAsk.value = -1;
+  emit("slot", { kind: "delete", index: card.index });
+}
+/** 入口の「戻る」。記録の一覧から来たなら一覧へ戻る(docs/return-path-design.md)。 */
+function entryBack() {
+  if (props.slots.some((card) => !card.empty)) slotsShown.value = true;
+  else emit("back");
+}
 
 // ---- 入口の設定(団体戦・研修会と同じ並び)
 const settingsOpen = ref(false);
@@ -1665,8 +1758,9 @@ function playWithScene() {
   if (due && due.key !== "pro-debut") openScene(due, () => emit("play"));
   else emit("play");
 }
-watch(() => props.state, (state) => {
-  if (storyScene.value || !state) return;
+// 記録の一覧を出しているあいだは、場面を始めない(選んだ記録の場面を、選んでから出す。37章)。
+watch([() => props.state, slotsShown], ([state, picking]) => {
+  if (storyScene.value || !state || picking) return;
   const due = proYearSceneDue(state);
   if (due?.key === "pro-debut") openScene(due, null);
   // 結果の札があれば、先に札を見せる(見終えると状態が変わり、ここへまた来る。19-3の7)。
@@ -1687,6 +1781,11 @@ watch(() => props.state, (state) => {
 }, { immediate: true });
 
 function goBack() {
+  if (slotsShown.value) {
+    if (deleteAsk.value < 0) return false;
+    deleteAsk.value = -1;
+    return true;
+  }
   // 結果の札は1枚前へ(読み飛ばさない。19-3の7)。
   if (resultsShown.value && resultsEl.value) return resultsEl.value.goBack();
   // 途中で難易度を変えるシートを先に閉じる(11章)。
@@ -1710,6 +1809,8 @@ function goBack() {
   else if (meetOpen.value) meetOpen.value = false;
   else if (eventId.value) eventId.value = "";
   else if (dayDate.value) dayDate.value = "";
+  // 入口(デビューの前)は、中身の入った枠があれば一覧へ戻る。
+  else if (!props.state && props.slots.some((card) => !card.empty)) slotsShown.value = true;
   else return false;
   return true;
 }
@@ -1741,6 +1842,30 @@ defineExpose({ goBack });
 }
 .shogi-game .pro-year__chip small { margin-left: auto; color: #cfd8de; font-size: 0.66rem; font-weight: 700; }
 .shogi-game .pro-year__chip-dot { width: 0.7rem; height: 0.7rem; flex: none; border-radius: 50%; background: var(--event-color); }
+/* 記録の枠(37章)。3枚の札を縦に並べ、遊んでいる枠は金の縁。 */
+.shogi-game .pro-year__saves { display: grid; gap: 0.5rem; width: min(100%, 34rem); margin: 0; padding: 0; list-style: none; }
+.shogi-game .pro-year__save { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-flow: row; gap: 0.35rem; margin: 0; padding: 0; border: 0; background: none; }
+.shogi-game .pro-year__save .pro-year__save-main {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.15rem 0.7rem; align-items: baseline; width: 100%; min-height: 4.6rem;
+  padding: 0.6rem 4.4rem 0.6rem 0.8rem; border: 0.13rem solid rgba(255, 252, 244, 0.22); border-radius: 0.8rem;
+  color: #fffcf4; background: rgba(43, 70, 91, 0.92); text-align: left; cursor: pointer;
+}
+.shogi-game .pro-year__save--active .pro-year__save-main { border-color: #e7c15a; background: rgba(58, 84, 104, 0.96); }
+.shogi-game .pro-year__save--empty .pro-year__save-main { border-style: dashed; background: rgba(43, 70, 91, 0.55); }
+.shogi-game .pro-year__save .pro-year__save-main:not(:disabled):hover { border-color: #8fc5ff; }
+.shogi-game .pro-year__save .pro-year__save-main:disabled { opacity: 0.55; cursor: default; }
+.shogi-game .pro-year__save .pro-year__save-main:focus-visible { outline: 0.18rem solid #fffcf4; outline-offset: 0.12rem; }
+.shogi-game .pro-year__save-no { grid-row: 1 / span 4; align-self: center; color: #e7c15a; font-size: 0.8rem; font-weight: 900; writing-mode: horizontal-tb; }
+.shogi-game .pro-year__save-head { font-size: 1rem; font-weight: 900; }
+.shogi-game .pro-year__save-line { color: #cfd8de; font-size: 0.8rem; font-weight: 700; }
+.shogi-game .pro-year__save-titles { color: #e7c15a; font-size: 0.82rem; font-weight: 900; }
+.shogi-game .pro-year__save-tag { justify-self: start; padding: 0.05rem 0.5rem; border-radius: 999px; color: #0f2233; background: #e7c15a; font-size: 0.68rem; font-weight: 900; }
+.shogi-game .pro-year__save-tag--suspended { background: #8fc5ff; }
+.shogi-game .pro-year__save .pro-year__save-delete {
+  position: absolute; top: 0.5rem; right: 0.5rem; min-width: 3.4rem; min-height: 44px; padding: 0 0.6rem;
+  border: 0.08rem solid rgba(255, 252, 244, 0.35); border-radius: 0.6rem; color: #fffcf4; background: transparent; font-size: 0.78rem; font-weight: 800; cursor: pointer;
+}
+.shogi-game .pro-year__save .pro-year__confirm button { min-width: 6rem; min-height: 3rem; }
 .shogi-game .pro-year__sprite { image-rendering: pixelated; object-fit: cover; object-position: 50% 0; }
 .shogi-game .pro-year__main { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.5rem; min-height: 0; padding: 0.5rem 0.6rem; overflow: hidden; }
 .shogi-game .pro-year__main--wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); grid-template-rows: minmax(0, 1fr); }

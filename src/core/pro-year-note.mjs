@@ -94,7 +94,8 @@ export function proYearNote(packed) {
  * タイトルは1つずつ(通算期数を説明に)、同時に2つ以上持ったら「棋士の1年 ○冠」、棋戦優勝は1つずつ。
  * 竜王戦・名人戦の大会の「竜王」「名人」と見分けるため、名前の頭に「棋士の1年」を付ける。
  * @param {any} state 棋士の1年の状態(pro-year.mjs)
- * @returns {{ id: string, label: string, detail: string, rank: number }[]}
+ * weightは同じidを記録の枠どうしで比べる回数(37-3)。
+ * @returns {{ id: string, label: string, detail: string, rank: number, weight: number }[]}
  */
 export function proYearProfileTitles(state) {
   if (!state?.user) return [];
@@ -107,15 +108,15 @@ export function proYearProfileTitles(state) {
       record?.defenses ? `防衛${record.defenses}回` : '',
       holding && (record?.streak ?? 0) >= 2 ? `${record.streak}連覇中` : (record?.best ?? 0) >= 2 ? `最長${record.best}連覇` : '',
     ].filter(Boolean).join('・');
-    result.push({ id: `pro-title-${row.id}`, label: `棋士の1年 ${row.short}`, detail: `棋士の1年で${row.name}・通算${row.count}期${extra ? `（${extra}）` : ''}`, rank: 20 });
+    result.push({ id: `pro-title-${row.id}`, label: `棋士の1年 ${row.short}`, detail: `棋士の1年で${row.name}・通算${row.count}期${extra ? `（${extra}）` : ''}`, rank: 20, weight: row.count });
     const eternal = ETERNAL_RULES[row.id];
-    if (record?.eternal && eternal) result.push({ id: `pro-eternal-${row.id}`, label: `棋士の1年 ${eternal.name}`, detail: `棋士の1年で${eternal.name}の資格を得た（${record.eternal}年度）`, rank: 30 });
+    if (record?.eternal && eternal) result.push({ id: `pro-eternal-${row.id}`, label: `棋士の1年 ${eternal.name}`, detail: `棋士の1年で${eternal.name}の資格を得た（${record.eternal}年度）`, rank: 30, weight: 1 });
   }
   const holding = TITLE_ORDER.filter((id) => state.titles?.[id] === USER_ID).length;
   const best = Math.max(holding, Number(state.user.bestCrowns) || 0);
-  if (best >= 2) result.push({ id: 'pro-crowns', label: `棋士の1年 ${crownName(best)}`, detail: `棋士の1年で、タイトルを同時に${best}つ持った`, rank: 20 + best });
+  if (best >= 2) result.push({ id: 'pro-crowns', label: `棋士の1年 ${crownName(best)}`, detail: `棋士の1年で、タイトルを同時に${best}つ持った`, rank: 20 + best, weight: best });
   for (const row of countRows(state.user.cupCounts)) {
-    result.push({ id: `pro-cup-${row.id}`, label: `${row.name}優勝`, detail: `棋士の1年で${row.name}に優勝（通算${row.count}回）`, rank: 9 });
+    result.push({ id: `pro-cup-${row.id}`, label: `${row.name}優勝`, detail: `棋士の1年で${row.name}に優勝（通算${row.count}回）`, rank: 9, weight: row.count });
   }
   return result;
 }
