@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CAREER_TRACKS, careerGoalsFrom, crossedTiers, danValue, tierLabel, trackProgress } from './pro-milestones.mjs';
 import {
   advanceToNextGame, careerGoals, clearProYearResults, createProYear, goalChoices, goalProgress, PRO_USER_ID, recordProGame,
-  setYearGoals, TITLE_EVENTS,
+  proEvent, setYearGoals, TITLE_EVENTS,
 } from './pro-year.mjs';
 import { createRoster } from './ryuo-roster.mjs';
 
@@ -94,7 +94,9 @@ describe('棋士の1年の目標(27章)', () => {
     expect(choices.find((goal) => goal.id === 'crownsUp')?.label).toBe('三冠になる');
     const recommended = choices.filter((goal) => goal.recommended).map((goal) => goal.id);
     expect(recommended).toHaveLength(3);
-    expect(recommended).toContain('defend');
+    // 2つ以上持っていれば、全冠防衛をおすすめにする(docs/pro-year-design.mdの33-3)。
+    expect(recommended).toContain('defendAll');
+    expect(ids).toContain('defendAll');
     const set = setYearGoals(state, recommended);
     const crowns = goalProgress(set).find((goal) => goal.id === 'crownsUp');
     expect(crowns).toMatchObject({ label: '三冠になる', done: false });
@@ -105,6 +107,34 @@ describe('棋士の1年の目標(27章)', () => {
     state.user.titleRecord = { [TITLE_EVENTS[0]]: { total: 2, streak: 0, best: 2, defenses: 1, first: 2024, eternal: null } };
     state.history = [{ fy: 2025, wins: 30, losses: 10 }];
     const recommended = goalChoices(state).filter((goal) => goal.recommended).map((goal) => goal.id);
-    expect(recommended).toEqual(['titleTake', 'challenge', 'wins']);
+    // 失ったタイトルの奪還・挑戦・地位の目標(順位戦の昇級)をおすすめにする(33-3)。
+    expect(recommended).toEqual(expect.arrayContaining(['retake', 'challenge', 'junniPromote']));
+    expect(goalChoices(state).find((goal) => goal.id === 'retake')?.label).toBe(`${proEvent(TITLE_EVENTS[0]).short}奪還`);
+  });
+
+  it('地位と経験で目標が変わる: 初タイトル・名人挑戦・竜王戦の組・全冠防衛の進み具合', () => {
+    const state = structuredClone(start);
+    state.history = [{ fy: 2025, wins: 30, losses: 10 }];
+    let ids = goalChoices(state).map((goal) => goal.id);
+    expect(ids).toContain('firstTitle');
+    expect(goalChoices(start).map((goal) => goal.id)).not.toContain('firstTitle');
+    state.user.group = 3;
+    expect(goalChoices(state).find((goal) => goal.id === 'ryuoGroupUp')?.label).toBe('竜王戦 3組で昇級');
+    state.user.group = 1;
+    state.user.cls = 'A';
+    ids = goalChoices(state).map((goal) => goal.id);
+    expect(ids).toContain('ryuoFinals');
+    expect(ids).not.toContain('ryuoGroupUp');
+    expect(ids).toContain('meijinChallenge');
+    expect(ids).not.toContain('junniPromote');
+    const holder = structuredClone(state);
+    holder.titles[TITLE_EVENTS[0]] = PRO_USER_ID;
+    holder.titles[TITLE_EVENTS[1]] = PRO_USER_ID;
+    const set = setYearGoals(holder, ['defendAll', 'wins', 'rate']);
+    expect(set.goals.target.held).toEqual([TITLE_EVENTS[0], TITLE_EVENTS[1]]);
+    set.year.titleLog = [{ event: TITLE_EVENTS[0], kind: 'defend', short: 'x' }];
+    expect(goalProgress(set).find((goal) => goal.id === 'defendAll')).toMatchObject({ text: '1/2防衛', done: false });
+    set.year.titleLog.push({ event: TITLE_EVENTS[1], kind: 'defend', short: 'y' });
+    expect(goalProgress(set).find((goal) => goal.id === 'defendAll')).toMatchObject({ done: true });
   });
 });

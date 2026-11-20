@@ -6,7 +6,8 @@
 import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
-import { PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
+import { bondLevel } from './pro-bonds.mjs';
+import { PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -563,6 +564,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
   ...PRO_YEAR_MORE_SCENES,
   // 勝ち方・負け方と調子で分かれる台本(32章)。
   ...PRO_YEAR_MOOD_SCENES,
+  // 何年目か・絆・相手の格で分かれる台本(33章)。
+  ...PRO_YEAR_LIFE_SCENES,
 });
 
 /**
@@ -690,6 +693,8 @@ const DEFAULT_VARS = Object.freeze({
   scenery: '窓の外は、もう暗い。', crowns: '2', total: '3',
   // 勝ち方・負け方と調子(32-3)。
   score: '4勝2敗', won: '獲得', run: '4', played: '6',
+  // 何年目か・絆の深い人(33-2)。
+  years: '5', bondName: '師匠',
   // 研究会で指したことがあるかで変える羽音の1行(23章。研究会に出ていないのに「何度も指した」と言わない)。
   study: STUDY_LINES.pro.studied, studyBig: STUDY_LINES.big.studied,
 });
@@ -699,14 +704,14 @@ const DEFAULT_VARS = Object.freeze({
  * 棋戦の言葉を先に入れ、名前をあとで入れる(言葉の中に{name}を書けるように。22-3の6)。中身が空になった行は出さない(`{record}`だけの行)。
  * 声だけの人(善彦)の名前の札は、行の名前を使う。
  * @param {string} id
- * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string, scenery?: string, crowns?: string, total?: string, score?: string, won?: string, run?: string, played?: string } }} [options]
+ * @param {{ playerName?: string, momokaCall?: string, vars?: { title?: string, holder?: string, event?: string, round?: string, date?: string, kishi?: string, mentor?: string, peers?: string, half?: string, challenger?: string, streak?: string, eternal?: string, series?: string, result?: string, record?: string, study?: string, studyBig?: string, scenery?: string, crowns?: string, total?: string, score?: string, won?: string, run?: string, played?: string, years?: string, bondName?: string } }} [options]
  */
 export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} } = {}) {
   const scene = PRO_YEAR_SCENES[/** @type {keyof typeof PRO_YEAR_SCENES} */ (id)];
   if (!scene) return null;
   const words = { ...DEFAULT_VARS, ...Object.fromEntries(Object.entries(vars).filter(([, value]) => value)) };
   const fill = (text) => sceneText(
-    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig|scenery|crowns|total|score|won|run|played)\}/g, (_, key) => words[key]),
+    String(text).replace(/\{(title|holder|event|round|date|kishi|mentor|peers|half|challenger|streak|eternal|series|result|record|study|studyBig|scenery|crowns|total|score|won|run|played|years|bondName)\}/g, (_, key) => words[key]),
     playerName,
     momokaCall,
   );
@@ -720,7 +725,7 @@ export function proYearScene(id, { playerName = '', momokaCall = '', vars = {} }
     lines: scene.lines
       .map((entry) => ({
         ...entry,
-        name: entry.who === 'extra' ? entry.name ?? '' : NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
+        name: entry.who === 'extra' ? fill(entry.name ?? '') : NOVEL_PEOPLE[/** @type {keyof typeof NOVEL_PEOPLE} */ (entry.who)]?.name ?? '',
         text: fill(entry.text),
       }))
       .filter((entry) => entry.text.trim()),
@@ -775,10 +780,15 @@ export function proYearSceneDue(state) {
   const run = Number(state.user?.form?.run) || 0;
   /** @type {{ event: string, opponentId: string, won: boolean }[]} */
   const seriesLog = Array.isArray(state.user?.seriesLog) ? state.user.seriesLog : [];
+  // 何年目かと、絆の深い人(33-2)。番勝負の相手その人は電話をかけてこない。
+  const years = careerYears(state);
+  const bond = deepBond(state, pending.opponentId);
+  const flavor = eveFlavor({ years, bond, seed: `${event}:${fy}` });
   const vars = {
     title: pending.titleName ?? '', holder: opponent?.name ?? '', event: pending.eventText ?? '', round: pending.label ?? '',
     study: studied ? STUDY_LINES.pro.studied : STUDY_LINES.pro.fresh, studyBig: studied ? STUDY_LINES.big.studied : STUDY_LINES.big.fresh,
     scenery: sceneryText(pending.date, `${event}:${fy}`), crowns: String(crowns), total: String(total), run: String(Math.abs(run)),
+    years: String(years), bondName: bond?.name ?? '',
   };
   const due = (key, id, extra = {}) => (seenProYearScene(state, key) ? null : { key, id, vars: { ...vars, ...extra } });
   if (rival) {
@@ -810,14 +820,14 @@ export function proYearSceneDue(state) {
       return { key: eternalKey, id: 'pro-defense-eternal', vars: { ...defenseVars, eternal: eternal.name } };
     }
     const rematch = seriesLog.some((entry) => entry.event === event && entry.opponentId === pending.opponentId);
-    const id = defenseEveId({ streak, crowns, rematch, run });
+    const id = defenseEveId({ streak, crowns, rematch, run, flavor });
     const key = `${id}:${event}:${fy}`;
     return seenProYearScene(state, key) ? null : { key, id, vars: defenseVars };
   }
   const challengedHere = (state.scenes ?? []).some((mark) => mark.startsWith('pro-title-eve') && mark.split(':')[1] === event);
   const challengedAny = (state.scenes ?? []).some((mark) => /^pro-(title|defense)-eve/.test(mark));
   const revenge = seriesLog.some((entry) => entry.event === event && entry.opponentId === pending.opponentId && !entry.won);
-  const id = titleEveId({ heldBefore: total > 0, challengedHere, crowns, challengedAny, revenge, run });
+  const id = titleEveId({ heldBefore: total > 0, challengedHere, crowns, challengedAny, revenge, run, flavor });
   const key = `${id}:${event}:${fy}`;
   if (!seenProYearScene(state, key)) return { key, id, vars };
   return null;
@@ -826,6 +836,11 @@ export function proYearSceneDue(state) {
 /** 前夜を「連敗のあと」にする連敗の数と、「連勝中」にする連勝の数(32-3)。 */
 export const SLUMP_EVE_RUN = 3;
 export const HOT_EVE_RUN = 6;
+/** 大金星・まさかの夜にするレーティングの差と、ベテランの前夜を出す年目(33-2)。 */
+export const UPSET_GAP = 150;
+export const VETERAN_YEARS = 8;
+/** 前夜に電話をくれる絆の深い人の段(33-2)。 */
+export const BOND_CALL_LEVEL = 4;
 
 /**
  * 番勝負の流れ(32-3)。sweep=負けた側が0勝、comeback=勝った側があと1勝と迫られてから勝ち切った、
@@ -856,20 +871,25 @@ export function seriesShape(games, need) {
 
 /**
  * 番勝負のあとの夜(羽音・善彦が相手でないとき。31-3・32-3)。取ったとき、初タイトル・永世称号・連覇の節目の夜は別に積むのでnull。
- * @param {{ kind: string, shape: string, special?: boolean, longHeld?: boolean, crownsOther?: number }} input
+ * @param {{ kind: string, shape: string, special?: boolean, longHeld?: boolean, crownsOther?: number, gap?: number }} input
  *   kindは19章の結果(take・retake・defend・lost・miss)、specialは初タイトル・永世称号・連覇の節目の夜を積んだか。
+ *   gapは相手のレーティングからあなたのレーティングを引いた差(33-2の大金星・まさかの夜)。
  * @returns {string | null}
  */
-export function seriesNightId({ kind, shape, special = false, longHeld = false, crownsOther = 0 }) {
+export function seriesNightId({ kind, shape, special = false, longHeld = false, crownsOther = 0, gap = 0 }) {
   if (kind === 'take' || kind === 'retake' || kind === 'defend') {
     if (special) return null;
     if (shape === 'sweep') return 'pro-series-sweep-win';
     if (shape === 'comeback') return 'pro-series-comeback-win';
+    // 格上から取った(33-2)。
+    if (gap >= UPSET_GAP) return 'pro-series-upset-win';
     if (shape === 'fullset') return 'pro-series-fullset-win';
     return 'pro-series-win';
   }
   if (shape === 'sweep') return 'pro-series-sweep-loss';
   if (shape === 'collapse') return 'pro-series-collapse-loss';
+  // 格下に取られた・届かなかった(33-2)。
+  if (gap <= -UPSET_GAP) return 'pro-series-upset-loss';
   if (kind === 'lost') {
     if (longHeld) return 'pro-title-lost-long';
     if (shape === 'fullset') return 'pro-series-close-loss';
@@ -879,16 +899,59 @@ export function seriesNightId({ kind, shape, special = false, longHeld = false, 
 }
 
 /**
+ * 前夜の色づけ(33-2)。絆の段4以上の師匠・兄弟子・同期(いちばん深い人)の電話と、8年目からのベテランの前夜。
+ * 年度と棋戦の種で、どちらか1つか、出さない年を選ぶ(毎回同じ人の電話にならないように)。
+ * @param {{ years?: number, bond?: { role: string, name: string } | null, seed?: string }} input
+ * @returns {string}
+ */
+export function eveFlavor({ years = 1, bond = null, seed = '' }) {
+  const options = [];
+  if (bond) options.push(`pro-eve-bond-${bond.role.startsWith('peer') ? 'peer' : bond.role}`);
+  if (years >= VETERAN_YEARS) options.push('pro-eve-veteran');
+  if (!options.length) return '';
+  return rotateScene([...options, ''], 0, seed);
+}
+
+/**
+ * 絆の段がBOND_CALL_LEVEL以上の師匠・兄弟子・同期のうち、いちばん深い人(33-2)。羽音と、番勝負の相手は除く。
+ * @param {any} state
+ * @param {string} [opponentId]
+ * @returns {{ role: string, name: string } | null}
+ */
+export function deepBond(state, opponentId = '') {
+  let best = null;
+  for (const role of ['mentor', 'senior', 'peer1', 'peer2']) {
+    const id = state?.people?.[role];
+    if (!id || id === opponentId) continue;
+    const level = bondLevel(state.bonds?.[id]?.points ?? 0);
+    const name = state.players?.[id]?.name ?? '';
+    if (level >= BOND_CALL_LEVEL && name && (!best || level > best.level)) best = { role, name, level };
+  }
+  return best ? { role: best.role, name: best.name } : null;
+}
+
+/**
+ * 何年目か(33-2)。前の年度の数(秋のデビューの半年は数えない)＋1。
+ * @param {any} state
+ */
+export function careerYears(state) {
+  return (state?.history ?? []).filter((entry) => entry && !entry.half).length + 1;
+}
+
+/**
  * タイトル戦(挑戦)の前夜の場合分け(31-3・32-3)。奪還＞雪辱＞連敗のあと＞2度目の挑戦＞連勝中＞冠を持って挑む＞ほかのタイトルの挑戦の経験あり＞はじめて。
  * revengeは前の番勝負で負けた相手か、runは公式戦の連勝(正)・連敗(負)の数。
- * @param {{ heldBefore?: boolean, challengedHere?: boolean, crowns?: number, challengedAny?: boolean, revenge?: boolean, run?: number }} input
+ * flavorは絆の電話かベテランの前夜の台本(33-2。空なら出さない)。
+ * @param {{ heldBefore?: boolean, challengedHere?: boolean, crowns?: number, challengedAny?: boolean, revenge?: boolean, run?: number, flavor?: string }} input
  */
-export function titleEveId({ heldBefore = false, challengedHere = false, crowns = 0, challengedAny = false, revenge = false, run = 0 }) {
+export function titleEveId({ heldBefore = false, challengedHere = false, crowns = 0, challengedAny = false, revenge = false, run = 0, flavor = '' }) {
   if (heldBefore) return 'pro-title-eve-retake';
   // 雪辱・連敗のあと・連勝中(32-3)。
   if (revenge) return 'pro-title-eve-revenge';
   if (run <= -SLUMP_EVE_RUN) return 'pro-title-eve-slump';
   if (challengedHere) return 'pro-title-eve-again';
+  // 絆の深い人の電話かベテランの前夜(33-2。出ない年もある)。
+  if (flavor) return flavor;
   if (run >= HOT_EVE_RUN) return 'pro-eve-hot';
   if (crowns > 0) return 'pro-title-eve-crowned';
   if (challengedAny) return 'pro-title-eve-next';
@@ -897,12 +960,13 @@ export function titleEveId({ heldBefore = false, challengedHere = false, crowns 
 
 /**
  * 防衛戦の前夜の場合分け(31-3・32-3。永世称号がかかる夜は先に決める)。同じ挑戦者ともう一度＞連敗のあと＞ほかに2つ以上持っている＞連勝中＞2期以上続けて守った＞はじめての防衛。
- * @param {{ streak?: number, crowns?: number, rematch?: boolean, run?: number }} input streakはいままで続けて持った期数、crownsはほかに持っているタイトルの数。
+ * @param {{ streak?: number, crowns?: number, rematch?: boolean, run?: number, flavor?: string }} input streakはいままで続けて持った期数、crownsはほかに持っているタイトルの数。
  */
-export function defenseEveId({ streak = 0, crowns = 0, rematch = false, run = 0 }) {
+export function defenseEveId({ streak = 0, crowns = 0, rematch = false, run = 0, flavor = '' }) {
   // 同じ挑戦者ともう一度・連敗のあと(32-3)。
   if (rematch) return 'pro-defense-eve-rematch';
   if (run <= -SLUMP_EVE_RUN) return 'pro-defense-eve-slump';
+  if (flavor) return flavor;
   if (crowns >= 2) return 'pro-defense-eve-crowns';
   if (run >= HOT_EVE_RUN) return 'pro-eve-hot';
   if (streak >= 2) return 'pro-defense-eve-again';

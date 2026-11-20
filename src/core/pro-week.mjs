@@ -152,6 +152,13 @@ export const GOAL_DEFS = Object.freeze({
   crownsUp: Object.freeze({ label: '冠を増やす', note: 'タイトルを同時に持つ数を増やす', level: 3 }),
   eternal: Object.freeze({ label: '永世称号に届く', note: 'あと少しの永世称号', level: 3 }),
   titleTake: Object.freeze({ label: 'タイトル獲得', note: 'どれか1つの番勝負に勝つ', level: 3 }),
+  // 地位と経験で変わる目標(docs/pro-year-design.mdの33-3)。
+  firstTitle: Object.freeze({ label: '初タイトル獲得', note: 'はじめてのタイトルを取る', level: 3 }),
+  retake: Object.freeze({ label: 'タイトル奪還', note: '失ったタイトルを取り返す', level: 3 }),
+  defendAll: Object.freeze({ label: '全冠防衛', note: '持っているタイトルを全部守る', level: 3 }),
+  meijinChallenge: Object.freeze({ label: '名人挑戦', note: 'A級で1位になり、名人戦の番勝負へ', level: 3 }),
+  ryuoGroupUp: Object.freeze({ label: '竜王戦で昇級', note: 'ランキング戦の決勝に進む', level: 2 }),
+  ryuoFinals: Object.freeze({ label: '竜王戦 決勝トーナメント', note: '1組の上位から決勝トーナメントへ', level: 2 }),
 });
 
 /**

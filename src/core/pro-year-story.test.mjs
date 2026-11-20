@@ -283,3 +283,62 @@ describe('調子と番勝負の記録の保存(32-3)', async () => {
     expect(back.user.seriesLog).toEqual(state.user.seriesLog);
   });
 });
+
+describe('何年目か・絆・相手の格(docs/pro-year-design.mdの33章)', async () => {
+  const { eveFlavor, deepBond, careerYears, seriesNightId, titleEveId, defenseEveId, proYearScene, UPSET_GAP } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_LIFE_SCENES } = await import('./pro-year-story-more.mjs');
+
+  it('絆の段4以上の人(番勝負の相手と羽音は除く)から、いちばん深い人を選ぶ', () => {
+    const state = {
+      people: { mentor: 'm', senior: 's', hanane: 'h', peer1: 'p', peer2: null },
+      bonds: { m: { points: 15 }, s: { points: 24 }, h: { points: 24 }, p: { points: 3 } },
+      players: { m: { name: '師匠の人' }, s: { name: '兄弟子の人' }, h: { name: '羽音' }, p: { name: '同期の人' } },
+    };
+    expect(deepBond(state)).toEqual({ role: 'senior', name: '兄弟子の人' });
+    expect(deepBond(state, 's')).toEqual({ role: 'mentor', name: '師匠の人' });
+    expect(deepBond({ ...state, bonds: {} })).toBeNull();
+  });
+
+  it('前夜の色づけは、絆の電話・ベテラン・出さない年を種で回す', () => {
+    const bond = { role: 'peer1', name: 'x' };
+    const picks = new Set(Array.from({ length: 30 }, (_, i) => eveFlavor({ years: 9, bond, seed: `kio:${2030 + i}` })));
+    expect(picks).toEqual(new Set(['pro-eve-bond-peer', 'pro-eve-veteran', '']));
+    expect(eveFlavor({ years: 2 })).toBe('');
+    expect(titleEveId({ challengedHere: true, flavor: 'pro-eve-veteran' })).toBe('pro-title-eve-again');
+    expect(titleEveId({ crowns: 1, flavor: 'pro-eve-veteran' })).toBe('pro-eve-veteran');
+    expect(defenseEveId({ crowns: 3, flavor: 'pro-eve-bond-mentor' })).toBe('pro-eve-bond-mentor');
+    expect(defenseEveId({ rematch: true, flavor: 'pro-eve-bond-mentor' })).toBe('pro-defense-eve-rematch');
+  });
+
+  it('何年目かは、半年の年度を数えない', () => {
+    expect(careerYears({ history: [{}, { half: true }, {}] })).toBe(3);
+    expect(careerYears({})).toBe(1);
+  });
+
+  it('大金星とまさかの夜', () => {
+    expect(seriesNightId({ kind: 'take', shape: 'plain', gap: UPSET_GAP })).toBe('pro-series-upset-win');
+    expect(seriesNightId({ kind: 'take', shape: 'sweep', gap: UPSET_GAP })).toBe('pro-series-sweep-win');
+    expect(seriesNightId({ kind: 'lost', shape: 'fullset', gap: -UPSET_GAP, longHeld: true })).toBe('pro-series-upset-loss');
+    expect(seriesNightId({ kind: 'miss', shape: 'plain', gap: -UPSET_GAP })).toBe('pro-series-upset-loss');
+    expect(seriesNightId({ kind: 'miss', shape: 'plain', gap: UPSET_GAP })).toBe('pro-series-miss');
+  });
+
+  it('台本は、名前の札にも絆の人の名前が入り、差し込みが残らない', () => {
+    const scene = proYearScene('pro-eve-bond-mentor', { playerName: 'やこび', vars: { bondName: '山田九段', title: '王位' } });
+    expect(scene.lines.filter((entry) => entry.who === 'extra').every((entry) => entry.name === '山田九段')).toBe(true);
+    for (const id of Object.keys(PRO_YEAR_LIFE_SCENES)) {
+      const plain = proYearScene(id, { playerName: 'やこび' });
+      expect(plain.title, id).not.toMatch(/\{/);
+      expect(plain.lines.map((entry) => `${entry.name}${entry.text}`).join(''), id).not.toMatch(/\{[a-zA-Z]+\}/);
+    }
+  });
+
+  it('5年目の年度の始まりに、節目の夜を積む(4年目の始まりには積まない)', async () => {
+    const { startNextYear } = await import('./pro-year.mjs');
+    const done = (history) => ({ ...structuredClone(start()), yearDone: true, summary: { fy: 2026 }, history });
+    const fifth = startNextYear(done([{}, {}, {}]));
+    expect(fifth.sceneQueue?.find((item) => item.id === 'pro-anniversary')).toMatchObject({ key: 'pro-anniversary:5', vars: { years: '5' } });
+    const fourth = startNextYear(done([{}, {}]));
+    expect(fourth.sceneQueue?.some((item) => item.id === 'pro-anniversary') ?? false).toBe(false);
+  });
+});

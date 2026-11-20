@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
+import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -929,7 +929,9 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   // 番勝負のあとの夜(羽音・善彦でないとき。31-3・32-3)。失冠の夜もここで選ぶ(棋戦と年度ごとに1回)。
   if (!rival) {
     const special = firstTitleNight || eternalNow || (kind === 'defend' && isStreakSceneMark(after.streak));
-    const night = seriesNightId({ kind, shape, special, longHeld: (before.streak ?? 0) >= 3, crownsOther });
+    // 相手の格(33-2)。相手のレーティングからあなたのレーティングを引いた差。
+    const gap = Math.round((state.players[opponentId ?? '']?.rating ?? 0) - (state.players[PRO_USER_ID]?.rating ?? 0));
+    const night = seriesNightId({ kind, shape, special, longHeld: (before.streak ?? 0) >= 3, crownsOther, gap: opponentId ? gap : 0 });
     if (night) {
       const wonWord = kind === 'defend' ? '防衛' : kind === 'retake' ? '奪還' : '獲得';
       const resultText = kind === 'lost' ? `${event.short}戦の番勝負が終わった。${event.short}の座は、${opponent}に移った。` : `${event.short}戦の番勝負が終わった。${event.short}には、届かなかった。`;
@@ -2218,6 +2220,9 @@ export function startNextYear(source) {
   state.week = newWeek(state, state.date);
   state.user.danAtStart = state.players[PRO_USER_ID]?.dan ?? '四段';
   checkDan(state);
+  // 5年目・10年目・15年目……の年度の始まりの夜(docs/pro-year-design.mdの33-2)。
+  const years = careerYears(state);
+  if (years >= 5 && years % 5 === 0) queueProYearScene(state, { key: `pro-anniversary:${years}`, id: 'pro-anniversary', vars: { years: String(years) } });
   state.rng = rng.state;
   return state;
 }
@@ -3099,6 +3104,18 @@ const titleTotal = (state, id) => Number(state.user?.titleRecord?.[id]?.total ??
 const crownsGoalLabel = (count) => (count >= TITLE_EVENTS.length ? '八冠' : crownsLabel(count) || 'タイトル保持');
 
 /** 永世称号まで あと2期以内のいちばん近いもの(年度の目標に出す)。持っているタイトルだけ。 */
+/**
+ * 取り返す目標のタイトル(33-3)。前に持っていて今は持っていないタイトルのうち、いちばん新しく失ったもの。
+ * @param {any} state
+ * @returns {string} 棋戦のid(なければ空)
+ */
+function retakeTarget(state) {
+  const held = new Set(heldTitles(state));
+  const lost = [...(state.user?.seriesLog ?? [])].reverse().find((entry) => entry.kind === 'lost' && !held.has(entry.event));
+  if (lost) return lost.event;
+  return TITLE_EVENTS.find((id) => !held.has(id) && titleTotal(state, id) > 0) ?? '';
+}
+
 function nearEternal(state) {
   return heldTitles(state)
     .map((id) => ({ id, ...(eternalProgress(id, state.user.titleRecord?.[id] ?? legacyTitleRecord(state, id)) ?? {}) }))
@@ -3158,6 +3175,17 @@ export function goalChoices(state) {
   // 強くなったら目標も上へ(27章)。持っているタイトル・前に持ったことがあるか・永世称号の近さで足す。
   const holding = heldTitles(state).length;
   const everHeld = TITLE_EVENTS.some((id) => titleTotal(state, id) > 0);
+  // 地位と経験で変わる目標(33-3)。2つ以上持てば全冠防衛、失ったタイトルの奪還、まだなら初タイトル(2年目から)。
+  const lostTitle = retakeTarget(state);
+  const firstYear = !(state.history ?? []).some((entry) => !entry?.half);
+  if (holding >= 2) add('defendAll', { note: `いま持っている${holding}つを全部守る` });
+  if (lostTitle) add('retake', { label: `${proEvent(lostTitle).short}奪還`, note: `失った${proEvent(lostTitle).short}を取り返す` });
+  if (!everHeld && !firstYear) add('firstTitle');
+  // 地位の目標(33-3)。A級なら名人挑戦、竜王戦は1組なら決勝トーナメント・2組以下なら昇級。
+  const group = Number(state.user.group) || 0;
+  if (state.user.cls === 'A' && (!junni || junni.withUser) && state.titles?.meijin !== PRO_USER_ID) add('meijinChallenge');
+  if (group >= 2) add('ryuoGroupUp', { label: `竜王戦 ${group}組で昇級`, note: `${group}組のランキング戦の決勝に進む` });
+  if (group === 1) add('ryuoFinals');
   if (holding) add('defend');
   if (holding && holding < TITLE_EVENTS.length) add('crownsUp', { target: holding + 1, label: `${crownsGoalLabel(holding + 1)}になる`, note: `タイトルを同時に${holding + 1}つ持つ` });
   const near = nearEternal(state);
@@ -3175,13 +3203,17 @@ export function goalChoices(state) {
   const first = !(state.history ?? []).some((entry) => !entry?.half);
   const offered = new Set(list.map((goal) => goal.id));
   const firstOf = (...ids) => ids.find((id) => offered.has(id)) ?? null;
+  // 地位の目標(33-3): 名人挑戦か順位戦の昇級、竜王戦の決勝トーナメントか組の昇級。
+  const standing = firstOf('meijinChallenge', 'junniPromote', 'ryuoFinals', 'ryuoGroupUp', 'junniWinning');
   const recommended = first
     ? ['junniPromote', shinjin?.withUser ? 'shinjinBest4' : 'junniWinning', 'wins']
-    : holding
-      ? ['defend', ...['eternal', 'crownsUp', 'wins'].filter((id) => offered.has(id)).slice(0, 2)]
-      : everHeld
-        ? ['titleTake', 'challenge', 'wins']
-        : [firstOf('junniPromote', 'junniWinning'), 'mainStage', 'wins'];
+    : holding >= 2
+      ? ['defendAll', ...['eternal', 'crownsUp', 'wins'].filter((id) => offered.has(id)).slice(0, 2)]
+      : holding
+        ? ['defend', firstOf('eternal', 'crownsUp'), standing ?? 'wins']
+        : everHeld
+          ? [firstOf('retake', 'titleTake'), 'challenge', standing ?? 'wins']
+          : [firstOf('firstTitle', 'challenge'), standing ?? 'wins', firstOf('mainStage', 'wins')];
   return list.map((goal) => ({ ...goal, recommended: recommended.includes(goal.id) }));
 }
 
@@ -3195,7 +3227,11 @@ export function setYearGoals(source, ids) {
   const choices = goalChoices(state);
   const picked = [...new Set(ids)].filter((id) => choices.some((goal) => goal.id === id)).slice(0, GOAL_PICK);
   if (picked.length !== GOAL_PICK || state.goals?.fy === state.fy) return state;
-  state.goals = { fy: state.fy, ids: picked, target: { wins: winsTarget(state), crowns: heldTitles(state).length + 1 }, done: {} };
+  // 全冠防衛は決めたときに持っていたタイトル、奪還は取り返すタイトルを覚えておく(33-3)。
+  state.goals = {
+    fy: state.fy, ids: picked, done: {},
+    target: { wins: winsTarget(state), crowns: heldTitles(state).length + 1, held: heldTitles(state), retake: retakeTarget(state), group: Number(state.user.group) || 0 },
+  };
   return state;
 }
 
@@ -3270,6 +3306,45 @@ export function goalProgress(state) {
       text = won.length ? won.map((entry) => entry.short).join('・') : id === 'defend' ? (heldTitles(state).length ? '防衛戦はこれから' : 'タイトルなし') : challenged ? 'タイトル挑戦' : 'まだ';
       ratio = won.length ? 1 : challenged ? 0.5 : 0;
       done ||= won.length > 0;
+    } else if (id === 'firstTitle') {
+      const taken = (state.year?.titleLog ?? []).filter((entry) => entry.kind === 'take');
+      text = taken.length ? taken.map((entry) => entry.short).join('・') : challenged ? 'タイトル挑戦' : 'まだ';
+      ratio = taken.length ? 1 : challenged ? 0.5 : reachedMain ? 0.25 : 0;
+      done ||= taken.length > 0;
+    } else if (id === 'retake') {
+      const target = goals.target?.retake ?? '';
+      const back = (state.year?.titleLog ?? []).some((entry) => entry.event === target && entry.kind === 'retake');
+      const there = Object.values(state.games).some((game) => game.user && game.event === target && game.date >= yearStart(state.fy) && proEvent(game.event)?.stages?.[game.stage]?.title);
+      text = back ? '奪還' : there ? '番勝負へ' : 'まだ';
+      ratio = back ? 1 : there ? 0.5 : 0;
+      done ||= back;
+    } else if (id === 'defendAll') {
+      const held = goals.target?.held ?? [];
+      const log = state.year?.titleLog ?? [];
+      const kept = held.filter((event) => log.some((entry) => entry.event === event && entry.kind === 'defend')).length;
+      const lost = held.some((event) => log.some((entry) => entry.event === event && entry.kind === 'lost'));
+      text = lost ? '失冠あり' : `${kept}/${held.length}防衛`;
+      ratio = lost ? Math.min(0.5, kept / Math.max(1, held.length)) : held.length ? kept / held.length : 0;
+      done ||= !lost && held.length > 0 && kept === held.length;
+    } else if (id === 'meijinChallenge') {
+      const there = Object.values(state.games).some((game) => game.user && game.event === 'meijin' && game.date >= yearStart(state.fy) && proEvent(game.event)?.stages?.[game.stage]?.title);
+      text = there ? '名人戦へ' : `順位戦 ${jw}勝${jl}敗`;
+      ratio = there ? 1 : Math.min(0.9, jw / 9);
+      done ||= there;
+    } else if (id === 'ryuoGroupUp' || id === 'ryuoFinals') {
+      const ryuoGames = mine.filter((game) => game.event === 'ryuo');
+      const finals = Object.values(state.games).some((game) => game.user && game.event === 'ryuo' && game.date >= yearStart(state.fy) && proEvent('ryuo').stages[game.stage]?.id !== 'ranking');
+      const up = Boolean(state.user.ryuoResult?.promoted);
+      const wins = ryuoGames.filter((game) => (game.winner === 'a') === (game.a === PRO_USER_ID)).length;
+      if (id === 'ryuoGroupUp') {
+        text = up ? '昇級' : `ランキング戦 ${wins}勝`;
+        ratio = up ? 1 : Math.min(0.75, wins / 4);
+        done ||= up;
+      } else {
+        text = finals ? '決勝トーナメント' : `ランキング戦 ${wins}勝`;
+        ratio = finals ? 1 : Math.min(0.75, wins / 4);
+        done ||= finals;
+      }
     } else if (id === 'crownsUp') {
       const target = goals.target?.crowns ?? 2;
       const now = heldTitles(state).length;
@@ -3287,7 +3362,12 @@ export function goalProgress(state) {
       ratio = ranking.rank ? Math.min(1, 30 / ranking.rank) : 0;
       done ||= end && ranking.rank > 0 && ranking.rank <= 30;
     }
-    const label = id === 'wins' ? `年間${goals.target?.wins ?? 15}勝` : id === 'crownsUp' ? `${crownsGoalLabel(goals.target?.crowns ?? 2)}になる` : def.label;
+    // 選んだときの言葉に合わせる(奪還するタイトル・竜王戦の組。33-3)。
+    const label = id === 'wins' ? `年間${goals.target?.wins ?? 15}勝`
+      : id === 'crownsUp' ? `${crownsGoalLabel(goals.target?.crowns ?? 2)}になる`
+        : id === 'retake' && goals.target?.retake ? `${proEvent(goals.target.retake)?.short ?? ''}奪還`
+          : id === 'ryuoGroupUp' && goals.target?.group ? `竜王戦 ${goals.target.group}組で昇級`
+            : def.label;
     return { id, label, text, ratio, done };
   });
 }

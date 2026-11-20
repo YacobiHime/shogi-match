@@ -1816,6 +1816,14 @@ defineExpose({ goBack });
 .shogi-game .pro-year__slot-text em { color: #86d4a9; font-size: 0.74rem; font-style: normal; font-weight: 800; }
 .shogi-game .pro-year__actions,
 .shogi-game .pro-year__goal-choices { display: grid; gap: 0.35rem; margin: 0 0 0.6rem; padding: 0; list-style: none; }
+/* 目標のシートは、目標の一覧だけを枠の中で動かし、「この3つで始める」をいつも見せる(33-3。地位と経験で目標が増えたため。U:7-5)。
+   広い画面では2列に並べる。 */
+.shogi-game .pro-year__sheet:has(> .pro-year__goal-choices) { display: flex; flex-direction: column; overflow: hidden; }
+.shogi-game .pro-year__sheet:has(> .pro-year__goal-choices) > * { flex: none; }
+.shogi-game .pro-year__sheet > .pro-year__goal-choices { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 900px) {
+  .shogi-game .pro-year__goal-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .shogi-game .pro-year__lastweek ul { margin: 0; padding-left: 1.1rem; font-size: 0.78rem; }
 .shogi-game .pro-year__goal-choice { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.35rem 0.55rem; border: 0.1rem solid rgba(255, 255, 255, 0.25); border-radius: 0.6rem; color: inherit; background: rgba(255, 255, 255, 0.05); text-align: left; cursor: pointer; }
 .shogi-game .pro-year__goal-choice[aria-pressed="true"] { border-color: var(--amber, #f1a54c); background: rgba(241, 165, 76, 0.16); }
