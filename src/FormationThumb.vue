@@ -67,6 +67,8 @@ const props = defineProps({
   filledSquares: { type: Array as () => string[] | null, default: null },
   // くわしい画面の手順の再生。何手目までの形を描くか(0は初めの形)。nullなら完成形。
   ply: { type: Number as () => number | null, default: null },
+  // 作戦カードのない戦型(銀冠穴熊など)の形。先手から見たマス(「88」)と駒の種類(「S」「+P」)。渡したら、この駒だけを描く。
+  shape: { type: Array as () => [string, string][] | null, default: null },
 });
 
 const FILES = 9;
@@ -77,7 +79,27 @@ const PIECE_PATH = "M5 1.2 L8.1 2.6 L8.8 8.8 L1.2 8.8 L1.9 2.6 Z";
 const LABELS: { [kind: string]: string } = { K: "玉", R: "飛", B: "角", G: "金", S: "銀", N: "桂", L: "香", P: "歩" };
 const PROMOTED_LABELS: { [kind: string]: string } = { R: "龍", B: "馬", S: "全", N: "圭", L: "杏", P: "と" };
 
+const RANK_LETTERS = "abcdefghi";
 const cells = computed(() => {
+  if (props.shape) {
+    return props.shape.flatMap(([square, kind]) => {
+      const rankIndex = RANKS.indexOf(RANK_LETTERS[Number(square[1]) - 1] ?? "");
+      if (rankIndex < 0) return [];
+      const promoted = kind.startsWith("+");
+      const base = kind.replace("+", "");
+      return [{
+        id: square,
+        square,
+        last: false,
+        x: (FILES - Number(square[0])) * CELL,
+        y: rankIndex * CELL,
+        moved: true,
+        promoted,
+        pending: false,
+        label: promoted ? PROMOTED_LABELS[base] ?? base : LABELS[base] ?? base,
+      }];
+    });
+  }
   const { steps, frames } = openingFormationSteps(props.strategyId, props.castleId);
   const index = props.ply === null ? frames.length - 1 : Math.max(0, Math.min(frames.length - 1, props.ply));
   // 再生中は、いま動いた駒のマスを濃く塗る(緑は「駒が動いた跡」)。

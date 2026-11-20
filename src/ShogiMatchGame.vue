@@ -3070,6 +3070,8 @@ import {
   detectFormationSnapshot,
   formationNamesFromSnapshot,
   formationNamesFromState,
+  formedNamesFromState,
+  formationMove,
   collectionFormationNames,
   updateFormationState,
 } from "./core/formation-tracker.mjs";
@@ -3312,6 +3314,7 @@ import { CHUNK_FAIL_TEXT, claimChunkReload, isChunkLoadError } from "./core/chun
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
 import { discoveryPlan, loadSeenFeatures, markFeatureSeen, todayPlan } from "./core/home-extras.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
+import { formationCatalog } from "./core/formation-catalog.mjs";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
 // 読み込みは import() の呼び出しごとに1回だけで、prefetchScreens() で先に読んでおける。
@@ -6296,13 +6299,15 @@ function formationTextForColor(color: Color): string {
 }
 
 function observeFormations(sfen: string) {
+  // 手数はSFENの手数の欄では進まないので、棋譜の今の手数を使う(戦法は60手まで・自分の手のあとだけ。7-2・7-3)。
   formationState.value = updateFormationState(
     formationState.value,
     formationSnapshotForSfen(sfen),
+    formationMove(sfen, record.value.current.ply),
   );
-  // 囲いは局面ごとに上書きされるので、対局中に一度でも組んだものをコレクション用に控える。
+  // 1局で組んだ囲い・戦法(崩されても残る。docs/formation-detect-design.mdの7-5)をコレクション用に控える。
   if (active.value && !reviewMode.value && normalizedMode.value === "cpu") {
-    for (const name of formationNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
+    for (const name of formedNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
   }
 }
 
@@ -6310,7 +6315,9 @@ function observeFormations(sfen: string) {
  * コレクション(core/collection.mjs)。対局で組んだ戦法・囲い、初めて勝ったLv、神の一手を印として残す。
  * 対CPUの対局すべてが対象で、Lvの壁だけはレーティングの対象の対局で数える。
  */
-const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+// 作戦カードの目録に、作戦カードのない戦型(銀冠穴熊・ビッグ4など)を足した目録(docs/formation-detect-design.mdの4章)。
+const PLAN_COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+const COLLECTION_CATALOG = formationCatalog(PLAN_COLLECTION_CATALOG);
 const CASTLE_LABELS = new Set(COLLECTION_CATALOG.filter(({ kind }) => kind === "castle").map(({ label }) => label));
 const matchFormationNames = new Set<string>();
 const matchTesuji = new Set<string>();
@@ -6326,7 +6333,7 @@ const collectionResult = ref<{
 function recordCollection(won: boolean) {
   collectionResult.value = null;
   if (normalizedMode.value !== "cpu") return;
-  for (const name of formationNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
+  for (const name of formedNamesFromState(formationState.value, playerColorKey.value)) matchFormationNames.add(name);
   const level = cpuStrengthLevel();
   const before = loadCollection(browserStorage());
   const recorded = recordMatchCollection(before, {
@@ -6539,7 +6546,7 @@ function noteWaza(previous: string, usi: string, before: { player: Set<string>; 
   const mine = mover === playerColorKey.value;
   const formations = formationWaza({
     before: collectionFormationNames(mine ? before.player : before.opponent),
-    after: collectionFormationNames(mine ? matchFormationNames : formationNamesFromState(formationState.value, mover)),
+    after: collectionFormationNames(mine ? matchFormationNames : formedNamesFromState(formationState.value, mover)),
     castles: CASTLE_LABELS,
     strategies: STRATEGY_LABELS,
   });
@@ -7405,7 +7412,7 @@ const ryuoAbilityDifficulty = computed(() => {
  */
 const avatarRepertoire = computed(() => {
   void planCollectionVersion.value;
-  return myRepertoire({ formations: loadCollection(browserStorage()).formations, catalog: COLLECTION_CATALOG });
+  return myRepertoire({ formations: loadCollection(browserStorage()).formations, catalog: PLAN_COLLECTION_CATALOG });
 });
 const avatarProfile = computed(() => myAbilityProfile({
   games: playInsight.value.games,
@@ -10319,7 +10326,7 @@ function syncPosition(usi = "") {
   const previous = currentSfen.value;
   const formationsBefore = new Set(matchFormationNames);
   // 相手の囲い・戦法(技の演出で、その手で新しく付いた名前を見る)。
-  const opponentFormationsBefore = usi ? formationNamesFromState(formationState.value, playerColorKey.value === "black" ? "white" : "black") : [];
+  const opponentFormationsBefore = usi ? formedNamesFromState(formationState.value, playerColorKey.value === "black" ? "white" : "black") : [];
   currentSfen.value = record.value.position.sfen;
   lastMove.value = usi;
   observeFormations(currentSfen.value);

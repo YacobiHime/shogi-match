@@ -9,6 +9,12 @@ import {
   OPENING_STRATEGIES,
 } from './opening-guide.mjs';
 import { parseSfenBoard } from './sfen-board.mjs';
+import { ruleSpecificity } from './formation-catalog.mjs';
+
+/** 戦法の名前を新しく付けるのは、この手数まで(docs/formation-detect-design.mdの7-2。終盤に急に戦法が付かない)。 */
+export const STRATEGY_PLY_LIMIT = 60;
+/** 囲いを「組んだ」と数えるのは、この手数まで。 */
+export const CASTLE_PLY_LIMIT = 100;
 
 function withTurn(sfen, turn) {
   const fields = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/);
@@ -54,8 +60,29 @@ function mostSpecificGuideMatch(definitions, board, color, sfen) {
     ))[0];
 }
 
-function guideCastleName(board, color, sfen) {
-  return mostSpecificGuideMatch(OPENING_CASTLES, board, color, sfen)?.label ?? '';
+/** 完成形のうち、いま当たっている形の駒の数のいちばん多いもの(具体的さ)。 */
+function guideSpecificity(definition, board, color) {
+  return Math.max(0, ...completionVariants(definition)
+    .filter((squares) => squares.every(([blackSquare, kind]) => {
+      const piece = board.get(color === 'white' ? mirrorUsiMove(blackSquare) : blackSquare);
+      return piece?.color === color && piece.kind === kind;
+    }))
+    .map((squares) => squares.length));
+}
+
+/**
+ * いまの囲い。定跡補助の完成形とひらがなすいしょうの囲いのうち、形の駒のいちばん多いもの(7-4 いちばん具体的なもの)。
+ * 同じ数なら定跡補助の形(作戦カードの名前)、次に規則の並びの順。
+ * 前は定跡補助の形をいつも先に選んでいたので、数マスしか見ない補助の形が、もっと詳しい形(銀冠穴熊など)を隠すことがあった。
+ */
+function bestCastleName(board, color, sfen, rules) {
+  const guide = OPENING_CASTLES
+    .filter((definition) => matchesGuideCompletion(definition, board, color, sfen))
+    .map((definition) => ({ name: definition.label, spec: guideSpecificity(definition, board, color), order: 0 }));
+  const hs = rules
+    .filter((rule) => rule.group === 'enc_match')
+    .map((rule, index) => ({ name: rule.name, spec: ruleSpecificity(rule), order: index + 1 }));
+  return [...guide, ...hs].sort((a, b) => b.spec - a.spec || a.order - b.order)[0]?.name ?? '';
 }
 
 function guideTacticNames(board, color, sfen) {
@@ -209,9 +236,22 @@ export function preferSpecificFormationNames(names) {
 export function createFormationState() {
   return {
     battle: '',
-    black: { rook: '', castle: '', tactics: [] },
-    white: { rook: '', castle: '', tactics: [] },
+    // formedは1局で組んだ囲い・戦法(崩されても残す。7-5)。castleは今の囲い。
+    black: { rook: '', castle: '', tactics: [], formed: [] },
+    white: { rook: '', castle: '', tactics: [], formed: [] },
   };
+}
+
+/**
+ * その局面までに指した手の数と、いま指した側(初めの局面は'')。局面のSFENの手数の欄は進まないことがあるので、手数は呼ぶ側が渡す。
+ * @param {string} sfen
+ * @param {number} ply
+ * @returns {{ ply: number, mover: '' | 'black' | 'white' }}
+ */
+export function formationMove(sfen, ply) {
+  const turn = String(sfen).replace(/^sfen\s+/, '').trim().split(/\s+/)[1];
+  const count = Math.max(0, Math.trunc(Number(ply) || 0));
+  return { ply: count, mover: count === 0 ? '' : turn === 'b' ? 'white' : 'black' };
 }
 
 /** 原典の先手・後手別の呼び分けに合わせて、現局面の分類を返す。 */
@@ -219,19 +259,17 @@ export function detectFormationSnapshot(sfen, master) {
   const direct = withTurn(sfen, 'w');
   const inverted = withTurn(invertHiraganaSuishoSfen(sfen), 'w');
   const goteDirect = withTurn(sfen, 'b');
-  const directRules = detectHiraganaSuishoFormations(direct, master);
-  const invertedRules = detectHiraganaSuishoFormations(inverted, master);
+  const directRules = detectHiraganaSuishoFormations(direct, master, { allCastles: true });
+  const invertedRules = detectHiraganaSuishoFormations(inverted, master, { allCastles: true });
   const goteRules = detectHiraganaSuishoFormations(goteDirect, master);
   const board = parseSfenBoard(sfen);
-  const blackGuideCastle = guideCastleName(board, 'black', sfen);
-  const whiteGuideCastle = guideCastleName(board, 'white', sfen);
   const blackGuideTactics = guideTacticNames(board, 'black', sfen);
   const whiteGuideTactics = guideTacticNames(board, 'white', sfen);
   return {
     battle: firstByGroup(directRules, 'bt_match1') || guideBattleName(board, sfen),
     black: {
       rook: firstByGroup(directRules, 'bt_match2'),
-      castle: blackGuideCastle || firstByGroup(directRules, 'enc_match'),
+      castle: bestCastleName(board, 'black', sfen, directRules),
       tactics: [...new Set([
         ...namesByGroup(directRules, ['sente_tac_match', 'tac_match']),
         ...blackGuideTactics,
@@ -239,7 +277,7 @@ export function detectFormationSnapshot(sfen, master) {
     },
     white: {
       rook: firstByGroup(invertedRules, 'bt_match2'),
-      castle: whiteGuideCastle || firstByGroup(invertedRules, 'enc_match'),
+      castle: bestCastleName(board, 'white', sfen, invertedRules),
       tactics: [
         ...new Set([
           ...namesByGroup(goteRules, ['gote_tac_match']),
@@ -251,22 +289,48 @@ export function detectFormationSnapshot(sfen, master) {
   };
 }
 
-export function updateFormationState(previous, snapshot) {
+/**
+ * 局面ごとの判定を、1局の戦型にまとめる(7-2・7-3・7-5)。moveはformationMoveの結果。
+ * - 新しい戦法・囲いを数えるのは、その側が指した手のあとだけ(相手の手で偶然できた形は、自分が次に指してもまだあれば数える)。
+ * - 戦法はSTRATEGY_PLY_LIMIT手まで、囲いを組んだと数えるのはCASTLE_PLY_LIMIT手まで。今の囲い(castle)はいつも今の局面のもの。
+ * - 初めの局面(手数0)と、moveを渡さないときは、どちらの側の形も数える。
+ * @param {ReturnType<typeof createFormationState>} previous
+ * @param {any} snapshot
+ * @param {{ ply: number, mover: '' | 'black' | 'white' }} [move]
+ */
+export function updateFormationState(previous, snapshot, move = { ply: 0, mover: '' }) {
   const next = {
     battle: previous.battle,
-    black: { ...previous.black, tactics: [...previous.black.tactics] },
-    white: { ...previous.white, tactics: [...previous.white.tactics] },
+    black: { ...previous.black, tactics: [...previous.black.tactics], formed: [...(previous.black.formed ?? [])] },
+    white: { ...previous.white, tactics: [...previous.white.tactics], formed: [...(previous.white.formed ?? [])] },
   };
-  if (!next.battle && snapshot.battle) next.battle = snapshot.battle;
+  const { ply, mover } = move;
+  // 戦型(相掛かり・矢倉など)と振り飛車の筋も、戦法と同じ手数まで(終盤の形で「矢倉」と付かない)。
+  if (!next.battle && snapshot.battle && ply <= STRATEGY_PLY_LIMIT) next.battle = snapshot.battle;
   for (const color of ['black', 'white']) {
-    if (!next[color].rook && snapshot[color].rook) next[color].rook = snapshot[color].rook;
+    const own = !mover || mover === color;
+    if (!next[color].rook && snapshot[color].rook && own && ply <= STRATEGY_PLY_LIMIT) next[color].rook = snapshot[color].rook;
     next[color].castle = snapshot[color].castle;
-    next[color].tactics = [...new Set([
-      ...next[color].tactics,
-      ...snapshot[color].tactics,
-    ])];
+    const fresh = own && ply <= STRATEGY_PLY_LIMIT ? snapshot[color].tactics.filter((name) => !next[color].tactics.includes(name)) : [];
+    next[color].tactics = [...next[color].tactics, ...fresh];
+    const formed = new Set(next[color].formed);
+    for (const name of fresh) formed.add(name);
+    if (own && ply <= CASTLE_PLY_LIMIT && snapshot[color].castle) formed.add(snapshot[color].castle);
+    next[color].formed = [...formed];
   }
   return next;
+}
+
+/**
+ * 1局でその側が組んだ戦型の名前(コレクション・技の演出)。戦型・振り飛車の筋と、組んだ囲い・戦法。
+ * 先手の一手損角換わりは数えない(後手の作戦の名前のため。formationNamesFromStateと同じ)。
+ * @param {ReturnType<typeof createFormationState>} state
+ * @param {'black' | 'white'} color
+ */
+export function formedNamesFromState(state, color) {
+  const side = state[color];
+  const battle = state.battle === '一手損角換わり' && color === 'black' ? '' : state.battle;
+  return [...new Set([battle, side.rook, ...(side.formed ?? []), ...side.tactics].filter(Boolean))];
 }
 
 export function formationNamesFromState(state, color, limit = Infinity) {

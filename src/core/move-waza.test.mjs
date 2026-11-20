@@ -66,7 +66,7 @@ describe('囲い・戦法と選び方(4-1の2・3・5)', () => {
   const strategies = new Set(['ノーマル四間飛車']);
   it('その手で新しく付いた名前だけ。堅い囲いは★★', () => {
     expect(formationWaza({ before: ['ノーマル四間飛車'], after: ['ノーマル四間飛車', '片美濃'], castles, strategies }))
-      .toEqual([{ kind: 'castle', id: '片美濃', name: '片美濃', tier: 'normal', to: '', targets: [] }]);
+      .toEqual([{ kind: 'castle', id: '片美濃', name: '片美濃', tier: 'normal', rarity: 1, to: '', targets: [] }]);
     expect(formationWaza({ before: [], after: ['居飛車穴熊', '居飛車'], castles, strategies }).map((entry) => [entry.name, entry.tier]))
       .toEqual([['居飛車穴熊', 'rare']]);
     expect(formationWaza({ before: [], after: ['ノーマル四間飛車'], castles, strategies })[0].kind).toBe('strategy');

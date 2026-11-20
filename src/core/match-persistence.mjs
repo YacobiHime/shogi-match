@@ -3,6 +3,7 @@ import { appendUsiMove, createGameRecord } from "../game-state";
 import {
   createFormationState,
   detectFormationSnapshot,
+  formationMove,
   updateFormationState,
 } from "./formation-tracker.mjs";
 
@@ -80,11 +81,12 @@ export function recordAndFormationsFromMoves(initialSfen, moves, formationMaster
     nextFormationState,
     detectFormationSnapshot(nextRecord.position.sfen, formationMaster),
   );
-  for (const move of moves) {
+  for (const [index, move] of moves.entries()) {
     if (!appendUsiMove(nextRecord, move)) throw new Error("保存棋譜に不正な指し手があります。");
     nextFormationState = updateFormationState(
       nextFormationState,
       detectFormationSnapshot(nextRecord.position.sfen, formationMaster),
+      formationMove(nextRecord.position.sfen, index + 1),
     );
   }
   return { nextRecord, nextFormationState };

@@ -12,7 +12,7 @@ import { moveLeaning } from './cpu-move-choice.mjs';
 import { nextOpeningPlanMove } from './opening-guide.mjs';
 import { shouldUseCpuOpening } from './cpu-opening-repertoire.mjs';
 import { openingEntry, proOpening } from './opening-usage.mjs';
-import { createFormationState, detectFormationSnapshot, formationNamesFromState, updateFormationState } from './formation-tracker.mjs';
+import { createFormationState, detectFormationSnapshot, formationMove, formationNamesFromState, updateFormationState } from './formation-tracker.mjs';
 import { matedIn, resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
 /** 棋譜の版。2は、敗者が優勢のまま投了しないようにした版(15章)。 */
@@ -449,7 +449,7 @@ export async function playRelayGame({ spec, search, formationMaster = null, onMo
     moves.push(usi);
     const key = positionKey(record.position.sfen);
     seen.set(key, (seen.get(key) ?? 0) + 1);
-    if (formationMaster) formations = updateFormationState(formations, detectFormationSnapshot(record.position.sfen, formationMaster));
+    if (formationMaster) formations = updateFormationState(formations, detectFormationSnapshot(record.position.sfen, formationMaster), formationMove(record.position.sfen, moves.length));
     const entry = {
       move: usi,
       eval: Math.round(evalCp),

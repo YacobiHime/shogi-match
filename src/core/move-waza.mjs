@@ -4,6 +4,7 @@
  * 盤の形だけで決める(良い手かどうかは見ない。名前を覚えるのが目的。4-1)。
  * 自分の手筋はこの目録のIDでコレクションの手筋の印にする(4-3)。
  */
+import { formationRarity, wazaTierOfRarity } from './formation-catalog.mjs';
 import { detectTesuji, TESUJI_HINTS, TESUJI_NAMES } from './move-tesuji.mjs';
 import { detectTesujiShape, TESUJI_SHAPES } from './tesuji-shape.mjs';
 import {
@@ -63,12 +64,6 @@ export const WAZA_TESUJI_NAMES = Object.freeze(Object.fromEntries(WAZA_TESUJI.ma
 export const WAZA_TESUJI_HINTS = Object.freeze(Object.fromEntries(WAZA_TESUJI.map(({ id, hint }) => [id, hint])));
 const tesujiEntry = (id) => WAZA_TESUJI.find((entry) => entry.id === id) ?? null;
 
-/** 堅い囲い・名のある戦法(★★)。ほかの囲いと戦法は★。 */
-const RARE_FORMATIONS = new Set([
-  '振り飛車穴熊', '居飛車穴熊', '松尾流穴熊', 'ミレニアム', 'ダイヤモンド美濃', '振り飛車銀冠', '天守閣美濃', '菊水矢倉',
-  '藤井システム', '森下システム', '雀刺し', '角換わり4五桂速攻', 'ゴキゲン中飛車', '横歩取り青野流',
-]);
-
 /** 指した側から見て、そのマスのsteps歩前。 */
 function ahead(square, color, steps = 1) {
   const { x, y } = squareXY(square);
@@ -119,7 +114,7 @@ export function detectWazaTesuji({ sfenBefore, usi, checkmate = false }) {
 /**
  * その手で新しく付いた囲い・戦法の名前(形の判定の名前の前とあと)。
  * @param {{ before: Iterable<string>, after: Iterable<string>, castles: Set<string>, strategies: Set<string> }} names
- * @returns {{ kind: 'castle' | 'strategy', id: string, name: string, tier: 'normal' | 'rare' | 'legend', to: string, targets: string[] }[]}
+ * @returns {{ kind: 'castle' | 'strategy', id: string, name: string, tier: 'normal' | 'rare' | 'legend', rarity: number, to: string, targets: string[] }[]}
  */
 export function formationWaza({ before, after, castles, strategies }) {
   const had = new Set(before);
@@ -128,7 +123,8 @@ export function formationWaza({ before, after, castles, strategies }) {
     if (had.has(name)) continue;
     const kind = castles.has(name) ? 'castle' : strategies.has(name) ? 'strategy' : null;
     if (!kind) continue;
-    out.push({ kind: /** @type {'castle' | 'strategy'} */ (kind), id: name, name, tier: /** @type {'normal' | 'rare'} */ (RARE_FORMATIONS.has(name) ? 'rare' : 'normal'), to: '', targets: [] });
+    // 段階は戦型の目録の★から(★1〜2は★、★3〜4は★★、★5は★★★。docs/formation-detect-design.mdの5章)。
+    out.push({ kind: /** @type {'castle' | 'strategy'} */ (kind), id: name, name, tier: wazaTierOfRarity(formationRarity(name)), rarity: formationRarity(name), to: '', targets: [] });
   }
   return out.sort(byPriority);
 }

@@ -686,7 +686,20 @@
               <p v-if="albumReadyCount" class="shogi-note__hint">「挑戦できる」は、作戦カードで選べるのに、まだ対局で組んでいない形だよ。押すと手順が見られるよ。</p>
               <ul v-scroll-more class="shogi-note__album-grid shogi-note__scroll">
                 <li v-for="card in albumFormationCards" :key="card.key">
+                  <!-- 作戦カードのない戦型(銀冠穴熊など)は、形と名前だけの札(押せない)。 -->
+                  <div
+                    v-if="card.catalogOnly"
+                    :class="['shogi-note__album-card', 'shogi-note__album-card--static', { 'shogi-note__album-card--got': card.got, 'shogi-note__album-card--new': card.isNew }]"
+                    :data-album-card="card.key"
+                  >
+                    <FormationThumb class="shogi-note__album-thumb" :shape="FORMATION_SHAPES.get(card.label) ?? []" :silhouette="!card.got" />
+                    <span class="shogi-note__album-name">{{ card.label }}</span>
+                    <small v-if="card.got" class="shogi-note__album-status">×{{ card.count }}</small>
+                    <small v-else class="shogi-note__album-status">まだ</small>
+                    <em v-if="card.isNew" class="shogi-note__album-new">NEW</em>
+                  </div>
                   <button
+                    v-else
                     type="button"
                     :class="['shogi-note__album-card', { 'shogi-note__album-card--got': card.got, 'shogi-note__album-card--ready': card.ready, 'shogi-note__album-card--new': card.isNew }]"
                     :data-album-card="card.key"
@@ -962,6 +975,8 @@ import {
 } from "./core/collection.mjs";
 import { ALL_OPENING_PLANS } from "./core/opening-catalog.mjs";
 import FormationThumb from "./FormationThumb.vue";
+import { formationCatalog, formationShapes } from "./core/formation-catalog.mjs";
+import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
 import { OPENING_CASTLES, OPENING_STRATEGIES } from "./core/opening-guide.mjs";
 // 手筋のページは技の演出と同じ目録(docs/move-waza-design.mdの4-3)。
 import { WAZA_TESUJI_NAMES as TESUJI_NAMES } from "./core/move-waza.mjs";
@@ -1113,14 +1128,17 @@ function selectTab(id: TabId) {
  * コレクション(core/collection.mjs)。開いたときに端末の保存から読む。
  * 着せ替えは、ここで選ぶと保存し、開いている盤にも知らせる(core/themes.mjsのsaveTheme)。
  */
-const COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+// 得意戦法・棋士の得意は作戦カードの目録で数え、アルバムは作戦カードのない戦型も足した目録(docs/formation-detect-design.mdの4章)。
+const PLAN_COLLECTION_CATALOG = collectionCatalog({ strategies: OPENING_STRATEGIES, castles: OPENING_CASTLES });
+const COLLECTION_CATALOG = formationCatalog(PLAN_COLLECTION_CATALOG);
+const FORMATION_SHAPES = formationShapes(hiraganaFormationMaster);
 const collection = ref(loadCollection(safeStorage()));
 const collectedLevelCount = computed(() => COLLECTION_LEVELS.filter((level) => collection.value.levels[level]).length);
 const collectionTotal = computed(() => collectionCount(collection.value));
 const TESUJI_IDS = Object.keys(TESUJI_NAMES);
 const collectionMax = COLLECTION_CATALOG.length + TESUJI_IDS.length + COLLECTION_LEVELS.length;
 /** 組んだ戦法・囲いごとに、それを得意にしている棋士(上の組から3人まで)。名鑑がないときは出さない。 */
-const formationFanRows = computed(() => COLLECTION_CATALOG
+const formationFanRows = computed(() => PLAN_COLLECTION_CATALOG
   .filter(({ label }) => collection.value.formations[label])
   .map((entry) => ({ label: entry.label, fans: formationFans(props.roster, { kind: entry.kind, id: entry.id }) }))
   .filter(({ fans }) => fans.length)
@@ -1418,7 +1436,7 @@ const myAbility = computed(() => myAbilityProfile({
   difficulty: props.ryuoDifficulty,
   world: props.ryuoWorld,
   // 得意戦法(組んだ戦法・囲いの回数から。分身もこれで指す。docs/tournament-relay-design.mdの28章)。
-  repertoire: myRepertoire({ formations: collection.value.formations, catalog: COLLECTION_CATALOG }),
+  repertoire: myRepertoire({ formations: collection.value.formations, catalog: PLAN_COLLECTION_CATALOG }),
 }));
 /** 名鑑の棋士の能力を、比べる形(軸ごとの値とランク)にする。 */
 function abilitiesOf(values: { [key: string]: number }) {
@@ -1600,7 +1618,7 @@ const ownStrategies = computed(() => {
       note: "1局で組んだ戦法をそれぞれ数えるので、合わせると100%をこえることがあるよ。",
     };
   }
-  const repertoire = myRepertoire({ formations: collection.value.formations, catalog: COLLECTION_CATALOG });
+  const repertoire = myRepertoire({ formations: collection.value.formations, catalog: PLAN_COLLECTION_CATALOG });
   if (repertoire) {
     const table = repertoireTable(openingUsageRows(repertoire.usage), repertoire.games);
     return {
@@ -2444,6 +2462,7 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   font: inherit;
   cursor: pointer;
 }
+.shogi-game .shogi-note__album-card--static { cursor: default; }
 .shogi-game .shogi-note__album-thumb { width: 100%; height: auto; }
 .shogi-game .shogi-note__album-card:not(.shogi-note__album-card--got):not(.shogi-note__album-card--ready) .shogi-note__album-thumb { opacity: 0.55; }
 .shogi-game .shogi-note__album-name {

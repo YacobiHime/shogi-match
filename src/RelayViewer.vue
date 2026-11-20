@@ -330,7 +330,7 @@ import {
   COMMENT_FLOWS, DANMAKU_GAP_EM, createDanmaku, createStillBoard, estimateTextWidth, flowForFrameInterval, medianFrameInterval, normalizeCommentFlow,
   placeComment, placeStill, type CommentFlow,
 } from "./core/danmaku-lanes.mjs";
-import { createFormationState, detectFormationSnapshot, updateFormationState } from "./core/formation-tracker.mjs";
+import { createFormationState, detectFormationSnapshot, formationMove, updateFormationState } from "./core/formation-tracker.mjs";
 import { HANANE, HANANE_SPRITE } from "./core/ryuo-story.mjs";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
 import { useRelayGenerator } from "./composables/match/useRelayGenerator";
@@ -471,7 +471,7 @@ function feedScript() {
   timeline = relayTimeline({ entries: list }, control);
   for (let index = ready.value; index < limit; index += 1) {
     const sfenAfter = sfens.value[index + 1];
-    formationState = updateFormationState(formationState, detectFormationSnapshot(sfenAfter, hiraganaFormationMaster));
+    formationState = updateFormationState(formationState, detectFormationSnapshot(sfenAfter, hiraganaFormationMaster), formationMove(sfenAfter, index + 1));
     script.add({
       index,
       entry: list[index],

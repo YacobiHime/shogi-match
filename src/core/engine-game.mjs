@@ -18,7 +18,7 @@ import {
   openingPlanMove, openingPlanOf, rankedCandidates, relayPlan, storedPv, valueToCp,
 } from './relay-game.mjs';
 import { winRate } from './move-selection.mjs';
-import { createFormationState, detectFormationSnapshot, updateFormationState } from './formation-tracker.mjs';
+import { createFormationState, detectFormationSnapshot, formationMove, updateFormationState } from './formation-tracker.mjs';
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, REAL_WORLD, WORLD_BASE_RATING, isRealWorld, worldCpuLevel } from './ryuo-strength.mjs';
@@ -206,7 +206,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     lastCapture = Boolean(move && typeof move === 'object' && 'capturedPieceType' in move && move.capturedPieceType);
     const key = positionKey(record.position.sfen);
     seen.set(key, (seen.get(key) ?? 0) + 1);
-    if (formationMaster) formations = updateFormationState(formations, detectFormationSnapshot(record.position.sfen, formationMaster));
+    if (formationMaster) formations = updateFormationState(formations, detectFormationSnapshot(record.position.sfen, formationMaster), formationMove(record.position.sfen, moves.length));
     return true;
   };
   // 保存していた手を並べ直す(時計の残りも、使った時間だけ減らす)。

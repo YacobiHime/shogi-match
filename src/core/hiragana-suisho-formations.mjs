@@ -172,7 +172,14 @@ export function validateHiraganaSuishoFormations(value) {
   return value;
 }
 
-export function detectHiraganaSuishoFormations(sfen, master) {
+/**
+ * 局面の戦型の規則。囲い(enc_match)・戦型(bt_match1)・振り飛車の筋(bt_match2)は、原典どおり並びの最初に当たった1つ。
+ * allCastlesを真にすると、囲いは当たったものを全部返す(いちばん具体的なものを選ぶため。docs/formation-detect-design.mdの7-4)。
+ * @param {string} sfen
+ * @param {any} master
+ * @param {{ allCastles?: boolean }} [options]
+ */
+export function detectHiraganaSuishoFormations(sfen, master, { allCastles = false } = {}) {
   const [, turn] = splitSfen(sfen);
   const isSentePosition = turn === 'w';
   const directBoard = parseSfenBoard(sfen);
@@ -181,7 +188,7 @@ export function detectHiraganaSuishoFormations(sfen, master) {
   const invertedBoard = parseSfenBoard(invertedSfen);
   const invertedHands = parseSfenHands(invertedSfen);
   const rules = validateHiraganaSuishoFormations(master).rules;
-  const firstOnly = new Set(['enc_match', 'bt_match1', 'bt_match2']);
+  const firstOnly = new Set(allCastles ? ['bt_match1', 'bt_match2'] : ['enc_match', 'bt_match1', 'bt_match2']);
   const foundGroups = new Set();
   return rules.filter((rule) => {
     let board = directBoard;

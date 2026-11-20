@@ -46,7 +46,7 @@ export function collectionCatalog({ strategies, castles }) {
 // ---- アルバム(やこびノートのコレクション。docs/player-world-note-design.mdの4章)
 
 /** 振り飛車の戦法の系統(定跡図鑑のfamily)。奇襲はspecial。ほかの戦法は居飛車のページ。 */
-const RANGING_FAMILIES = new Set(['shiken', 'sangen', 'nakabisha', 'mukai']);
+const RANGING_FAMILIES = new Set(['shiken', 'sangen', 'nakabisha', 'mukai', 'aifuri', 'furibisha']);
 
 /**
  * アルバムのページ。groupはページの切り替えの小さな見出し(戦法・囲い・そのほか)。
@@ -103,8 +103,9 @@ export function planCardsByFormation(plans, unlockedIds) {
 
 /**
  * アルバムの戦法・囲いのページのカード。挑戦できるカードを先に、あとは定跡図鑑の順。
+ * @template {{ kind: string, id: string, label: string, family: string, catalogOnly?: boolean }} T
  * @param {ReturnType<typeof createCollection>} state
- * @param {{ kind: string, id: string, label: string, family: string }[]} catalog
+ * @param {T[]} catalog 作戦カードのない戦型(catalogOnly)も入る(formation-catalog.mjs)
  * @param {string} page
  * @param {{ playable?: Map<string, string>, seenAt?: number }} [options] playableはplanCardsByFormationの結果
  */
