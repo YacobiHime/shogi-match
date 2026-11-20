@@ -7,7 +7,7 @@ import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
 import { bondLevel } from './pro-bonds.mjs';
-import { PRO_YEAR_HANANE_LOST_SCENES, PRO_YEAR_HANANE_SCENES, PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
+import { PRO_YEAR_YOSHIHIKO_SCENES, PRO_YEAR_HANANE_LOST_SCENES, PRO_YEAR_HANANE_SCENES, PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -570,6 +570,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
   ...PRO_YEAR_HANANE_SCENES,
   // 羽音に取られた夜・羽音に挑んで届かなかった夜(35章)。
   ...PRO_YEAR_HANANE_LOST_SCENES,
+  // 善彦との番勝負のあとの夜(36章)。
+  ...PRO_YEAR_YOSHIHIKO_SCENES,
 });
 
 /**
@@ -934,6 +936,48 @@ export function hananeLostId({ kind, shape, losses = 0, series = 0, retaken = fa
   if (shape === 'sweep') return `${prefix}-sweep`;
   if (shape === 'fullset') return `${prefix}-fullset`;
   const pool = [...(lost ? HANANE_LOST_ROTATION : HANANE_MISS_ROTATION), ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-lost-hanane-long'] : [])];
+  return pool[(losses - 1) % pool.length];
+}
+
+/** 善彦に勝った夜・敗れた夜の、流れで決まらないときに回す台本(36章)。 */
+export const YOSHIHIKO_BEAT_ROTATION = Object.freeze(['pro-beat-yoshihiko', 'pro-beat-yoshihiko-2', 'pro-beat-yoshihiko-3']);
+export const YOSHIHIKO_LOST_ROTATION = Object.freeze(['pro-lost-yoshihiko', 'pro-lost-yoshihiko-2', 'pro-lost-yoshihiko-3']);
+
+/**
+ * 善彦との番勝負に勝った夜の台本のid(36章。引数は`hananeBeatId`と同じ)。
+ * 順：永世称号＞取り返した＞はじめて（奪取・防衛ごと）＞善彦を無冠にした＞同じ棋戦で続けて退けた＞カド番からの逆転＞ストレート＞フルセット＞回す。
+ * @param {{ kind: string, shape: string, beats?: number, series?: number, retake?: boolean, eternal?: boolean, mukan?: boolean, defendRun?: number }} input
+ * @returns {string}
+ */
+export function yoshihikoBeatId({ kind, shape, beats = 0, series = 0, retake = false, eternal = false, mukan = false, defendRun = 0 }) {
+  const defend = kind === 'defend';
+  if (eternal) return 'pro-beat-yoshihiko-eternal';
+  if (!defend && retake) return 'pro-beat-yoshihiko-retake';
+  if (beats === 0) return defend ? 'pro-beat-yoshihiko-defend-first' : 'pro-beat-yoshihiko-take-first';
+  if (!defend && mukan) return 'pro-beat-yoshihiko-mukan';
+  if (defend && defendRun >= 2) return 'pro-beat-yoshihiko-defend-again';
+  if (['comeback', 'sweep', 'fullset'].includes(shape)) return `pro-beat-yoshihiko-${shape}`;
+  const pool = [...YOSHIHIKO_BEAT_ROTATION, ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-yoshihiko-long'] : [])];
+  return pool[(beats - 1) % pool.length];
+}
+
+/**
+ * 善彦との番勝負に敗れた夜の台本のid(36章。引数は`hananeLostId`と同じ。長く守ったタイトルの夜は善彦には分けない)。
+ * 順：取られた…取り返された＞はじめて＞無冠になった。届かなかった…はじめて＞続けて届かない。そのあと、あと1勝からの逆転＞ストレート＞フルセット＞回す。
+ * @param {{ kind: string, shape: string, losses?: number, series?: number, retaken?: boolean, mukan?: boolean, longHeld?: boolean, missRun?: number }} input
+ * @returns {string}
+ */
+export function yoshihikoLostId({ kind, shape, losses = 0, series = 0, retaken = false, mukan = false, missRun = 0 }) {
+  if (kind === 'lost') {
+    if (retaken) return 'pro-lost-yoshihiko-retaken';
+    if (losses === 0) return 'pro-lost-yoshihiko-lost-first';
+    if (mukan) return 'pro-lost-yoshihiko-mukan';
+  } else {
+    if (losses === 0) return 'pro-lost-yoshihiko-miss-first';
+    if (missRun >= 2) return 'pro-lost-yoshihiko-miss-again';
+  }
+  if (['collapse', 'sweep', 'fullset'].includes(shape)) return `pro-lost-yoshihiko-${shape}`;
+  const pool = [...YOSHIHIKO_LOST_ROTATION, ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-yoshihiko-long'] : [])];
   return pool[(losses - 1) % pool.length];
 }
 

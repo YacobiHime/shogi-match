@@ -419,3 +419,44 @@ describe('羽音に取られた夜・羽音に挑んで届かなかった夜(doc
     }
   });
 });
+
+describe('善彦との番勝負のあとの夜(docs/pro-year-design.mdの36章)', async () => {
+  const { yoshihikoBeatId, yoshihikoLostId, YOSHIHIKO_BEAT_ROTATION, YOSHIHIKO_LOST_ROTATION } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_YOSHIHIKO_SCENES } = await import('./pro-year-story-more.mjs');
+  const { storyEpisode } = await import('./story-mode.mjs');
+
+  it('勝った夜：永世称号＞取り返した＞はじめて＞無冠にした＞続けて退けた＞流れ＞回す', () => {
+    expect(yoshihikoBeatId({ kind: 'take', shape: 'sweep', beats: 2, eternal: true })).toBe('pro-beat-yoshihiko-eternal');
+    expect(yoshihikoBeatId({ kind: 'retake', shape: 'sweep', retake: true })).toBe('pro-beat-yoshihiko-retake');
+    expect(yoshihikoBeatId({ kind: 'take', shape: 'sweep', beats: 0 })).toBe('pro-beat-yoshihiko-take-first');
+    expect(yoshihikoBeatId({ kind: 'defend', shape: 'sweep', beats: 0, defendRun: 1 })).toBe('pro-beat-yoshihiko-defend-first');
+    expect(yoshihikoBeatId({ kind: 'take', shape: 'sweep', beats: 1, mukan: true })).toBe('pro-beat-yoshihiko-mukan');
+    expect(yoshihikoBeatId({ kind: 'defend', shape: 'sweep', beats: 1, defendRun: 2 })).toBe('pro-beat-yoshihiko-defend-again');
+    for (const shape of ['comeback', 'sweep', 'fullset']) expect(yoshihikoBeatId({ kind: 'take', shape, beats: 1 })).toBe(`pro-beat-yoshihiko-${shape}`);
+    expect([1, 2, 3].map((beats) => yoshihikoBeatId({ kind: 'take', shape: 'plain', beats }))).toEqual([...YOSHIHIKO_BEAT_ROTATION]);
+    expect(yoshihikoBeatId({ kind: 'take', shape: 'plain', beats: 4, series: 4 })).toBe('pro-yoshihiko-long');
+  });
+
+  it('敗れた夜：取り返された＞はじめて＞無冠／はじめて＞続けて届かない＞流れ＞回す', () => {
+    expect(yoshihikoLostId({ kind: 'lost', shape: 'sweep', retaken: true })).toBe('pro-lost-yoshihiko-retaken');
+    expect(yoshihikoLostId({ kind: 'lost', shape: 'sweep', losses: 0 })).toBe('pro-lost-yoshihiko-lost-first');
+    expect(yoshihikoLostId({ kind: 'lost', shape: 'sweep', losses: 1, mukan: true })).toBe('pro-lost-yoshihiko-mukan');
+    expect(yoshihikoLostId({ kind: 'miss', shape: 'sweep', losses: 0, missRun: 1 })).toBe('pro-lost-yoshihiko-miss-first');
+    expect(yoshihikoLostId({ kind: 'miss', shape: 'sweep', losses: 1, missRun: 2 })).toBe('pro-lost-yoshihiko-miss-again');
+    for (const shape of ['collapse', 'sweep', 'fullset']) expect(yoshihikoLostId({ kind: 'miss', shape, losses: 1, missRun: 1 })).toBe(`pro-lost-yoshihiko-${shape}`);
+    expect([1, 2, 3].map((losses) => yoshihikoLostId({ kind: 'lost', shape: 'plain', losses }))).toEqual([...YOSHIHIKO_LOST_ROTATION]);
+  });
+
+  it('台本: 善彦は声だけ(名前の札は天鷺善彦か師匠)、羽音は敬語と「！」なし、差し込みが残らず、物語のサブで読み直せる', () => {
+    expect(Object.keys(PRO_YEAR_YOSHIHIKO_SCENES).length).toBeGreaterThanOrEqual(20);
+    for (const id of Object.keys(PRO_YEAR_YOSHIHIKO_SCENES)) {
+      expect(storyEpisode(`pro:${id}`)?.scene, id).toBe(id);
+      const plain = proYearScene(id, { playerName: 'やこび' });
+      expect(plain.title, id).not.toMatch(/\{/);
+      expect(plain.lines.map((entry) => `${entry.name ?? ''}${entry.text}`).join(''), id).not.toMatch(/\{[a-zA-Z]+\}/);
+      for (const entry of plain.lines.filter((line) => line.who === 'extra')) expect(['天鷺善彦', '師匠'], id).toContain(entry.name);
+      for (const entry of plain.lines.filter((line) => line.who === 'hanane')) expect(entry.text, id).not.toMatch(/応援|がんば|！|です|ます/);
+      for (const entry of plain.lines.filter((line) => line.who === 'momoka')) expect(entry.face, id).not.toBe('smile');
+    }
+  });
+});

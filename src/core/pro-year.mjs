@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { hananeBeatId, hananeLostId, isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
+import { hananeBeatId, hananeLostId, isStreakSceneMark, yoshihikoBeatId, yoshihikoLostId, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -889,46 +889,47 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
     let id = base;
     let streakWord = '';
     const log = state.user.seriesLog ?? [];
-    const withHanane = log.filter((entry) => proYearRival(state.players[entry.opponentId]) === 'hanane');
-    if (rival === 'hanane' && won) {
+    // 相手との番勝負の記録(羽音・善彦ごと)。勝った夜・敗れた夜を、奪取か防衛か・流れ・何度目か・取り返した/取り返された・無冠で分ける(34〜36章)。
+    const withRival = log.filter((entry) => proYearRival(state.players[entry.opponentId]) === rival);
+    if (won) {
       // 羽音に勝った夜は、奪取か防衛か・流れ・何度目か・取り返したか・無冠にしたかで分ける(34章)。
       const defend = kind === 'defend';
-      const beats = withHanane.filter((entry) => entry.won && (entry.kind === 'defend') === defend).length;
+      const beats = withRival.filter((entry) => entry.won && (entry.kind === 'defend') === defend).length;
       let defendRun = defend ? 1 : 0;
       if (defend) {
         const sameEvent = log.filter((entry) => entry.event === event.id);
         for (let index = sameEvent.length - 1; index >= 0; index -= 1) {
           const entry = sameEvent[index];
-          if (entry.kind !== 'defend' || proYearRival(state.players[entry.opponentId]) !== 'hanane') break;
+          if (entry.kind !== 'defend' || proYearRival(state.players[entry.opponentId]) !== rival) break;
           defendRun += 1;
         }
       }
-      id = hananeBeatId({
-        kind, shape, beats, series: withHanane.length, eternal: eternalNow, defendRun,
-        retake: !defend && withHanane.some((entry) => entry.event === event.id && entry.kind === 'lost'),
+      id = (rival === 'hanane' ? hananeBeatId : yoshihikoBeatId)({
+        kind, shape, beats, series: withRival.length, eternal: eternalNow, defendRun,
+        retake: !defend && withRival.some((entry) => entry.event === event.id && entry.kind === 'lost'),
         mukan: !defend && !TITLE_EVENTS.some((titleId) => titleId !== event.id && state.titles[titleId] === opponentId),
       });
-      streakWord = String(id === 'pro-beat-hanane-long' ? withHanane.length + 1 : defendRun);
-    } else if (rival === 'hanane') {
+      streakWord = String(id.endsWith('-long') ? withRival.length + 1 : defendRun);
+    } else {
       // 羽音に敗れた夜は、取られたか届かなかったか・流れ・何度目か・取り返されたか・無冠になったかで分ける(35章)。
       const lostKind = kind === 'lost';
-      const losses = withHanane.filter((entry) => !entry.won && (entry.kind === 'lost') === lostKind).length;
+      const losses = withRival.filter((entry) => !entry.won && (entry.kind === 'lost') === lostKind).length;
       let missRun = lostKind ? 0 : 1;
       if (!lostKind) {
         const sameEvent = log.filter((entry) => entry.event === event.id);
         for (let index = sameEvent.length - 1; index >= 0; index -= 1) {
           const entry = sameEvent[index];
-          if (entry.kind !== 'miss' || proYearRival(state.players[entry.opponentId]) !== 'hanane') break;
+          if (entry.kind !== 'miss' || proYearRival(state.players[entry.opponentId]) !== rival) break;
           missRun += 1;
         }
       }
-      id = hananeLostId({
-        kind, shape, losses, series: withHanane.length, missRun,
-        retaken: lostKind && withHanane.some((entry) => entry.event === event.id && (entry.kind === 'take' || entry.kind === 'retake')),
+      id = (rival === 'hanane' ? hananeLostId : yoshihikoLostId)({
+        kind, shape, losses, series: withRival.length, missRun,
+        retaken: lostKind && withRival.some((entry) => entry.event === event.id && (entry.kind === 'take' || entry.kind === 'retake')),
         mukan: lostKind && !TITLE_EVENTS.some((titleId) => titleId !== event.id && state.titles[titleId] === PRO_USER_ID),
         longHeld: lostKind && (before.streak ?? 0) >= 3,
       });
-      streakWord = String(id === 'pro-lost-hanane-long' ? withHanane.length + 1 : missRun);
+      streakWord = String(id.endsWith('-long') ? withRival.length + 1 : missRun);
     }
     queueProYearScene(state, {
       key: `${id}:${event.id}:${state.fy}`,

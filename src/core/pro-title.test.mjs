@@ -437,12 +437,14 @@ describe('相手が羽音・善彦のときの場面(docs/pro-year-design.mdの2
 
   it('番勝負のあとの夜：善彦・羽音に勝てば「〜との番勝負のあと」、負ければ「〜に届かなかった夜」。今までの節目の夜の代わりに出す', () => {
     const queueOf = (state) => state.sceneQueue ?? [];
-    const beat = [year1, playYear(startNextYear(year1.state))].flatMap((year) => queueOf(year.state)).find((item) => item.id === 'pro-beat-yoshihiko');
+    const beat = [year1, playYear(startNextYear(year1.state))].flatMap((year) => queueOf(year.state)).find((item) => item.id.startsWith('pro-beat-yoshihiko'));
     expect(beat).toBeTruthy();
     expect(beat.vars.result).toMatch(/天鷺善彦(に勝ち|を退け)/);
-    expect(textOf(beat)).toContain('途中から、あなたの手を予想するのをやめました。');
+    // はじめて善彦に勝った夜は、取った・退けたの「はじめて」の台本(36章)。
+    expect(beat.id).toMatch(/^pro-beat-yoshihiko-(take|defend)-first$/);
+    expect(textOf(beat)).toContain('天鷺善彦');
     const lostYear = playYear(startNextYear(year1.state), (state) => (state.pending.defense && state.players[state.pending.opponentId]?.story === YOSHIHIKO ? 'loss' : 'win'));
-    const lost = queueOf(lostYear.state).find((item) => item.id === 'pro-lost-yoshihiko');
+    const lost = queueOf(lostYear.state).find((item) => item.id.startsWith('pro-lost-yoshihiko'));
     expect(lost).toBeTruthy();
     expect(lost.vars.result).toContain('の座は、天鷺善彦に移った。');
     const event = lost.key.split(':')[1];
