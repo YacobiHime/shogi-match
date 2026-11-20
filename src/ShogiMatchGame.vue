@@ -1754,11 +1754,12 @@
           <button
             type="button"
             class="shogi-game__assist-toggle shogi-game__command--waza"
-            aria-label="技の演出（手筋・囲い・戦法の名前を出す）"
+            :aria-label="`技の演出（手筋・囲い・戦法の名前を出す。いまは${WAZA_EFFECT_TEXT[wazaEffectChoice]}。押すと切り替え）`"
             :aria-pressed="wazaEffectEnabled"
+            :data-waza-mode="wazaEffectChoice"
             data-waza-toggle
             @click="toggleWazaEffect"
-          >技の<wbr>演出</button>
+          >技の<wbr>演出<small v-if="wazaEffectChoice === 'simple'" class="shogi-game__assist-mode">かんたん</small></button>
           <!-- 危ないマス(docs/coach-advice-expansion-design.mdの14章)。駒を選ぶと、動かすと駒損になる行き先に赤い輪。はじめは消えている。 -->
           <button
             type="button"
@@ -3314,7 +3315,8 @@ import { CHUNK_FAIL_TEXT, claimChunkReload, isChunkLoadError } from "./core/chun
 import { currentStreak, loadPlayStreak, recordPlay, savePlayStreak, streakGreeting } from "./core/play-streak.mjs";
 import { discoveryPlan, loadSeenFeatures, markFeatureSeen, todayPlan } from "./core/home-extras.mjs";
 import hiraganaFormationMaster from "./data/hiragana_suisho_formations.json";
-import { formationCatalog } from "./core/formation-catalog.mjs";
+import { evolvedFrom, formationCatalog, formationGlowSquares, formationShapes } from "./core/formation-catalog.mjs";
+import { parseSfenBoard } from "./core/sfen-board.mjs";
 
 // 対局のほかの画面は、開いたときに読み込む。最初に読むJSを小さくして、起動を速くするため。
 // 読み込みは import() の呼び出しごとに1回だけで、prefetchScreens() で先に読んでおける。
@@ -6498,16 +6500,22 @@ function showCastleCallout(label: string) {
  * 表示補助の「技の演出」で消せる(はじめは付いている)。
  */
 const STRATEGY_LABELS = new Set(COLLECTION_CATALOG.filter(({ kind }) => kind === "strategy").map(({ label }) => label));
-const wazaEffectChoice = ref<"on" | "off">((() => {
+// 全部・かんたん(どの★も小さな帯だけ)・なし(docs/formation-detect-design.mdの6-7。棋桜の簡易表示にならう)。
+const WAZA_EFFECT_ORDER = ["on", "simple", "off"] as const;
+const wazaEffectChoice = ref<"on" | "simple" | "off">((() => {
   try {
-    return browserStorage()?.getItem(WAZA_EFFECT_KEY) === "off" ? "off" : "on";
+    const saved = browserStorage()?.getItem(WAZA_EFFECT_KEY);
+    return saved === "off" || saved === "simple" ? saved : "on";
   } catch {
     return "on";
   }
 })());
 const wazaEffectEnabled = computed(() => wazaEffectChoice.value !== "off");
+const WAZA_EFFECT_TEXT = { on: "全部", simple: "かんたん", off: "なし" } as const;
+/** 押すたびに 全部 → かんたん → なし → 全部。 */
 function toggleWazaEffect() {
-  wazaEffectChoice.value = wazaEffectEnabled.value ? "off" : "on";
+  const at = WAZA_EFFECT_ORDER.indexOf(wazaEffectChoice.value);
+  wazaEffectChoice.value = WAZA_EFFECT_ORDER[(at + 1) % WAZA_EFFECT_ORDER.length];
   if (!wazaEffectEnabled.value) clearWaza();
   try {
     browserStorage()?.setItem(WAZA_EFFECT_KEY, wazaEffectChoice.value);
@@ -6516,7 +6524,9 @@ function toggleWazaEffect() {
   }
 }
 const wazaCutin = ref<WazaCutinView | null>(null);
-const wazaGlow = ref<{ id: number; square: string; tier: string; mine: boolean; targets: string[] } | null>(null);
+const wazaGlow = ref<{ id: number; square: string; tier: string; mine: boolean; targets: string[]; pieces?: string[]; edge?: boolean; look?: string } | null>(null);
+// 形を作る駒を光らせるための、名前ごとの形(規則と定跡補助の完成形。docs/formation-detect-design.mdの6-2)。
+const FORMATION_SHAPES = formationShapes(hiraganaFormationMaster, [...OPENING_CASTLES, ...OPENING_STRATEGIES]);
 let wazaSeq = 0;
 let wazaTimer: ReturnType<typeof setTimeout> | undefined;
 let wazaGlowTimer: ReturnType<typeof setTimeout> | undefined;
@@ -6557,12 +6567,19 @@ function noteWaza(previous: string, usi: string, before: { player: Set<string>; 
   wazaShown.add(key);
   const collection = loadCollection(browserStorage());
   const first = mine && !repeat && (waza.kind === "tesuji" ? !collection.tesuji?.[waza.id] : !collection.formations?.[waza.name]);
-  const view = wazaPresentation(waza, { mine, repeat, first, tip });
+  // 進化のもと(1局で組んだ形のうち、進化のもとをたどって見つかるもの。「高美濃 → 銀冠」)。
+  const evolved = waza.kind === "tesuji" ? "" : evolvedFrom(waza.name, collectionFormationNames(mine ? before.player : before.opponent));
+  const simple = wazaEffectChoice.value === "simple";
+  const view = wazaPresentation(waza, { mine, repeat, first, tip, evolved, simple });
+  // ★3から、形を作る駒を玉に近い順(戦法は動いた駒に近い順)に光らせる。
+  const pieces = view.glow && waza.kind !== "tesuji"
+    ? formationGlowSquares(FORMATION_SHAPES.get(waza.name) ?? [], parseSfenBoard(currentSfen.value), mover, { kind: waza.kind, moved: usi.slice(2, 4) })
+    : [];
   wazaSeq += 1;
   clearTimeout(wazaTimer);
   clearTimeout(wazaGlowTimer);
   wazaCutin.value = { id: wazaSeq, ...view };
-  wazaGlow.value = { id: wazaSeq, square: usi.slice(2, 4), tier: waza.tier, mine, targets: waza.targets };
+  wazaGlow.value = { id: wazaSeq, square: usi.slice(2, 4), tier: waza.tier, mine, targets: waza.targets, pieces, edge: view.edge, look: view.look };
   wazaTimer = setTimeout(() => { wazaCutin.value = null; }, view.ms);
   wazaGlowTimer = setTimeout(() => { wazaGlow.value = null; }, Math.max(view.ms, WAZA_GLOW_MIN_MS));
   // 自分の大きな帯のあいだは、CPUの応手を少し待たせる(盤を触れば打ち切る。4-2の7)。

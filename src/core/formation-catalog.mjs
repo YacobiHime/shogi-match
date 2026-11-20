@@ -137,10 +137,16 @@ export function ruleOwnPieces(rule) {
 /**
  * 名前ごとの形(アルバムのカードの小さな盤。作戦カードのない名前に使う)。同じ名前の規則が2つあれば、駒の多いほう。
  * @param {{ rules: { group: string, name: string, expression: any }[] }} master
+ * @param {{ label: string, completionSquares?: readonly (readonly [string, string])[], completionVariants?: readonly (readonly (readonly [string, string])[])[] }[]} [guides] 定跡補助の戦法・囲い
  * @returns {Map<string, [string, string][]>}
  */
-export function formationShapes(master) {
+export function formationShapes(master, guides = []) {
   const shapes = new Map();
+  // 定跡補助の完成形(作戦カードの名前。規則に同じ名前がなければこれを使う)。マスはUSIの「2h」。
+  for (const definition of guides) {
+    const squares = definition.completionVariants?.[0] ?? definition.completionSquares ?? [];
+    if (squares.length) shapes.set(definition.label, squares.map(([usi, kind]) => [`${usi[0]}${usi.charCodeAt(1) - 96}`, kind]));
+  }
   for (const rule of master?.rules ?? []) {
     const pieces = ruleOwnPieces(rule);
     if ((shapes.get(rule.name)?.length ?? 0) < pieces.length) shapes.set(rule.name, pieces);
@@ -256,4 +262,77 @@ export function strategyRuleMatches(rule, { own, opp, battle, visited, ply }) {
     && (!variant.oppRook || variant.oppRook === oppStyle)
     && (variant.visited ?? []).every((cell) => seen.has(cell))
   ));
+}
+
+// ---- 演出(F4。docs/formation-detect-design.mdの5・6章)
+
+/** 囲いの系統の紋。 */
+const CASTLE_MONS = Object.freeze({
+  yagura: 'yagura', mino: 'fan', hidarimino: 'fan', ginkan: 'crown', anaguma: 'paw', gangi: 'geese', funa: 'boat',
+  kinmuso: 'twin', millennium: 'thousand', migigyoku: 'house', other: 'shield',
+});
+/** 振り飛車の筋の字(戦法の紋)。 */
+const RANGING_FILE_TEXT = Object.freeze({ shiken: '四', sangen: '三', nakabisha: '中', mukai: '向', furibisha: '飛' });
+
+/**
+ * 名前の系統の紋(人物の絵は使わない。設計の6-1)。shapeはWazaCutin.vueの紋の形、textは筋の字の紋の字。
+ * @param {string} name
+ * @returns {{ shape: string, text: string }}
+ */
+export function formationMon(name) {
+  const meta = formationMeta(name);
+  if (!meta) return { shape: 'shield', text: '' };
+  if (meta.kind === 'castle') return { shape: CASTLE_MONS[/** @type {keyof typeof CASTLE_MONS} */ (meta.family)] ?? 'shield', text: '' };
+  const file = RANGING_FILE_TEXT[/** @type {keyof typeof RANGING_FILE_TEXT} */ (meta.family)];
+  if (file) return { shape: 'file', text: file };
+  if (meta.family === 'aifuri') return { shape: 'arrows', text: '' };
+  if (meta.family === 'special') return { shape: 'shuriken', text: '' };
+  if (meta.family === 'aigakari' || meta.family === 'yokofudori') return { shape: 'cloud', text: '' };
+  if (meta.family === 'anti-ranging') return { shape: 'bolt', text: '' };
+  return { shape: 'mountain', text: '' };
+}
+
+/**
+ * ★ごとの見せ方(設計の5章の表)。lookは帯の色(銀・金・虹)、glowは形を作る駒を光らせるか、monBigは大きな紋、edgeは盤の縁の光。
+ * @param {number} rarity
+ */
+export function rarityLook(rarity) {
+  const r = Math.max(1, Math.min(5, Math.round(rarity) || 2));
+  return {
+    rarity: r,
+    small: r <= 1,
+    look: /** @type {'silver' | 'gold' | 'rainbow'} */ (r >= 5 ? 'rainbow' : r >= 4 ? 'gold' : 'silver'),
+    glow: r >= 3,
+    monBig: r >= 4,
+    edge: r >= 5,
+    ms: [0, 900, 1200, 1350, 1500, 1500][r],
+    holdMs: [0, 0, 400, 600, 700, 900][r],
+  };
+}
+
+/**
+ * 形を作る自分の駒のマス(USIの「2h」)。玉に近い順(戦法は動いた駒に近い順)に並べる。設計の6-2。
+ * shapeはformationShapesの形(先手から見たマスと駒)。いまその駒がいるマスだけ。
+ * @param {[string, string][]} shape
+ * @param {Map<string, { color: string, kind: string }>} board sfen-board.mjsの盤
+ * @param {'black' | 'white'} color
+ * @param {{ kind: 'castle' | 'strategy', moved?: string }} options movedは動いた駒のマス(USI)
+ */
+export function formationGlowSquares(shape, board, color, { kind, moved = '' }) {
+  const toUsi = (square) => {
+    const at = color === 'white' ? mirrorSquare(square) : square;
+    return `${at[0]}${String.fromCharCode(96 + Number(at[1]))}`;
+  };
+  const squares = shape
+    .map(([square, piece]) => ({ usi: toUsi(square), piece }))
+    .filter(({ usi, piece }) => {
+      const on = board.get(usi);
+      return on?.color === color && on.kind === piece;
+    })
+    .map(({ usi }) => usi);
+  const king = [...board].find(([, piece]) => piece.color === color && piece.kind === 'K')?.[0] ?? '';
+  const anchor = kind === 'castle' ? king : moved || king;
+  if (!anchor) return squares;
+  const distance = (usi) => Math.max(Math.abs(Number(usi[0]) - Number(anchor[0])), Math.abs(usi.charCodeAt(1) - anchor.charCodeAt(1)));
+  return [...squares].sort((a, b) => distance(a) - distance(b));
 }

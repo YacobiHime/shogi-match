@@ -4,7 +4,7 @@
  * 盤の形だけで決める(良い手かどうかは見ない。名前を覚えるのが目的。4-1)。
  * 自分の手筋はこの目録のIDでコレクションの手筋の印にする(4-3)。
  */
-import { formationRarity, wazaTierOfRarity } from './formation-catalog.mjs';
+import { formationMon, formationRarity, rarityLook, wazaTierOfRarity } from './formation-catalog.mjs';
 import { detectTesuji, TESUJI_HINTS, TESUJI_NAMES } from './move-tesuji.mjs';
 import { detectTesujiShape, TESUJI_SHAPES } from './tesuji-shape.mjs';
 import {
@@ -151,14 +151,23 @@ export const WAZA_HOLD_MS = Object.freeze({ normal: 500, rare: 700, legend: 900 
 /**
  * 帯の見せ方(4-2)。mineは自分の技、repeatは同じ対局で同じ側が前にも使った技、firstはコレクションにまだない技、
  * tipは同じ手で教室のコツの形ができたか。
- * @param {{ kind: 'tesuji' | 'castle' | 'strategy', name: string, tier: 'normal' | 'rare' | 'legend' }} waza
- * @param {{ mine: boolean, repeat?: boolean, first?: boolean, tip?: boolean }} options
+ * 囲い・戦法(rarityのあるもの)は★1〜5で見せ方を変える(docs/formation-detect-design.mdの5・6章)。evolvedは進化のもとの名前、
+ * simpleは表示補助の「かんたん」(どの★も小さな帯だけ)。
+ * @param {{ kind: 'tesuji' | 'castle' | 'strategy', name: string, tier: 'normal' | 'rare' | 'legend', rarity?: number }} waza
+ * @param {{ mine: boolean, repeat?: boolean, first?: boolean, tip?: boolean, evolved?: string, simple?: boolean }} options
  */
-export function wazaPresentation(waza, { mine, repeat = false, first = false, tip = false }) {
-  const big = mine && !repeat;
+export function wazaPresentation(waza, { mine, repeat = false, first = false, tip = false, evolved = '', simple = false }) {
+  if (waza.kind !== 'tesuji' && waza.rarity) return formationPresentation(waza, { mine, repeat, first, tip, evolved, simple });
+  const big = mine && !repeat && !simple;
   const kindLabel = WAZA_KIND_LABELS[waza.kind];
   const ms = big ? Math.min(WAZA_MS.legend, WAZA_MS[waza.tier] + (first ? WAZA_FIRST_EXTRA_MS : 0)) : WAZA_MS.small;
   return {
+    look: /** @type {'silver' | 'gold' | 'rainbow'} */ (waza.tier === 'legend' ? 'rainbow' : waza.tier === 'rare' ? 'gold' : 'silver'),
+    mon: null,
+    monBig: false,
+    edge: false,
+    glow: false,
+    prev: '',
     size: /** @type {'big' | 'small'} */ (big ? 'big' : 'small'),
     mine,
     kind: waza.kind,
@@ -171,6 +180,39 @@ export function wazaPresentation(waza, { mine, repeat = false, first = false, ti
     badge: mine && first ? 'はじめて！' : mine && tip ? 'コツどおり！' : '',
     ms,
     holdMs: big ? WAZA_HOLD_MS[waza.tier] : 0,
+  };
+}
+
+/**
+ * 囲い・戦法の帯(★1〜5。設計の5章の表と6章)。★1は自分の手でも小さな帯、★3から形を作る駒が光り、★4から金の帯と大きな紋、
+ * ★5は虹の帯と盤の縁の光。相手の形は小さな帯で、★4以上だけ紋。進化したら前の名前と「進化！」。
+ * @param {{ kind: 'tesuji' | 'castle' | 'strategy', name: string, tier: 'normal' | 'rare' | 'legend', rarity?: number }} waza
+ * @param {{ mine: boolean, repeat: boolean, first: boolean, tip: boolean, evolved: string, simple: boolean }} options
+ */
+function formationPresentation(waza, { mine, repeat, first, tip, evolved, simple }) {
+  const look = rarityLook(waza.rarity ?? 2);
+  const big = mine && !repeat && !simple && !look.small;
+  const kindLabel = WAZA_KIND_LABELS[waza.kind];
+  const fancy = big && !simple;
+  const evolvedNow = mine && !repeat && Boolean(evolved);
+  return {
+    look: look.look,
+    mon: simple ? null : mine || look.rarity >= 4 ? formationMon(waza.name) : null,
+    monBig: fancy && look.monBig,
+    edge: fancy && look.edge,
+    glow: fancy && look.glow,
+    prev: evolvedNow && !simple ? evolved : '',
+    size: /** @type {'big' | 'small'} */ (big ? 'big' : 'small'),
+    mine,
+    kind: waza.kind,
+    kindLabel: mine ? kindLabel : `相手の${kindLabel}`,
+    name: waza.name,
+    suffix: waza.kind === 'castle' ? '完成' : '',
+    tier: waza.tier,
+    stars: look.rarity,
+    badge: mine && first ? 'はじめて！' : evolvedNow ? '進化！' : mine && tip ? 'コツどおり！' : '',
+    ms: big ? Math.min(WAZA_MS.legend, look.ms + (first ? WAZA_FIRST_EXTRA_MS : 0)) : WAZA_MS.small,
+    holdMs: big ? look.holdMs : 0,
   };
 }
 

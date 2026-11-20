@@ -6,7 +6,7 @@
   <div
     :key="cutin.id"
     class="waza-cutin"
-    :class="[`waza-cutin--${cutin.size}`, `waza-cutin--${cutin.tier}`, { 'waza-cutin--theirs': !cutin.mine }]"
+    :class="[`waza-cutin--${cutin.size}`, `waza-cutin--${lookClass}`, { 'waza-cutin--theirs': !cutin.mine }]"
     :style="{ '--waza-ms': `${cutin.ms}ms` }"
     role="status"
     aria-live="polite"
@@ -15,7 +15,11 @@
     :data-waza-tier="cutin.tier"
   >
     <div class="waza-cutin__band">
+      <!-- ★4からの大きな紋(帯の後ろに薄く)と、進化のもとの名前(消し線。docs/formation-detect-design.mdの6-1・6-3)。 -->
+      <WazaMon v-if="cutin.mon && cutin.monBig" class="waza-cutin__bigmon" :mon="cutin.mon" data-waza-bigmon />
+      <span v-if="cutin.prev" class="waza-cutin__prev" data-waza-prev><s>{{ cutin.prev }}</s> →</span>
       <span class="waza-cutin__kind">{{ cutin.kindLabel }}</span>
+      <WazaMon v-if="cutin.mon" class="waza-cutin__mon" :mon="cutin.mon" data-waza-mon />
       <strong class="waza-cutin__name" data-waza-name>{{ cutin.name }}<small v-if="cutin.suffix">{{ cutin.suffix }}</small></strong>
       <span class="waza-cutin__stars" :aria-label="`★${cutin.stars}つ`">{{ "★".repeat(cutin.stars) }}</span>
       <em v-if="cutin.badge" class="waza-cutin__badge" data-waza-badge>{{ cutin.badge }}</em>
@@ -24,9 +28,16 @@
 </template>
 
 <script setup lang="ts">
-import type { PropType } from "vue";
+import { computed, type PropType } from "vue";
+import WazaMon from "./WazaMon.vue";
 
 export type WazaCutinView = {
+  look?: "silver" | "gold" | "rainbow";
+  mon?: { shape: string; text: string } | null;
+  monBig?: boolean;
+  edge?: boolean;
+  glow?: boolean;
+  prev?: string;
   id: number;
   size: "big" | "small";
   mine: boolean;
@@ -39,9 +50,12 @@ export type WazaCutinView = {
   ms: number;
 };
 
-defineProps({
+const props = defineProps({
   cutin: { type: Object as PropType<WazaCutinView>, required: true },
 });
+// 帯の色(★1〜3は銀、★4は金、★5は虹。手筋は段階のまま)。
+const LOOK_CLASS: { [look: string]: string } = { silver: "normal", gold: "rare", rainbow: "legend" };
+const lookClass = computed(() => (props.cutin.look ? LOOK_CLASS[props.cutin.look] : props.cutin.tier));
 </script>
 
 <style>
@@ -122,6 +136,22 @@ defineProps({
   font-weight: 900;
 }
 /* 相手の技と、2回目からの技は小さく、盤の上の端に。相手の技は朱の縁(注目)。 */
+.shogi-game .waza-cutin__band { position: relative; overflow: hidden; }
+.shogi-game .waza-cutin__mon { color: var(--waza-edge); font-size: 1.1em; }
+.shogi-game .waza-cutin__bigmon {
+  position: absolute;
+  right: 6%;
+  top: 50%;
+  width: 3.6em;
+  height: 3.6em;
+  color: var(--waza-edge);
+  opacity: 0.2;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.shogi-game .waza-cutin__prev { flex-basis: 100%; color: #cfd8de; font-size: 0.8em; text-align: center; }
+.shogi-game .waza-cutin__prev s { opacity: 0.85; }
+.shogi-game .waza-cutin--small .waza-cutin__prev { display: none; }
 .shogi-game .waza-cutin--small { top: 12%; }
 .shogi-game .waza-cutin--small .waza-cutin__band { width: auto; max-width: 94%; padding: 0.2em 0.9em 0.25em; border-radius: 0.6em; border: 2px solid var(--waza-edge); }
 .shogi-game .waza-cutin--small .waza-cutin__name { font-size: clamp(1rem, 4.2vmin, 1.5rem); }

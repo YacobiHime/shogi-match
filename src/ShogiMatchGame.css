@@ -1679,6 +1679,8 @@
   background: var(--lavender);
   box-shadow: 0 2px 0 rgba(23, 38, 50, 0.6), inset 0 0 0 2px var(--night-deep);
 }
+/* 技の演出の「かんたん」(docs/formation-detect-design.mdの6-7)。押した色のまま、下に小さく今の段を添える。 */
+.shogi-game .shogi-game__assist-mode { display: block; font-size: 0.72em; font-weight: 800; opacity: 0.85; }
 /* 表示補助は、広いときは操作列と一続き、狭いときは上に開く折り畳み。 */
 .shogi-game__display-tools {
   flex: 6 1 calc(var(--assist-button-min-em) * 6em + 2.5em);

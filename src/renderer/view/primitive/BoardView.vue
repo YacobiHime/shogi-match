@@ -137,6 +137,24 @@
             aria-hidden="true"
             data-waza-burst
           ></div>
+          <!-- 囲い・戦法の形を作る駒(★3から。玉に近い順に0.06秒ずつ。docs/formation-detect-design.mdの6-2)と、★5の盤の縁の光。 -->
+          <div
+            v-for="piece in wazaGlowView.pieces"
+            :key="'waza-piece-' + wazaGlowView.id + '-' + piece.id"
+            class="waza-piece"
+            :class="`waza-piece--${wazaGlowView.look}`"
+            :style="piece.style"
+            aria-hidden="true"
+            data-waza-piece
+          ></div>
+          <div
+            v-if="wazaGlowView.edge"
+            :key="'waza-edge-' + wazaGlowView.id"
+            class="waza-edge"
+            :style="wazaGlowView.edge"
+            aria-hidden="true"
+            data-waza-edge
+          ></div>
           <div
             v-for="target in wazaGlowView.targets"
             :key="'waza-target-' + wazaGlowView.id + '-' + target.id"
@@ -544,7 +562,7 @@ const props = defineProps({
   },
   // 技の演出(docs/move-waza-design.mdの4-2)。指した駒のマス(USIの升)と、ねらった駒のマス。idが変わるたびに光り直す。
   wazaGlow: {
-    type: Object as PropType<{ id: number; square: string; tier: string; mine: boolean; targets: string[] } | null>,
+    type: Object as PropType<{ id: number; square: string; tier: string; mine: boolean; targets: string[]; pieces?: string[]; edge?: boolean; look?: string } | null>,
     required: false,
     default: null,
   },
@@ -1281,8 +1299,32 @@ const wazaGlowView = computed(() => {
     mine: glow.mine,
     burst: at?.style ?? null,
     targets: board.value.squares.flatMap((square) => (targets.has(usiOf(square)) ? [{ id: square.id, style: square.style }] : [])),
+    look: glow.look ?? "silver",
+    pieces: (glow.pieces ?? []).flatMap((usi, index) => {
+      const square = board.value.squares.find((item) => usiOf(item) === usi);
+      return square ? [{ id: square.id, style: { ...square.style, animationDelay: `${index * 60}ms` } }] : [];
+    }),
+    edge: glow.edge ? boardEdgeStyle() : null,
   };
 });
+/** 9×9の升の外側を囲む枠(★5の盤の縁の光)。升の位置から出す。 */
+function boardEdgeStyle() {
+  const boxes = board.value.squares.map((square) => {
+    const style = square.style as { [key: string]: string };
+    const left = parseFloat(style.left);
+    const top = parseFloat(style.top);
+    return { left, top, right: left + parseFloat(style.width), bottom: top + parseFloat(style.height) };
+  });
+  if (!boxes.length || boxes.some((box) => Number.isNaN(box.right) || Number.isNaN(box.bottom))) return null;
+  const left = Math.min(...boxes.map((box) => box.left));
+  const top = Math.min(...boxes.map((box) => box.top));
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${Math.max(...boxes.map((box) => box.right)) - left}px`,
+    height: `${Math.max(...boxes.map((box) => box.bottom)) - top}px`,
+  };
+}
 const riskSquareViews = computed(() => {
   // 悪手の理由で「取られちゃう」と言った駒の升(N2)。駒を選んでいなくても出す。
   const fixed = new Set(props.riskSquares);
@@ -1864,9 +1906,46 @@ const whitePlayerTimeSeverity = computed(() => {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
+/*
+ * 囲い・戦法の形を作る駒(docs/formation-detect-design.mdの6-2)。黄色の面は使わず、駒の縁を白い輪と系統の色(★の色)で光らせる。
+ * 光は1回だけで残さない。★5は盤の縁を虹色で一周光らせる。
+ */
+.waza-piece {
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgba(255, 252, 244, 0.95), 0 0 0 3px var(--waza-piece-color, #8fd6ff), 0 0 12px 3px var(--waza-piece-color, #8fd6ff);
+  opacity: 0;
+  animation: waza-piece 1100ms ease-out both;
+}
+.waza-piece--gold { --waza-piece-color: #f1a54c; }
+.waza-piece--rainbow { --waza-piece-color: #c18bff; }
+.waza-edge {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+  border: 4px solid;
+  border-image: linear-gradient(90deg, #ff7a7a, #ffd36b, #7dffa8, #6bc7ff, #c18bff) 1;
+  opacity: 0;
+  animation: waza-edge 1400ms ease-out both;
+}
+@keyframes waza-piece {
+  0% { opacity: 0; transform: scale(0.7); }
+  25% { opacity: 1; transform: scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes waza-edge {
+  0% { opacity: 0; }
+  20%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .waza-burst { animation: waza-burst-fade 900ms ease-out both; }
   .waza-target { animation: none; }
+  .waza-piece { animation: waza-burst-fade 1100ms ease-out both; }
+  .waza-edge { animation: waza-burst-fade 1400ms ease-out both; }
 }
 @keyframes waza-burst-fade {
   0% { opacity: 0; }
