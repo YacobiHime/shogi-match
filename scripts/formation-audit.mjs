@@ -6,7 +6,7 @@
 //     ロジックAI(Lv6〜10)どうしの対局を--logic局。エンジンを使わないので速い。
 //     --baselineを渡すと、前の版(git show <コミット>:src/core/formation-tracker.mjs で取り出し、importを絶対パスに直したもの)と
 //     1局ずつ比べ、前の版だけ・今の版だけに出た名前を数える(前の版は、毎手の名前を1局ぶん合わせたもの)。
-//     --trace <名前> で、前の版でその名前が出た局面と今の版の判定を並べる。
+//     --trace <名前> で、前の版でその名前が出た局面と今の版の判定を並べる(--baselineなしなら、今の版でその名前がはじめて付いた局面)。
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -73,7 +73,12 @@ for (const game of corpus) {
   game.steps.forEach(({ sfen }, ply) => {
     state = updateFormationState(state, detectFormationSnapshot(sfen, master), formationMove(sfen, ply));
     for (const color of ["black", "white"]) {
-      for (const name of formedNamesFromState(state, color)) if (!first[color].has(name)) first[color].set(name, ply);
+      for (const name of formedNamesFromState(state, color)) {
+        if (first[color].has(name)) continue;
+        first[color].set(name, ply);
+        // --baselineなしの--trace: 今の版でその名前がはじめて付いた局面。
+        if (trace && !baseline && name === trace) console.log(`[${trace}] ${game.id} ${ply}手 ${color} ${sfen}`);
+      }
     }
     if (baseline) {
       const oldSnapshot = baseline.detectFormationSnapshot(sfen, master);

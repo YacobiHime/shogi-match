@@ -9,7 +9,7 @@ import {
   OPENING_STRATEGIES,
 } from './opening-guide.mjs';
 import { parseSfenBoard } from './sfen-board.mjs';
-import { CUSTOM_CASTLE_RULES, customRuleSpecificity, ruleSpecificity } from './formation-catalog.mjs';
+import { CUSTOM_CASTLE_RULES, CUSTOM_STRATEGY_RULES, customRuleSpecificity, ruleSpecificity, sideCells, strategyRuleMatches, turnCells } from './formation-catalog.mjs';
 
 /** 戦法の名前を新しく付けるのは、この手数まで(docs/formation-detect-design.mdの7-2。終盤に急に戦法が付かない)。 */
 export const STRATEGY_PLY_LIMIT = 60;
@@ -160,6 +160,15 @@ const FORMATION_PARENTS_BY_SPECIFIC = new Map([
   ['銀立ち矢倉', ['矢倉']],
   ['右矢倉', ['矢倉']],
   ['シン・パックマン', ['パックマン']],
+  // 自作の戦法の規則(F3)。
+  ['4→3戦法', ['三間飛車']],
+  ['鬼殺し向かい飛車', ['向かい飛車']],
+  ['ツノ銀中飛車', ['中飛車']],
+  ['中飛車左穴熊', ['中飛車']],
+  ['右四間飛車急戦', ['右四間飛車']],
+  ['右四間飛車左美濃', ['右四間飛車']],
+  ['矢倉棒銀', ['棒銀']],
+  ['相掛かり棒銀', ['棒銀']],
 ]);
 
 /**
@@ -242,8 +251,9 @@ export function createFormationState() {
   return {
     battle: '',
     // formedは1局で組んだ囲い・戦法(崩されても残す。7-5)。castleは今の囲い。
-    black: { rook: '', castle: '', tactics: [], formed: [] },
-    white: { rook: '', castle: '', tactics: [], formed: [] },
+    // visitedは駒の通り道(1局で一度でもいたマスの札「68R」。F3)。
+    black: { rook: '', castle: '', tactics: [], formed: [], visited: [] },
+    white: { rook: '', castle: '', tactics: [], formed: [], visited: [] },
   };
 }
 
@@ -275,6 +285,7 @@ export function detectFormationSnapshot(sfen, master) {
     black: {
       rook: firstByGroup(directRules, 'bt_match2'),
       castle: bestCastleName(board, 'black', sfen, directRules),
+      cells: sideCells(board, 'black'),
       tactics: [...new Set([
         ...namesByGroup(directRules, ['sente_tac_match', 'tac_match']),
         ...blackGuideTactics,
@@ -283,6 +294,7 @@ export function detectFormationSnapshot(sfen, master) {
     white: {
       rook: firstByGroup(invertedRules, 'bt_match2'),
       castle: bestCastleName(board, 'white', sfen, invertedRules),
+      cells: sideCells(board, 'white'),
       tactics: [
         ...new Set([
           ...namesByGroup(goteRules, ['gote_tac_match']),
@@ -316,7 +328,22 @@ export function updateFormationState(previous, snapshot, move = { ply: 0, mover:
     const own = !mover || mover === color;
     if (!next[color].rook && snapshot[color].rook && own && ply <= STRATEGY_PLY_LIMIT) next[color].rook = snapshot[color].rook;
     next[color].castle = snapshot[color].castle;
-    const fresh = own && ply <= STRATEGY_PLY_LIMIT ? snapshot[color].tactics.filter((name) => !next[color].tactics.includes(name)) : [];
+    // 駒の通り道(F3の visited)。大駒・金銀桂と玉の、1局で一度でもいたマス。
+    const cells = snapshot[color].cells ?? [];
+    const visited = new Set(previous[color].visited ?? []);
+    for (const cell of cells) if (/[RBGSNK]$/.test(cell)) visited.add(cell);
+    next[color].visited = [...visited];
+    // 自作の戦法の規則(相手の形・通り道・戦型・手数の窓。data/formation-rules.mjs)。
+    const opponent = color === 'black' ? 'white' : 'black';
+    const custom = snapshot[color].cells ? CUSTOM_STRATEGY_RULES.filter((rule) => strategyRuleMatches(rule, {
+      own: cells,
+      opp: turnCells(snapshot[opponent].cells ?? []),
+      battle: next.battle || snapshot.battle,
+      visited,
+      ply,
+    })).map((rule) => rule.name) : [];
+    const candidates = [...snapshot[color].tactics, ...custom];
+    const fresh = own && ply <= STRATEGY_PLY_LIMIT ? [...new Set(candidates)].filter((name) => !next[color].tactics.includes(name)) : [];
     next[color].tactics = [...next[color].tactics, ...fresh];
     const formed = new Set(next[color].formed);
     for (const name of fresh) formed.add(name);

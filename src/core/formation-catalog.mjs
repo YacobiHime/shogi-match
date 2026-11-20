@@ -2,7 +2,7 @@
 // 作戦カードの目録(collection.mjsのcollectionCatalog)に、作戦カードのない名前(銀冠穴熊・ビッグ4など)を足す。
 // 画面・保存に依存しない。
 import { FORMATION_META, FORMATION_SAME_NAMES, RANGING_STRATEGY_FAMILIES } from '../data/formation-catalog.mjs';
-import { FORMATION_CASTLE_RULES } from '../data/formation-rules.mjs';
+import { FORMATION_CASTLE_RULES, FORMATION_STRATEGY_RULES } from '../data/formation-rules.mjs';
 
 /** 同じ作戦のもう1つの呼び方。 */
 const sameName = (name) => FORMATION_SAME_NAMES.find((pair) => pair.includes(name))?.find((item) => item !== name) ?? '';
@@ -146,9 +146,9 @@ export function formationShapes(master) {
     if ((shapes.get(rule.name)?.length ?? 0) < pieces.length) shapes.set(rule.name, pieces);
   }
   // 自作の規則は、置き換えるものも足すものも、最初の形の駒で描く。
-  for (const rule of FORMATION_CASTLE_RULES) {
-    const variant = rule.variants[0];
-    shapes.set(rule.name, [...variant.own, ...(variant.ownAny ?? []).map((group) => group[0])].map(splitCell));
+  for (const rule of [...FORMATION_CASTLE_RULES, ...FORMATION_STRATEGY_RULES]) {
+    const variant = /** @type {any} */ (rule.variants[0]);
+    shapes.set(rule.name, [...variant.own, ...(variant.ownAny ?? []).map((/** @type {string[]} */ group) => group[0])].map(splitCell));
   }
   return shapes;
 }
@@ -201,4 +201,59 @@ export function evolvedFrom(name, formed) {
     parent = formationMeta(parent)?.parent ?? '';
   }
   return '';
+}
+
+/** 自作の戦法の規則(F3)。 */
+export const CUSTOM_STRATEGY_RULES = FORMATION_STRATEGY_RULES;
+
+/**
+ * 盤の駒を、その側から見たマスの札(「28R」)の一覧にする。boardはsfen-board.mjsの盤(マスはUSIの「2h」)。
+ * 先手は盤のまま、後手は盤を回す(後手の飛車の初めのマス8二は「28R」)。
+ * @param {Map<string, { color: string, kind: string }>} board
+ * @param {'black' | 'white'} color
+ * @returns {string[]}
+ */
+export function sideCells(board, color) {
+  const cells = [];
+  for (const [usi, piece] of board) {
+    if (piece.color !== color) continue;
+    const square = `${usi[0]}${usi.charCodeAt(1) - 96}`;
+    cells.push(`${color === 'white' ? mirrorSquare(square) : square}${piece.kind}`);
+  }
+  return cells;
+}
+
+/** 札の一覧(その側から見たマス)を、相手から見たマスに回す。 */
+export const turnCells = (cells) => cells.map((cell) => `${mirrorSquare(cell.slice(0, 2))}${cell.slice(2)}`);
+
+/** 振り飛車か(その側から見た飛車の筋が5〜9)。飛車がないか成っていれば''。 */
+export function rookStyle(ownCells) {
+  const rook = ownCells.find((cell) => cell.slice(2) === 'R');
+  if (!rook) return '';
+  return Number(rook[0]) >= 5 ? 'ranging' : 'static';
+}
+
+/**
+ * 自作の戦法の規則に当たるか。
+ * @param {typeof FORMATION_STRATEGY_RULES[number]} rule
+ * @param {{ own: string[], opp: string[], battle: string, visited: Iterable<string>, ply: number }} context
+ *   ownはその側から見た自分の駒、oppはその側から見た相手の駒(sideCellsの相手の結果をturnCellsで回したもの)
+ */
+export function strategyRuleMatches(rule, { own, opp, battle, visited, ply }) {
+  const limit = /** @type {any} */ (rule).maxPly ?? Infinity;
+  if (ply > limit) return false;
+  if (/** @type {any} */ (rule).battle && /** @type {any} */ (rule).battle !== battle) return false;
+  const mine = new Set(own);
+  const theirs = new Set(opp);
+  const seen = new Set(visited);
+  const oppStyle = rookStyle(turnCells(opp));
+  return rule.variants.some((/** @type {any} */ variant) => (
+    (variant.own ?? []).every((cell) => mine.has(cell))
+    && (variant.ownAny ?? []).every((group) => group.some((cell) => mine.has(cell)))
+    && !(variant.ownNot ?? []).some((cell) => mine.has(cell))
+    && (variant.opp ?? []).every((cell) => theirs.has(cell))
+    && (variant.oppAny ?? []).every((group) => group.some((cell) => theirs.has(cell)))
+    && (!variant.oppRook || variant.oppRook === oppStyle)
+    && (variant.visited ?? []).every((cell) => seen.has(cell))
+  ));
 }

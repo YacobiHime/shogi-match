@@ -61,3 +61,40 @@ export const FORMATION_CASTLE_RULES = Object.freeze([
     variants: [{ own: ['58K'], ownAny: [['68G', '78G', '69G'], ['48G', '38G', '49G']] }],
   },
 ]);
+
+// ---- 戦法の規則(F3)。囲いの語彙に、次の条件を足す。
+//   opp       : 相手の駒(自分から見たマス。先手なら盤のまま、後手なら盤を回した向き)が全部ある
+//   oppAny    : 相手の駒の組ごとに、どれか1つ
+//   oppRook   : 相手の飛車が 'ranging'(振り飛車。相手から見て5〜9筋)か 'static'(居飛車。1〜4筋)
+//   visited   : 1局のうちに、自分のその駒がそのマスにいたことがある(駒の通り道。「四間から三間」など)
+//   battle    : 戦型(相掛かり・矢倉など。formation-trackerのbattle)がこの名前
+//   maxPly    : 名前を付けるのはこの手数まで(既定は戦法の60手。奇襲・急戦は早く)
+// 形は一般の説明(定跡書・用語辞典の図)から書いた目安で、監査(scripts/formation-audit.mjs)と実戦で確かめて直す。
+export const FORMATION_STRATEGY_RULES = Object.freeze([
+  // 相居飛車
+  { name: '脇システム', variants: [{ own: ['46B', '77S'], ownAny: [['78G', '67G']], opp: ['64B'] }] },
+  { name: '矢倉棒銀', variants: [{ own: ['77S', '28R'], ownAny: [['78G', '67G'], ['26S', '15S']] }] },
+  { name: '矢倉中飛車', variants: [{ own: ['77S', '58R'], ownAny: [['78G', '67G']], oppRook: 'static' }] },
+  { name: 'カニカニ銀', maxPly: 50, variants: [{ own: ['46S', '66S'], oppRook: 'static' }] },
+  { name: '相掛かり棒銀', battle: '相掛かり', variants: [{ own: ['28R'], ownAny: [['27S', '26S', '15S']] }] },
+  // 位は銀で支える(歩の交換の直後の5五歩だけでは付けない。監査で見つけた)。
+  { name: '5筋位取り', maxPly: 40, variants: [{ own: ['55P'], ownAny: [['46S', '56S', '66S']], ownNot: ['58R', '55R'], oppRook: 'static' }] },
+  // 角を7九に引き、銀を7七に上げた形(角が引いただけでは付けない。監査で見つけた)。
+  { name: '飯島流引き角戦法', maxPly: 40, variants: [{ own: ['79B', '77S'], oppRook: 'static' }] },
+  { name: 'ツノ銀雁木', variants: [{ own: ['67S', '47S'], ownAny: [['78G', '58G']], ownNot: ['58R'] }] },
+  // 対振り飛車(相手の飛車が振られてから)
+  { name: '4六銀右急戦', maxPly: 50, variants: [{ own: ['46S', '28R'], ownAny: [['77S', '68S', '79S', '78S']], oppRook: 'ranging' }] },
+  { name: '左美濃急戦', maxPly: 50, variants: [{ own: ['88K', '78S'], ownAny: [['46S', '57S', '35S']], oppRook: 'ranging' }] },
+  { name: '右四間飛車急戦', maxPly: 50, variants: [{ own: ['48R'], ownAny: [['78K', '68K', '69K', '79K']], oppRook: 'ranging' }] },
+  { name: '右四間飛車左美濃', variants: [{ own: ['48R', '88K', '78S'] }] },
+  // 玉を居飛車の側に囲ってから飛車を3筋へ(玉が中央のままの飛車の寄りには付けない。監査で見つけた)。
+  { name: '7二飛亜急戦', maxPly: 50, variants: [{ own: ['38R'], ownAny: [['78K', '68K', '79K', '88K']], oppRook: 'ranging' }] },
+  { name: '玉頭位取り', variants: [{ own: ['35P'], ownAny: [['36S', '46S', '26S']], oppRook: 'ranging' }] },
+  { name: '対振り持久戦', variants: [{ own: ['28R'], ownAny: [['99K', '88K', '98K', '87K']], oppRook: 'ranging' }] },
+  { name: '5七金戦法', maxPly: 50, variants: [{ own: ['57G'], opp: ['52R'] }] },
+  // 振り飛車
+  { name: 'ツノ銀中飛車', variants: [{ own: ['58R', '47S', '67S'] }] },
+  { name: '中飛車左穴熊', variants: [{ own: ['58R', '99K', '98L'] }] },
+  { name: '4→3戦法', variants: [{ own: ['78R'], visited: ['68R'] }] },
+  { name: '鬼殺し向かい飛車', maxPly: 20, variants: [{ own: ['88R', '77N'] }] },
+]);
