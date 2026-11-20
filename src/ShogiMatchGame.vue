@@ -1530,13 +1530,64 @@
       </section>
 
       <section
-        v-if="openingGuideShown"
+        v-if="openingGuideShown || phaseGuide"
         class="shogi-game__opening-guide"
         :class="{ 'shogi-game__opening-guide--collapsed': openingGuideCollapsed }"
-        aria-label="やこび姫補助"
+        :aria-label="openingGuideShown || !phaseGuide ? 'やこび姫補助' : phaseGuide.title"
       >
-        <h2>定跡の案内</h2>
-        <p v-if="!openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
+        <h2>{{ openingGuideShown || !phaseGuide ? "定跡の案内" : phaseGuide.title }}</h2>
+        <p v-if="openingGuideShown && !openingGuideAvailable" class="shogi-game__opening-guide-note">駒落ちや完成形からの対局では、定跡の道しるべはお休みだよ。</p>
+        <!--
+          定跡の案内が終わったら、同じ欄の中身を、中盤は作戦ボード、終盤は寄せの速度計に替える(docs/phase-guide-design.md)。
+          答えの手は言わず、考える場所だけを出す。欄の大きさと位置は変えない。
+        -->
+        <div
+          v-if="!openingGuideShown && phaseGuide"
+          class="shogi-game__phase-guide"
+          :class="`shogi-game__phase-guide--${phaseGuide.phase}`"
+          :data-phase-guide="phaseGuide.phase"
+          role="status"
+        >
+          <div class="shogi-game__phase-head">
+            <span class="shogi-game__phase-tag" aria-hidden="true">{{ phaseGuide.title }}</span>
+            <p v-if="phaseMiddle" class="shogi-game__phase-main" data-phase-policy>{{ phaseMiddle.policy.text }}</p>
+            <p v-else-if="phaseEnd" class="shogi-game__phase-main shogi-game__phase-action" data-phase-action>{{ phaseEnd.action.text }}</p>
+          </div>
+          <p v-if="phaseIntroText" class="shogi-game__phase-intro" data-phase-intro>{{ phaseIntroText }}</p>
+          <div v-if="phaseMiddle" class="shogi-game__phase-kings" data-phase-kings>
+            <span
+              v-for="king in phaseMiddle.kings"
+              :key="king.side"
+              class="shogi-game__phase-king"
+              :aria-label="`${king.label}の堅さ ${king.pips}／5 ${king.word}`"
+            >
+              <b>{{ king.label }}</b>
+              <span class="shogi-game__phase-pips" aria-hidden="true"><i v-for="n in 5" :key="n" :class="{ on: n <= king.pips }" /></span>
+              {{ king.word }}
+            </span>
+          </div>
+          <!-- はじめての1行が出ているあいだは、補足の行を休ませる(縦積みの欄で切れないように)。 -->
+          <template v-if="phaseMiddle && !phaseIntroText">
+            <p v-if="phaseMiddle.fileText" class="shogi-game__phase-note" data-phase-file>{{ phaseMiddle.fileText }}</p>
+            <p v-if="phaseMiddle.tesuji" class="shogi-game__phase-note" data-phase-tesuji>{{ PHASE_GUIDE_TEXT.tesuji }}</p>
+          </template>
+          <div
+            v-if="phaseEnd"
+            class="shogi-game__phase-meter"
+            :class="{ 'shogi-game__phase-meter--flash': phaseAttackFlash }"
+            data-phase-meter
+          >
+            <template v-for="row in [{ ...phaseEnd.attack, kind: 'attack' }, { ...phaseEnd.risk, kind: 'risk' }]" :key="row.kind">
+              <b>{{ row.label }}</b>
+              <span
+                class="shogi-game__phase-bars"
+                :class="`shogi-game__phase-bars--${row.kind}`"
+                aria-hidden="true"
+              ><i v-for="n in 4" :key="n" :class="{ on: n <= row.level }" /></span>
+              <span :aria-label="`${row.label} ${row.level}／4 ${row.text}`">{{ row.text }}</span>
+            </template>
+          </div>
+        </div>
         <!--
           作戦は、完成形の小さな盤が描かれた作戦カードで選ぶ(docs/opening-guide-ux-design.md)。
           作戦を選んでいないあいだは、何をする欄かを1行で伝えるボタンにたたむ。押すと作戦カードのシートを開く。
@@ -3243,6 +3294,7 @@ import {
   normalizeAssistLimit,
 } from "./core/learning-setup.mjs";
 import { AI_PIECE_POINTS, CAPTURE_POP_MS, materialBalance, materialLabel, materialPops } from "./core/piece-points.mjs";
+import { PHASE_GUIDE_TEXT, endgameGauge, guidePhase, loadPhaseIntroSeen, markPhaseIntroSeen, middleBoard } from "./core/phase-guide.mjs";
 import { FURIGOMA_LAND_AT, createMoveSoundPlayer, loadSoundEnabled, saveSoundEnabled, selectMoveSound } from "./core/move-sound";
 import { IMPACT_STAGE, finishImpact, impactStopMs, moveImpact, praiseImpactStage } from "./core/move-impact.mjs";
 import {
@@ -6814,16 +6866,86 @@ const planCardShown = computed(() => {
   if (!openingPlanSettled.value) return true;
   return moveHistory.length <= PLAN_CHOICE_MAX_PLY || openingCombinedFollowupCandidates.value.length > 0;
 });
-/** 補助の欄を出すか。出すものが何もなくなったら(中盤で作戦なし・組める作戦もない)、欄ごと消す。 */
-const openingGuideShown = computed(() => (
-  (matchKind.value === "learning" && !openingGuideAvailable.value)
-  || openingGuideCollapsed.value
+/** 定跡の案内が出すものがあるか(駒落ちの学習対局の「お休み」の1行は数えない)。 */
+const openingGuideContent = computed(() => (
+  openingGuideCollapsed.value
   || planCardShown.value
   || Boolean(planInterruption.value || coachPlanOffer.value || lunchOffer.value || dayBreakOffer.value)
   || rangingRookChoiceRequired.value
   || strategyCompletionChoiceRequired.value
   || Boolean(nearCompletionPrompt.value)
 ));
+/** 補助の欄を出すか。出すものが何もなくなったら(中盤で作戦なし・組める作戦もない)、欄ごと消す。 */
+const openingGuideShown = computed(() => (
+  openingGuideContent.value
+  || (matchKind.value === "learning" && !openingGuideAvailable.value && !phaseGuide.value)
+));
+
+// ---- 序盤のあとの補助(docs/phase-guide-design.md)。定跡の案内が終わった欄を、中盤は作戦ボード、終盤は寄せの速度計にする。
+
+/**
+ * やこび姫の助言が読んだ局面と、その読み(評価値はプレイヤーから見た値)。欄は今の局面の読みだけを使い、新しく探索しない(6章)。
+ */
+const phaseReading = shallowRef<{
+  sfen: string;
+  score: EngineEvaluation | null;
+  mateThreat: boolean | null;
+  bestMove: string;
+  bestGivesCheck: boolean;
+  bestGivesMateThreat: boolean | null;
+} | null>(null);
+/** 作戦ボード・寄せの速度計を出せる対局か(3章)。CPUとの対局で、助言が「なし」でないとき。測定・振り返りでは出さない。 */
+const phaseGuideAllowed = computed(() => (
+  active.value && matchStarted.value && !reviewMode.value && !measureMode.value
+  && normalizedMode.value === "cpu" && coachLevel.value !== "off"
+));
+/** この対局で終盤に入った手数(3章。いちど入ったら終盤のまま。待ったでそれより前へ戻ったら消す)。 */
+const phaseEndgameFrom = ref<number | null>(null);
+watch([currentSfen, moveCount], ([sfen, ply]) => {
+  if (phaseEndgameFrom.value !== null && ply < phaseEndgameFrom.value) phaseEndgameFrom.value = null;
+  if (phaseEndgameFrom.value === null && isEndgame(sfen, ply)) phaseEndgameFrom.value = ply;
+});
+const phaseGuide = computed((): ReturnType<typeof middleBoard> | ReturnType<typeof endgameGauge> | null => {
+  if (!phaseGuideAllowed.value) return null;
+  const sfen = currentSfen.value;
+  const ply = moveHistory.length;
+  const reachedEndgame = phaseEndgameFrom.value !== null && ply >= phaseEndgameFrom.value;
+  const phase = guidePhase({ sfen, ply, openingShown: openingGuideContent.value, reachedEndgame });
+  if (phase === "opening") return null;
+  const color = humanColor.value === Color.WHITE ? "white" : "black";
+  const saved = phaseReading.value;
+  const reading = saved && saved.sfen === sfen ? saved : null;
+  if (phase === "endgame") return endgameGauge({ sfen, color, reading });
+  const totals = materialBalance(sfen, matchInitialSfen.value);
+  const materialDiff = totals[color] - totals[color === "black" ? "white" : "black"];
+  return middleBoard({ sfen, color, materialDiff, reading });
+});
+const phaseMiddle = computed(() => (phaseGuide.value?.phase === "middle" ? phaseGuide.value as ReturnType<typeof middleBoard> : null));
+const phaseEnd = computed(() => (phaseGuide.value?.phase === "endgame" ? phaseGuide.value as ReturnType<typeof endgameGauge> : null));
+/** はじめての1行(3章)。段階が替わったはじめての1回だけ、その手から3手(自分の手番で数えて)ほど出す。 */
+const PHASE_INTRO_PLIES = 6;
+const phaseIntroSeen = ref(loadPhaseIntroSeen());
+const phaseIntro = ref<{ phase: "middle" | "endgame"; ply: number } | null>(null);
+const phaseIntroText = computed(() => {
+  const guide = phaseGuide.value;
+  const intro = phaseIntro.value;
+  if (!guide || !intro || intro.phase !== guide.phase || moveHistory.length - intro.ply >= PHASE_INTRO_PLIES) return "";
+  return guide.phase === "middle" ? PHASE_GUIDE_TEXT.middleIntro : PHASE_GUIDE_TEXT.endgameIntro;
+});
+watch(() => phaseGuide.value?.phase ?? null, (phase) => {
+  if (!phase || phaseIntroSeen.value[phase]) return;
+  phaseIntro.value = { phase, ply: moveHistory.length };
+  phaseIntroSeen.value = markPhaseIntroSeen(phase);
+});
+/** 寄せの速度計で、相手玉の段が上がったときだけ目盛りを光らせる(5章)。 */
+const phaseAttackFlash = ref(false);
+let phaseAttackFlashTimer: ReturnType<typeof setTimeout> | null = null;
+watch(() => phaseEnd.value?.attack.level ?? 0, (level, previous) => {
+  if (!level || !previous || level <= previous) return;
+  phaseAttackFlash.value = true;
+  if (phaseAttackFlashTimer) clearTimeout(phaseAttackFlashTimer);
+  phaseAttackFlashTimer = setTimeout(() => { phaseAttackFlash.value = false; }, 600);
+});
 function planEntries(context: "pregame" | "game"): OpeningPlanEntry[] {
   const unlocks = planUnlocks.value;
   const formations = planFormations.value;
@@ -11448,13 +11570,14 @@ async function updateDedicatedCoachAdvice(
   // N3 終盤の「攻めるか、受けるか」。詰めろの一言(mate-risk-top3)の代わりと、評価の崖より先。
   // 最善手が相手玉に詰めろをかけるかは、終盤で、自玉が詰めろでなく最善手が王手でないときだけ1回読んで確かめる。
   let policyLine: { key: string; text: string } | null = null;
+  // 最善手が相手玉に詰めろをかけるか(確かめたときだけ。寄せの速度計でも使う。docs/phase-guide-design.mdの6章)。
+  let bestGivesMateThreat: boolean | null = null;
   const endgame = coachLevel.value === "detailed" && !winningMate && !moveFeedback && bestMove
     && !inCheck && isEndgame(currentSfen.value, analyzedHistoryLength);
   if (endgame && bestMove && (!riskAdvice || /^(mate-risk-top3|candidate-evaluation-cliff|save-threatened-rook|prefer-defense|not-mate-threat|still-resilient)/.test(riskAdvice.key))) {
     const context = bestMoveTacticalContext(bestMove);
     const bestGivesCheck = Boolean(context.bestMoveGivesCheck);
     const policyAllowed = mateThreat || analyzedHistoryLength - lastPolicyPly >= INSIGHT_INTERVAL_PLIES;
-    let bestGivesMateThreat: boolean | null = null;
     if (policyAllowed && !mateThreat && !bestGivesCheck) {
       const preview = createGameRecord(currentSfen.value);
       if (appendUsiMove(preview, bestMove)) {
@@ -11474,6 +11597,15 @@ async function updateDedicatedCoachAdvice(
       playerScore: score ?? null,
     }) : null;
   }
+  // 作戦ボード・寄せの速度計に、この局面の読みを残す(新しく探索しない。docs/phase-guide-design.mdの6章)。
+  phaseReading.value = {
+    sfen: analyzedAt.sfen,
+    score: score ?? null,
+    mateThreat: mateThreatResult && mateThreatResult.status !== "unknown" ? mateThreat : null,
+    bestMove: bestMove ?? "",
+    bestGivesCheck: bestMove ? Boolean(bestMoveTacticalContext(bestMove).bestMoveGivesCheck) : false,
+    bestGivesMateThreat,
+  };
   let planLine: { key: string; text: string; topic?: string } | null = null;
   if (coachLevel.value === "detailed" && !winningMate && !moveFeedback && !urgentAdvice && !threatLine && !policyLine) {
     planLine = coachPlanPraise();

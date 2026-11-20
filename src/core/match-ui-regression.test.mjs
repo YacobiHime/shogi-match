@@ -619,11 +619,14 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/row\.kind === 'plan'[\s\S]*?data-plan-recommend[\s\S]*?openRecommendedPlan\('pregame'\)[\s\S]*?openPlanSheet\('pregame'\)/);
     expect(source).toMatch(/function openRecommendedPlan[\s\S]*?planSheetDetailId\.value = recommendedPlanId\.value;/);
     // 対局中の欄は「定跡の案内」。作戦を選ぶと「戦法」「囲い」を1行ずつ見せる。
-    expect(source).toMatch(/<h2>定跡の案内<\/h2>/);
+    // 定跡の案内が終わると、同じ欄の見出しは作戦ボード・寄せの速度計に替わる(docs/phase-guide-design.md)。
+    expect(source).toMatch(/<h2>\{\{ openingGuideShown \|\| !phaseGuide \? "定跡の案内" : phaseGuide\.title \}\}<\/h2>/);
     expect(source).toMatch(/<span>戦法・囲いを選ぶ<\/span>/);
     expect(source).toMatch(/data-plan-strategy><em>戦法<\/em>[\s\S]*?data-plan-castle><em>囲い<\/em>/);
     // 序盤(30手目まで)を過ぎたり、今の局面から組める作戦がなくなったりしたら、作戦の選択と欄を消す。
-    expect(source).toMatch(/v-if="openingGuideShown"[\s\S]{0,80}class="shogi-game__opening-guide"/);
+    // 消えた欄は、中盤・終盤では作戦ボード・寄せの速度計が使う(docs/phase-guide-design.md)。
+    expect(source).toMatch(/v-if="openingGuideShown \|\| phaseGuide"[\s\S]{0,80}class="shogi-game__opening-guide"/);
+    expect(source).toMatch(/v-if="!openingGuideShown && phaseGuide"[\s\S]{0,80}class="shogi-game__phase-guide"/);
     expect(source).toMatch(/const PLAN_CHOICE_MAX_PLY = 30;/);
     expect(source).toMatch(/moveHistory\.length > PLAN_CHOICE_MAX_PLY\) return false;/);
     expect(source).toMatch(/buildable\.strategies\.has\(id\)/);

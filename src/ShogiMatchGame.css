@@ -863,6 +863,134 @@
   font-size: 0.95em;
   text-align: center;
 }
+/* ===== 作戦ボード(中盤)と寄せの速度計(終盤)。docs/phase-guide-design.md ===== */
+.shogi-game__phase-guide {
+  --phase-off: rgba(255, 252, 244, 0.16);
+  --phase-good: #6fcf8a;
+  --phase-risk: #ef7d6b;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  min-width: 0;
+}
+.shogi-game__phase-head {
+  display: flex;
+  gap: 0.5em;
+  align-items: baseline;
+  min-width: 0;
+}
+/* 見出し(h2)を隠す縦積みの画面で、何の欄かを言う小さな札。見出しが見える画面では出さない。 */
+.shogi-game__phase-tag {
+  display: none;
+  flex: none;
+  padding: 0.05em 0.5em;
+  border: 1px solid var(--amber);
+  border-radius: 1em;
+  color: var(--amber);
+  font-size: 0.75em;
+  font-weight: 700;
+}
+.shogi-game--stack .shogi-game__phase-tag,
+.shogi-game--side.shogi-game--short .shogi-game__phase-tag {
+  display: inline-block;
+}
+/* 欄の段落の書式(紫の線と帯。.shogi-game__opening-guide p)は、作戦ボードでは使わない。 */
+.shogi-game__opening-guide .shogi-game__phase-guide p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 1.45;
+}
+.shogi-game__opening-guide .shogi-game__phase-main {
+  min-width: 0;
+  font-size: 1em;
+  font-weight: 700;
+}
+.shogi-game__phase-action::before {
+  content: "▶ ";
+  color: var(--amber);
+}
+.shogi-game__opening-guide .shogi-game__phase-guide .shogi-game__phase-intro,
+.shogi-game__opening-guide .shogi-game__phase-guide .shogi-game__phase-note {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+.shogi-game__phase-note::before {
+  content: "・";
+}
+/* 2つの玉の行は、入る幅なら横に並べ、狭ければ1列に折り返す(重ねない)。 */
+.shogi-game__phase-kings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11em, 1fr));
+  gap: 0.2em 0.8em;
+}
+.shogi-game__phase-king {
+  display: flex;
+  gap: 0.4em;
+  align-items: center;
+  min-width: 0;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.shogi-game__phase-king b {
+  color: var(--muted);
+  font-weight: 500;
+}
+.shogi-game__phase-pips,
+.shogi-game__phase-bars {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+.shogi-game__phase-pips i {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 2px;
+  background: var(--phase-off);
+}
+.shogi-game__phase-pips i.on {
+  background: var(--amber);
+}
+.shogi-game__phase-meter {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 0.25em 0.5em;
+  align-items: center;
+  font-size: 0.88em;
+}
+.shogi-game__phase-meter b {
+  color: var(--muted);
+  font-weight: 500;
+}
+.shogi-game__phase-bars {
+  gap: 3px;
+}
+.shogi-game__phase-bars i {
+  width: 1.1em;
+  height: 0.75em;
+  border-radius: 2px;
+  background: var(--phase-off);
+}
+/* 相手玉は攻めの色(緑)、自玉は危険の色(赤)。段の言葉をいつも並べ、色だけで伝えない(U:7-3)。 */
+.shogi-game__phase-bars--attack i.on {
+  background: var(--phase-good);
+}
+.shogi-game__phase-bars--risk i.on {
+  background: var(--phase-risk);
+}
+.shogi-game__phase-meter--flash .shogi-game__phase-bars--attack i.on {
+  animation: shogi-phase-flash 0.6s ease-out;
+}
+@keyframes shogi-phase-flash {
+  0% { box-shadow: 0 0 0 0 rgba(111, 207, 138, 0.9); filter: brightness(1.6); }
+  100% { box-shadow: 0 0 0 0.35em rgba(111, 207, 138, 0); filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shogi-game__phase-meter--flash .shogi-game__phase-bars--attack i.on {
+    animation: none;
+  }
+}
 /* 選んだ作戦のカード。完成形の小さな盤と名前、完成までの残り。押すと作戦カードのシートを開く。 */
 .shogi-game__opening-plan {
   display: grid;

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作戦ボードと寄せの速度計 モックアップ</title>
+<!-- docs/phase-guide-design.md のモックアップ。色は対局画面のトークン(ShogiMatchGame.css)に合わせる。 -->
+<style>
+:root { --amber:#f1a54c; --ivory:#fffcf4; --muted:rgba(255,252,244,.72); --line:rgba(241,165,76,.5);
+  --guide-good:#6fcf8a; --guide-risk:#ef7d6b; --guide-off:rgba(255,252,244,.16); }
+body { margin:0; padding:16px; background:#1d303f; color:var(--ivory); font:15px/1.45 "Noto Sans JP",system-ui,sans-serif; }
+h1 { font-size:16px; color:var(--amber); margin:0 0 12px; }
+.row { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
+.frame { width:358px; } .frame--side { width:330px; }
+.cap { font-size:12px; color:var(--muted); margin:0 0 4px; }
+.guide { display:flex; flex-direction:column; gap:.4em; padding:.5em .6em; border:1px solid var(--line); border-left:3px solid var(--amber); background:rgba(23,38,50,.96); }
+.guide h2 { margin:0; color:var(--amber); font-size:.95em; text-align:center; }
+.frame:not(.frame--side) .guide h2 { display:none; }
+.pg__head { display:flex; gap:.5em; align-items:baseline; }
+.pg__tag { flex:none; padding:.05em .5em; border:1px solid var(--amber); border-radius:1em; color:var(--amber); font-size:.75em; font-weight:700; }
+.frame--side .pg__tag { display:none; }
+.pg__policy { margin:0; font-weight:700; }
+.pg__intro { margin:0; color:var(--muted); font-size:.8em; }
+.pg__kings { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.2em .8em; }
+.frame--side .pg__kings { grid-template-columns:1fr; }
+.pg__king { display:flex; gap:.4em; align-items:center; font-size:.85em; white-space:nowrap; }
+.pg__king b { min-width:4.2em; font-weight:500; color:var(--muted); }
+.pg__pips { display:inline-flex; gap:2px; }
+.pg__pips i { width:.7em; height:.7em; border-radius:2px; background:var(--guide-off); }
+.pg__pips i.on { background:var(--amber); }
+.pg__note { margin:0; font-size:.8em; color:var(--muted); }
+.pg__note::before { content:"・"; }
+.pg__meter { display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:.25em .5em; align-items:center; font-size:.88em; }
+.pg__meter b { font-weight:500; color:var(--muted); }
+.pg__bars { display:inline-flex; gap:3px; }
+.pg__bars i { width:1.1em; height:.75em; border-radius:2px; background:var(--guide-off); }
+.pg__bars--attack i.on { background:var(--guide-good); }
+.pg__bars--risk i.on { background:var(--guide-risk); }
+.pg__action { margin:0; font-weight:700; }
+.pg__action::before { content:"▶ "; color:var(--amber); }
+</style>
+</head>
+<body>
+<h1>作戦ボード（中盤）と寄せの速度計（終盤）</h1>
+<div class="row">
+  <div class="frame"><p class="cap">スマホ縦・中盤（はじめての1回）</p>
+    <section class="guide"><h2>作戦ボード</h2>
+      <div class="pg__head"><span class="pg__tag">作戦ボード</span><p class="pg__policy">攻めるなら3筋に駒を集めよう</p></div>
+      <p class="pg__intro">囲いの時間はおしまい。ここからは作戦ボードで方針を見よう</p>
+      <div class="pg__kings">
+        <span class="pg__king"><b>あなたの玉</b><span class="pg__pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>堅い</span>
+        <span class="pg__king"><b>相手の玉</b><span class="pg__pips"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span>ふつう</span>
+      </div>
+    </section></div>
+  <div class="frame"><p class="cap">スマホ縦・終盤</p>
+    <section class="guide"><h2>寄せの速度計</h2>
+      <div class="pg__head"><span class="pg__tag">寄せの速度計</span><p class="pg__action">詰めろをかけて、攻め合いで勝とう</p></div>
+      <div class="pg__meter">
+        <b>相手玉</b><span class="pg__bars pg__bars--attack"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span>詰めろをかけられる</span>
+        <b>自玉</b><span class="pg__bars pg__bars--risk"><i class="on"></i><i></i><i></i><i></i></span><span>安全</span>
+      </div>
+    </section></div>
+  <div class="frame frame--side"><p class="cap">横の画面・中盤</p>
+    <section class="guide"><h2>作戦ボード</h2>
+      <div class="pg__head"><span class="pg__tag">作戦ボード</span><p class="pg__policy">駒を交換して、局面を単純に</p></div>
+      <div class="pg__kings">
+        <span class="pg__king"><b>あなたの玉</b><span class="pg__pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>ふつう</span>
+        <span class="pg__king"><b>相手の玉</b><span class="pg__pips"><i class="on"></i><i></i><i></i><i></i><i></i></span>薄い</span>
+      </div>
+      <p class="pg__note">攻めるなら3筋（相手の守りが手薄だよ）</p>
+      <p class="pg__note">使えそうな手筋があるよ。閃きで答えを見られるよ</p>
+    </section></div>
+  <div class="frame frame--side"><p class="cap">横の画面・終盤（自玉が詰めろ）</p>
+    <section class="guide"><h2>寄せの速度計</h2>
+      <div class="pg__head"><span class="pg__tag">寄せの速度計</span><p class="pg__action">まず受けよう</p></div>
+      <div class="pg__meter">
+        <b>相手玉</b><span class="pg__bars pg__bars--attack"><i class="on"></i><i class="on"></i><i></i><i></i></span><span>迫っている</span>
+        <b>自玉</b><span class="pg__bars pg__bars--risk"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span>詰めろ</span>
+      </div>
+    </section></div>
+</div>
+</body>
+</html>
