@@ -176,3 +176,42 @@ describe('戦型の役割別追跡', () => {
       .toEqual(['角換わり', '棒銀', '腰掛け銀']);
   });
 });
+
+describe('石田流(docs/formation-detect-design.mdの18章)', async () => {
+  const { Position } = await import('tsshogi');
+  const { formationMove } = await import('./formation-tracker.mjs');
+  const START = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
+  /** 手順を指して、その側の名前(盤の札の並び)。 */
+  function namesAfter(moves, color) {
+    const position = Position.newBySFEN(START);
+    let state = createFormationState();
+    moves.split(' ').forEach((usi, index) => {
+      position.doMove(position.createMoveByUSI(usi));
+      state = updateFormationState(state, detectFormationSnapshot(position.sfen, master), formationMove(position.sfen, index + 1));
+    });
+    return formationNamesFromState(state, color);
+  }
+
+  test('早石田から7六飛に組むと、早石田でなく石田流と見せる', () => {
+    const names = namesAfter('7g7f 3c3d 7f7e 8c8d 2h7h 8d8e 5i4h 7a6b 4h3h 5a4b 3h2h 6c6d 3i3h 4b3b 7h7f 6b6c', 'black');
+    expect(names).toContain('石田流');
+    expect(names).not.toContain('早石田');
+    // 盤の札は3つまで。石田流が切れない。
+    expect(names.slice(0, 3)).toContain('石田流');
+  });
+
+  test('7筋の歩を交換して7六に飛車を引いた升田式の形も石田流', () => {
+    const names = namesAfter('7g7f 3c3d 7f7e 8c8d 2h7h 8d8e 7e7d 7c7d 7h7d 6a5b 7d7f 5a4b 5i4h 4b3b', 'black');
+    expect(names).toContain('石田流');
+    expect(names).not.toContain('早石田');
+  });
+
+  test('7八飛のまま(7六へ浮かない)は早石田', () => {
+    expect(namesAfter('7g7f 3c3d 7f7e 8c8d 2h7h 8d8e 5i4h 7a6b', 'black')).toContain('早石田');
+  });
+
+  test('後手の石田流(3二飛から3四飛)', () => {
+    const names = namesAfter('2g2f 3c3d 2f2e 3d3e 2e2d 2c2d 2h2d 8b3b 2d2h 5a6b 5i6h 6b7b 6h7h 7b8b 6i5h 7a7b 3g3f 3b3d', 'white');
+    expect(names).toContain('石田流');
+  });
+});

@@ -96,5 +96,8 @@ export const FORMATION_STRATEGY_RULES = Object.freeze([
   { name: 'ツノ銀中飛車', variants: [{ own: ['58R', '47S', '67S'] }] },
   { name: '中飛車左穴熊', variants: [{ own: ['58R', '99K', '98L'] }] },
   { name: '4→3戦法', variants: [{ own: ['78R'], visited: ['68R'] }] },
+  // 7八から7六へ浮いた飛車(7筋の歩を突き越した形と、7筋の歩を交換した升田式の形)。ひらがなすいしょうの規則は7五歩と居玉か右の囲いを
+  // 求めるので、7筋の歩を交換すると早石田のままだった(docs/formation-detect-design.mdの18章)。
+  { name: '石田流', maxPly: 40, variants: [{ own: ['76R'], ownNot: ['77P'], visited: ['78R'] }] },
   { name: '鬼殺し向かい飛車', maxPly: 20, variants: [{ own: ['88R', '77N'] }] },
 ]);
