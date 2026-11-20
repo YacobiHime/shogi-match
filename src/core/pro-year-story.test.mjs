@@ -342,3 +342,45 @@ describe('何年目か・絆・相手の格(docs/pro-year-design.mdの33章)', a
     expect(fourth.sceneQueue?.some((item) => item.id === 'pro-anniversary') ?? false).toBe(false);
   });
 });
+
+describe('羽音から取った夜・羽音の挑戦を退けた夜(docs/pro-year-design.mdの34章)', async () => {
+  const { hananeBeatId, HANANE_TAKE_ROTATION, HANANE_DEFEND_ROTATION } = await import('./pro-year-story.mjs');
+  const { PRO_YEAR_HANANE_SCENES } = await import('./pro-year-story-more.mjs');
+  const { storyEpisode } = await import('./story-mode.mjs');
+
+  it('永世称号＞取り返した＞はじめて＞無冠＞続けて退けた＞流れ＞回す', () => {
+    expect(hananeBeatId({ kind: 'take', shape: 'sweep', beats: 3, eternal: true })).toBe('pro-beat-hanane-eternal');
+    expect(hananeBeatId({ kind: 'retake', shape: 'sweep', beats: 0, retake: true })).toBe('pro-beat-hanane-retake');
+    expect(hananeBeatId({ kind: 'take', shape: 'sweep', beats: 0, mukan: true })).toBe('pro-beat-hanane-take-first');
+    expect(hananeBeatId({ kind: 'defend', shape: 'sweep', beats: 0, defendRun: 1 })).toBe('pro-beat-hanane-defend-first');
+    expect(hananeBeatId({ kind: 'take', shape: 'sweep', beats: 1, mukan: true })).toBe('pro-beat-hanane-mukan');
+    expect(hananeBeatId({ kind: 'defend', shape: 'sweep', beats: 1, defendRun: 2 })).toBe('pro-beat-hanane-defend-again');
+    for (const [shape, take, defend] of [['comeback', 'take-comeback', 'defend-comeback'], ['sweep', 'take-sweep', 'defend-sweep'], ['fullset', 'take-fullset', 'defend-fullset']]) {
+      expect(hananeBeatId({ kind: 'take', shape, beats: 1 })).toBe(`pro-beat-hanane-${take}`);
+      expect(hananeBeatId({ kind: 'defend', shape, beats: 1, defendRun: 1 })).toBe(`pro-beat-hanane-${defend}`);
+    }
+    // 流れで決まらないときは、勝った回数で回す。5度目の番勝負からは「何度目か」の夜も入る。
+    const takes = [1, 2, 3, 4].map((beats) => hananeBeatId({ kind: 'take', shape: 'plain', beats }));
+    expect(takes).toEqual([...HANANE_TAKE_ROTATION]);
+    const defends = [1, 2, 3, 4].map((beats) => hananeBeatId({ kind: 'defend', shape: 'plain', beats, defendRun: 1 }));
+    expect(defends).toEqual([...HANANE_DEFEND_ROTATION]);
+    expect(hananeBeatId({ kind: 'take', shape: 'plain', beats: 5, series: 4 })).toBe('pro-beat-hanane-long');
+    expect(hananeBeatId({ kind: 'take', shape: 'plain', beats: 5, series: 2 })).toBe('pro-beat-hanane');
+  });
+
+  it('台本: 羽音は慰めも応援も言わず、差し込みが残らず、物語のサブで読み直せる', () => {
+    expect(Object.keys(PRO_YEAR_HANANE_SCENES).length).toBeGreaterThanOrEqual(15);
+    for (const id of Object.keys(PRO_YEAR_HANANE_SCENES)) {
+      expect(storyEpisode(`pro:${id}`)?.scene, id).toBe(id);
+      const plain = proYearScene(id, { playerName: 'やこび' });
+      expect(plain.title, id).not.toMatch(/\{/);
+      expect(plain.lines.map((entry) => `${entry.name ?? ''}${entry.text}`).join(''), id).not.toMatch(/\{[a-zA-Z]+\}/);
+      for (const entry of plain.lines.filter((line) => line.who === 'hanane')) expect(entry.text, id).not.toMatch(/応援|がんば|！|です|ます/);
+      for (const entry of plain.lines.filter((line) => line.who === 'momoka')) expect(entry.face, id).not.toBe('smile');
+    }
+    const filled = proYearScene('pro-beat-hanane-take-sweep', { playerName: 'やこび', vars: { title: '王座', score: '3勝0敗', played: '3', result: '王座戦の番勝負が終わった。' } });
+    const text = filled.lines.map((entry) => entry.text).join('\n');
+    expect(text).toContain('3勝0敗');
+    expect(text).toContain('3局、一度も勝たせてもらえなかった。');
+  });
+});

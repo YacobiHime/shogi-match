@@ -7,7 +7,7 @@ import { NOVEL_PEOPLE, sceneText } from './team-story.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { originSceneVars } from './pro-year-origin.mjs';
 import { bondLevel } from './pro-bonds.mjs';
-import { PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
+import { PRO_YEAR_HANANE_SCENES, PRO_YEAR_LIFE_SCENES, PRO_YEAR_MOOD_SCENES, PRO_YEAR_MORE_SCENES, SCENERY_LINES, SEAL_ROTATIONS } from './pro-year-story-more.mjs';
 
 /** 台本の1行。fxは演出(docs/novel-scene-design.mdの12章、書き方はdocs/novel-authoring-guide.md)。 */
 const line = (who, face, text, fx = {}) => Object.freeze({ who, face, text, ...fx });
@@ -566,6 +566,8 @@ export const PRO_YEAR_SCENES = Object.freeze({
   ...PRO_YEAR_MOOD_SCENES,
   // 何年目か・絆・相手の格で分かれる台本(33章)。
   ...PRO_YEAR_LIFE_SCENES,
+  // 羽音から取った夜・羽音の挑戦を退けた夜(34章)。
+  ...PRO_YEAR_HANANE_SCENES,
 });
 
 /**
@@ -867,6 +869,36 @@ export function seriesShape(games, need) {
   if (!userWon && userNearFirst) return 'collapse';
   if (need > 1 && loser === need - 1) return 'fullset';
   return 'plain';
+}
+
+/** 羽音から取った夜の、流れで決まらないときに回す台本(34章)。 */
+export const HANANE_TAKE_ROTATION = Object.freeze(['pro-beat-hanane', 'pro-beat-hanane-2', 'pro-beat-hanane-take-3', 'pro-beat-hanane-take-4']);
+/** 羽音の挑戦を退けた夜の、流れで決まらないときに回す台本(34章)。 */
+export const HANANE_DEFEND_ROTATION = Object.freeze(['pro-beat-hanane', 'pro-beat-hanane-2', 'pro-beat-hanane-defend-3', 'pro-beat-hanane-defend-4']);
+/** 羽音とのタイトル戦の番勝負が、この数を超えたら(何度目か)の夜を回しに入れる(34章)。 */
+export const HANANE_LONG_SERIES = 5;
+
+/**
+ * 羽音との番勝負に勝った夜の台本のid(34章)。
+ * 順：永世称号＞取り返した＞はじめて（奪取・防衛ごと）＞羽音を無冠にした＞同じ棋戦で続けて退けた＞カド番からの逆転＞ストレート＞フルセット＞回す。
+ * @param {{ kind: string, shape: string, beats?: number, series?: number, retake?: boolean, eternal?: boolean, mukan?: boolean, defendRun?: number }} input
+ *   kindは19章の結果(take・retake・defend)、shapeは`seriesShape`、beatsは前に羽音との番勝負に勝った回数(奪取と防衛で別に数える)、
+ *   seriesは前に羽音とタイトル戦の番勝負を指した回数、retakeは羽音に取られたタイトルを取り返したか、
+ *   mukanは羽音のタイトルがなくなったか、defendRunはこの棋戦で羽音を続けて退けた回数(今回を入れる)。
+ * @returns {string}
+ */
+export function hananeBeatId({ kind, shape, beats = 0, series = 0, retake = false, eternal = false, mukan = false, defendRun = 0 }) {
+  const defend = kind === 'defend';
+  if (eternal) return 'pro-beat-hanane-eternal';
+  if (!defend && retake) return 'pro-beat-hanane-retake';
+  if (beats === 0) return defend ? 'pro-beat-hanane-defend-first' : 'pro-beat-hanane-take-first';
+  if (!defend && mukan) return 'pro-beat-hanane-mukan';
+  if (defend && defendRun >= 2) return 'pro-beat-hanane-defend-again';
+  if (shape === 'comeback') return defend ? 'pro-beat-hanane-defend-comeback' : 'pro-beat-hanane-take-comeback';
+  if (shape === 'sweep') return defend ? 'pro-beat-hanane-defend-sweep' : 'pro-beat-hanane-take-sweep';
+  if (shape === 'fullset') return defend ? 'pro-beat-hanane-defend-fullset' : 'pro-beat-hanane-take-fullset';
+  const pool = [...(defend ? HANANE_DEFEND_ROTATION : HANANE_TAKE_ROTATION), ...(series + 1 >= HANANE_LONG_SERIES ? ['pro-beat-hanane-long'] : [])];
+  return pool[(beats - 1) % pool.length];
 }
 
 /**

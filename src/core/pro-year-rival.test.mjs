@@ -110,3 +110,42 @@ describe('研究会で指していないのに「何度も指した」と言わ�
     expect(textOf(studied)).toContain('研究会では何度も指したけど');
   });
 });
+
+describe('羽音に勝った番勝負の夜を、流れと記録で分ける(34章)', () => {
+  /** 番勝負の相手を羽音にして、決着まで指す。 */
+  function finishVsHanane(base, results, log = []) {
+    let state = structuredClone(base);
+    const opponentId = state.pending.opponentId;
+    for (const player of Object.values(state.players)) if (player.story === HANANE) player.story = '';
+    state.players[opponentId].story = HANANE;
+    state.user.seriesLog = log.map((entry) => ({ ...entry, opponentId }));
+    // 番勝負のあいだに、ほかの棋戦の対局もはさまる。番勝負の局はresultsの順、ほかは勝つ。
+    let index = 0;
+    for (let step = 0; step < 200 && !state.yearDone; step += 1) {
+      if (!state.pending) state = advanceToNextGame(state);
+      if (state.yearDone) break;
+      const inSeriesGame = state.pending.kind === 'finals' && state.pending.opponentId === opponentId;
+      state = clearProYearResults(recordProGame(state, inSeriesGame ? results[index++] ?? 'win' : 'win').state);
+      const night = (state.sceneQueue ?? []).find((item) => item.id.startsWith('pro-beat-hanane'));
+      if (night) return night;
+      state = advanceToNextGame(state);
+    }
+    return null;
+  }
+  const base = inSeries();
+
+  it('はじめて羽音から取ったら、はじめての夜。ストレートなら勝ちの数と局数が入る', () => {
+    const first = finishVsHanane(base, Array(7).fill('win'));
+    expect(first?.id).toBe('pro-beat-hanane-take-first');
+    const again = finishVsHanane(base, Array(7).fill('win'), [{ event: 'x', won: true, kind: 'take' }]);
+    expect(again?.id).toBe('pro-beat-hanane-take-sweep');
+    expect(again.vars.score).toMatch(/^\d勝0敗$/);
+    expect(Number(again.vars.played)).toBeGreaterThan(0);
+  });
+
+  it('羽音に取られたことのある棋戦なら、取り返した夜', () => {
+    const event = base.pending.eventId;
+    const night = finishVsHanane(base, Array(7).fill('win'), [{ event, won: false, kind: 'lost' }]);
+    expect(night?.id).toBe('pro-beat-hanane-retake');
+  });
+});

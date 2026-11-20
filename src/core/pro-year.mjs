@@ -33,7 +33,7 @@ import {
   ETERNAL_RULES, applyTitleResult, crownsLabel, emptyTitleRecord, eternalProgress, eternalRuleText, isTitleWin, seriesStatusText,
   titleCoachLine, titleKind, titleResultText,
 } from './pro-title.mjs';
-import { isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
+import { hananeBeatId, isStreakSceneMark, proYearRival, queueProYearScene, rivalRecordText, rivalResultText, careerYears, rotateScene, seriesNightId, seriesShape } from './pro-year-story.mjs';
 import {
   BOND_DEFS, BOND_MEET, BOND_ROLES, BOND_SMALL, addBond, bondLevel, bondNext, emptyBonds, hasPerk, markBondScene, peerPerk, pickPeople, roleOf,
 } from './pro-bonds.mjs';
@@ -879,11 +879,40 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   // 相手が羽音・善彦なら、番勝負のあとの夜は相手ごとの場面1つ(docs/pro-year-design.mdの22-3の4)。永世称号・連覇はその場面の1行で言う。
   const rival = proYearRival(opponentId ? state.players[opponentId] : null);
   const eternalName = eternalNow ? ETERNAL_RULES[event.id]?.name ?? '' : '';
+  // 番勝負の流れ(32-3。ストレート・カド番からの逆転・王手から逆転された・フルセット)。羽音の夜(34章)も使う。
+  const played = stage.rounds.flat().map((id) => state.games[id]).filter((entry) => entry?.winner);
+  const games = played.map((entry) => (entry.winner === 'a' ? entry.a : entry.b) === PRO_USER_ID);
+  const shape = seriesShape(games, series.need ?? 0);
   if (rival) {
     const won = isTitleWin(kind);
     const base = `pro-${won ? 'beat' : 'lost'}-${rival}`;
-    // 羽音との番勝負のあとは、1回目と2回目からの台本を回す(docs/pro-year-design.mdの31-3)。
-    const id = rival === 'hanane' ? rotateScene([base, `${base}-2`], (state.scenes ?? []).filter((mark) => mark.startsWith(`${base}`)).length) : base;
+    let id = base;
+    let streakWord = '';
+    if (rival === 'hanane' && won) {
+      // 羽音に勝った夜は、奪取か防衛か・流れ・何度目か・取り返したか・無冠にしたかで分ける(34章)。
+      const log = state.user.seriesLog ?? [];
+      const withHanane = log.filter((entry) => proYearRival(state.players[entry.opponentId]) === 'hanane');
+      const defend = kind === 'defend';
+      const beats = withHanane.filter((entry) => entry.won && (entry.kind === 'defend') === defend).length;
+      let defendRun = defend ? 1 : 0;
+      if (defend) {
+        const sameEvent = log.filter((entry) => entry.event === event.id);
+        for (let index = sameEvent.length - 1; index >= 0; index -= 1) {
+          const entry = sameEvent[index];
+          if (entry.kind !== 'defend' || proYearRival(state.players[entry.opponentId]) !== 'hanane') break;
+          defendRun += 1;
+        }
+      }
+      id = hananeBeatId({
+        kind, shape, beats, series: withHanane.length, eternal: eternalNow, defendRun,
+        retake: !defend && withHanane.some((entry) => entry.event === event.id && entry.kind === 'lost'),
+        mukan: !defend && !TITLE_EVENTS.some((titleId) => titleId !== event.id && state.titles[titleId] === opponentId),
+      });
+      streakWord = String(id === 'pro-beat-hanane-long' ? withHanane.length + 1 : defendRun);
+    } else if (rival === 'hanane') {
+      // 羽音に敗れた夜は、1回目と2回目からの台本を回す(docs/pro-year-design.mdの31-3)。
+      id = rotateScene([base, `${base}-2`], (state.scenes ?? []).filter((mark) => mark.startsWith(`${base}`)).length);
+    }
     queueProYearScene(state, {
       key: `${id}:${event.id}:${state.fy}`,
       id,
@@ -891,6 +920,8 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
         title: event.short,
         result: rivalResultText({ rival, kind, title: event.short }),
         record: won ? rivalRecordText({ eternal: eternalName, streak: kind === 'defend' ? after.streak : 0 }) : '',
+        score: `${score[0]}勝${score[1]}敗`, played: String(games.length),
+        ...(streakWord ? { streak: streakWord } : {}),
       },
     });
   }
@@ -899,10 +930,7 @@ function settleUserTitle(state, cycle, stage, event, won, holder) {
   // はじめてタイトルを取った夜(31-3。羽音・善彦から取ったときは、相手ごとの場面が言う)。
   const firstTitleNight = kind === 'take' && firstEver && !rival;
   if (firstTitleNight) queueProYearScene(state, { key: 'pro-first-title', id: 'pro-first-title', vars: { title: event.short } });
-  // 番勝負の流れ(32-3。ストレート・カド番からの逆転・王手から逆転された・フルセット)と、番勝負の記録(雪辱・同じ挑戦者を見る)。
-  const played = stage.rounds.flat().map((id) => state.games[id]).filter((entry) => entry?.winner);
-  const games = played.map((entry) => (entry.winner === 'a' ? entry.a : entry.b) === PRO_USER_ID);
-  const shape = seriesShape(games, series.need ?? 0);
+  // 番勝負の記録(雪辱・同じ挑戦者を見る)。
   state.user.seriesLog = [...(state.user.seriesLog ?? []), {
     event: event.id, fy: state.fy, opponentId: opponentId ?? '', won: isTitleWin(kind), kind, score, shape,
   }].slice(-40);
