@@ -81,6 +81,10 @@
             <span v-for="key in APTITUDE_KEYS" :key="key">{{ APTITUDE_SHORT[key] }}<b>{{ view.aptitudes[key].rank }}</b></span>
           </div>
         </div>
+        <div v-if="view.charms.length" data-disciple-charms>
+          <small>お守り</small>
+          <div class="disciple__charms"><span v-for="charm in view.charms" :key="charm.id" :title="charm.text">{{ charm.name }}<b v-if="charm.count > 1">×{{ charm.count }}</b></span></div>
+        </div>
       </aside>
 
       <!-- スキルを覚える条件(25-3) -->
@@ -140,6 +144,14 @@
           <div class="disciple__choice disciple__choice--two">
             <button v-for="option in PLANS.ending" :key="option.id" type="button" class="disciple__opt" :aria-pressed="plan.ending === option.id"
               :data-disciple-plan="option.id" @click="plan.ending = option.id">{{ option.label }}<small>{{ option.note }}</small></button>
+          </div>
+        </template>
+        <template v-if="view.big && view.charms.length">
+          <h4>お守りを持たせる</h4>
+          <div class="disciple__choice disciple__choice--charm">
+            <button type="button" class="disciple__opt" :aria-pressed="!charmPick" data-disciple-charm="" @click="charmPick = ''">持たせない<small>次の大一番にとっておく</small></button>
+            <button v-for="charm in view.charms" :key="charm.id" type="button" class="disciple__opt" :aria-pressed="charmPick === charm.id"
+              :data-disciple-charm="charm.id" @click="charmPick = charm.id">{{ charm.name }}<small>{{ charm.text }}</small></button>
           </div>
         </template>
         <div class="disciple__row">
@@ -277,12 +289,26 @@
           :style="{ left: `${markLeft(mark.ply)}%`, top: markRaised(index) ? '2.8rem' : '0.3rem' }" :data-disciple-mark="index" @click="watch.selected = index">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
       </div>
     </section>
+
+    <!-- 問題の場面(26章)。予定を止めず、上に重ねて出す。答えたら効き目を入れる。 -->
+    <NovelScene
+      v-if="sceneData"
+      ref="sceneEl"
+      :scene="sceneData"
+      :asset-base-url="assetBaseUrl"
+      data-disciple-scene
+      @choose="sceneChoice = $event.value"
+      @done="closeScene"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch as vueWatch, type PropType } from "vue";
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import NovelScene from "./NovelScene.vue";
+import { libraryScene } from "./core/novel-library.mjs";
+import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, CAUSE_ORDER, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, discipleWatchMoves, skillById, statRank, watchMarks,
@@ -299,6 +325,8 @@ const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   /** 観戦の本局を指すエンジン(対局画面のensureEngineFactory)。なければ観戦しない(結果だけ)。 */
   engineFactory: { type: Function as PropType<(() => Promise<EngineFactory>) | null>, default: null },
+  /** 場面の地の文の名前(師匠)。 */
+  playerName: { type: String, default: "" },
 });
 const emit = defineEmits<{ close: [] }>();
 
@@ -397,19 +425,43 @@ function act(kind: "rest" | "outing" | "study" | "master") {
   say(growthLine(result) || result.text);
 }
 /** 覚えたスキルと、引き出しに増えたカードの知らせ(G:3 出来事の重さ。ふだんの一言より先に言う)。 */
-function growthLine(result: { newSkills?: string[]; newCards?: string[] }) {
+function growthLine(result: { newSkills?: string[]; newCards?: string[]; newCharms?: string[]; overcome?: boolean }) {
+  if (result.overcome) return "先生、勝てました。もう、大事な日もこわくないです";
   const skills = (result.newSkills ?? []).map((id) => `「${skillById(id)?.name}」`).join("");
-  if (skills) return `先生、わたし、スキル${skills}を覚えました！`;
+  if (skills) return `先生、スキル${skills}を覚えました！`;
   const cards = (result.newCards ?? []).map((id) => `「${cardById(id)?.label}」`).join("");
-  return cards ? `指導の引き出しに${cards}が増えた` : "";
+  if (cards) return `指導の引き出しに${cards}が増えた`;
+  const charms = (result.newCharms ?? []).map((id) => `「${charmById(id)?.name}」`).join("");
+  return charms ? `お守り${charms}を手に入れた。大一番に持たせられる` : "";
 }
 const skillsOpen = ref(false);
 
+// ---- 問題の場面(26章)
+const sceneEl = ref<InstanceType<typeof NovelScene> | null>(null);
+const sceneChoice = ref<string | null>(null);
+/** いま見せる場面(言葉の窓・観戦・終わりの間は待つ)。 */
+const sceneData = computed(() => {
+  const pending = view.value?.scene;
+  if (!pending || view.value?.kind === "words" || view.value?.end || watch.value) return null;
+  return libraryScene(pending.script, { playerName: props.playerName, vars: pending.vars });
+});
+function closeScene() {
+  if (!state.value) return;
+  const { state: next, text } = resolveScene(state.value, sceneChoice.value);
+  sceneChoice.value = null;
+  commit(next);
+  if (text) say(text);
+}
+
 // ---- 入会試験・例会
 const plan = reactive({ opening: "own", ending: "wait" });
+/** 大一番に持たせるお守り(26章)。空なら持たせない。 */
+const charmPick = ref("");
 function play() {
   const big = Boolean(view.value?.big);
-  const { state: next, result } = playEvent(state.value, { plan: big ? { ...plan } : null });
+  const charm = big ? charmPick.value || null : null;
+  charmPick.value = "";
+  const { state: next, result } = playEvent(state.value, { plan: big ? { ...plan } : null, charm });
   commit(next);
   const grown = growthLine(result);
   if (grown) return say(grown);
@@ -424,7 +476,7 @@ function words(id: string) {
 // ---- 観戦と見立て(24章)。その日のはじめの局をエンジンが本当に指し、終局したら崩れた場面に印を付ける。
 type WatchMark = { ply: number; loss: number; cause: string; clues: string[] };
 type Watch = {
-  label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string } | null;
+  label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string } | null; charm: string | null;
   entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
   marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
 };
@@ -436,13 +488,14 @@ onBeforeUnmount(() => engineGame.dispose());
 function startWatch() {
   const big = Boolean(view.value?.big);
   const planNow = big ? { ...plan } : null;
-  const made = watchSpec(state.value, { plan: planNow });
+  const charm = big ? charmPick.value || null : null;
+  const made = watchSpec(state.value, { plan: planNow, charm });
   if (!made) {
     play();
     return;
   }
   const current: Watch = {
-    label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, entries: [], end: null, win: false, done: false,
+    label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, entries: [], end: null, win: false, done: false,
     marks: [], guesses: [], selected: -1, error: "",
   };
   watch.value = current;
@@ -470,7 +523,8 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   // 弟子から見たいちばん低い評価値(劣勢から勝つと、逆境の粘りの条件に数える。25-3)。
   const sign = current.side === "black" ? 1 : -1;
   const watchedMin = Math.min(0, ...current.entries.map((entry) => sign * (Number(entry?.eval) || 0)));
-  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin });
+  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm });
+  charmPick.value = "";
   commit(next);
   current.marks = watchMarks(discipleWatchMoves(current.entries, current.side), { dan: eyeDan(state.value?.eye) });
   current.guesses = current.marks.map(() => null);
@@ -509,7 +563,7 @@ function closeWatch() {
     const { state: next, revealed, results } = applyFindings(state.value, current.marks, current.guesses);
     commit(next);
     const right = results.filter((item) => item.right).length;
-    say(revealed ? `先生……わたしの弱点、「${revealed}」なんですね` : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
+    say(revealed ? `先生……弱点は「${revealed}」なんですね` : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
   }
 }
 /** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
@@ -557,6 +611,10 @@ const markLeft = (ply: number) => Math.min(92, Math.max(4, (ply / Math.max(watch
 
 /** 戻る操作。観戦・稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
 function goBack() {
+  if (sceneData.value) {
+    if (!sceneEl.value?.goBack()) closeScene();
+    return true;
+  }
   if (watch.value) {
     closeWatch();
     return true;
@@ -693,6 +751,11 @@ defineExpose({ goBack });
 .shogi-game .disciple__note { margin: 0.4rem 0 0; }
 .shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
 
+/* お守り(26章) */
+.shogi-game .disciple__charms { display: flex; flex-wrap: wrap; gap: 0.2rem; }
+.shogi-game .disciple__charms span { padding: 0.08rem 0.4rem; border-radius: 999px; background: #fde3e6; color: #8a2a3a; font-size: 0.66rem; font-weight: 800; }
+.shogi-game .disciple__choice--charm { grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); }
+.shogi-game .disciple [data-disciple-scene] { z-index: 9; }
 /* 指導の引き出し(25-1)・研究会と師匠の予定(25-2)・スキルの条件(25-3) */
 .shogi-game .disciple__dock--free { grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr)); }
 .shogi-game .disciple__lesson h3 small { margin-left: auto; font-size: 0.74rem; }

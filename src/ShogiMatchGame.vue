@@ -472,7 +472,7 @@
       @start-match="startResearchMatch"
     />
     <!-- 師匠の1年(docs/disciple-mode-design.md)。 -->
-    <ShogiDisciple v-if="discipleOpen" ref="discipleView" :asset-base-url="assetBaseUrl" :engine-factory="ensureEngineFactory" @close="discipleOpen = false" />
+    <ShogiDisciple v-if="discipleOpen" ref="discipleView" :asset-base-url="assetBaseUrl" :engine-factory="ensureEngineFactory" :player-name="playerDisplayName(playerName)" @close="discipleOpen = false" />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
       :player-profile="playerProfile"

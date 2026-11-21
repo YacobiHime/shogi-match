@@ -8,7 +8,8 @@ import {
   APTITUDE_KEYS, DISCIPLES, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
   failChance, judgeGuess, raiseAptitude, skillById, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
-import { cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
+import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
+import { charmList, checkScenes, overcomeSlump, pendingScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 
 export const DISCIPLE_RUN_KEY = 'yacobihime:shogi-match:disciple:v1';
@@ -116,6 +117,10 @@ export function createDiscipleRun({ seed, discipleId }) {
     kenshukai: null,
     words: null,
     lastEvent: null,
+    // 入門の場面(12-1)から始まる。場面は予定を止めない(26章)。
+    sceneQueue: ['intro'],
+    scenesSeen: {},
+    charms: {},
     log: [{ turn: 0, text: `${base.name}が弟子入りした` }],
     end: null,
   };
@@ -205,6 +210,7 @@ function advanceTurn(state, rng) {
   if (rng.next() < 0.12) state.mood = clamp(state.mood + (rng.next() < 0.5 ? -1 : 1), -2, 2);
   state.friends = assignFriends(rng);
   if (state.turn >= MAX_TURNS && !state.end) finish(state, 'timeup');
+  checkScenes(state, { calendar: turnCalendar(state.turn, state.startGrade) });
 }
 
 /**
@@ -276,7 +282,7 @@ export function chooseAction(state, action) {
     result = { kind: 'outing', gains: { [key]: 5 }, text: `一緒に出かけた。やる気が上がった（${STAT_LABELS[key]}＋5）` };
   }
   next.log.push({ turn: next.turn, text: result.text });
-  Object.assign(result, growth(next));
+  Object.assign(result, growth(next, { outing: action.kind === 'outing', rng }));
   advanceTurn(next, rng);
   next.rng = rng.state;
   return { state: next, result };
@@ -286,7 +292,7 @@ export function chooseAction(state, action) {
  * 引き出しに増えたカードと、覚えたスキル(25章)。状態に書き足し、知らせる中身を返す。
  * @param {any} state 書き換えてよい写し
  */
-function growth(state) {
+function growth(state, { outing = false, rng = undefined } = {}) {
   state.deck ??= [];
   const newCards = [];
   for (const unlock of CARD_UNLOCKS) {
@@ -300,7 +306,9 @@ function growth(state) {
     state.skills.push(id);
     state.log.push({ turn: state.turn, text: `スキル「${skillById(id)?.name}」を覚えた` });
   }
-  return { newCards, newSkills: learned };
+  // お守り(26章): 仲間の絆と、出かけた先で。
+  const newCharms = receiveCharms(state, { outing, rng });
+  return { newCards, newSkills: learned, newCharms };
 }
 
 /** 入会試験を受けるクラス。相手が弟子より少しだけ弱いクラス(大一番の勝つ見込みが6割前後になる。23-3)。 */
@@ -376,19 +384,22 @@ function ensureKenshukai(state) {
 /**
  * 入会試験・例会を弟子が指す(観戦しない局)。その日の局を全部決め、ターンを進める。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[], watchedMin?: number | null }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け。
+ * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[], watchedMin?: number | null, charm?: string | null }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け。
+ *   charmは大一番に持たせたお守り(その日の局だけ効き、使うとなくなる。26章)
  *   watchedMinは観戦した局の弟子から見たいちばん低い評価値(劣勢から勝つと逆境の粘りの条件に数える)
- * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[] } }}
+ * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[], charm?: string | null, overcome?: boolean } }}
  */
-export function playEvent(state, { plan = null, forced = [], watchedMin = null } = {}) {
+export function playEvent(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return { state, result: { kind: 'reikai', games: [], wins: 0, losses: 0, text: '', events: [] } };
   const next = ensureKenshukai(structuredClone(state));
   const rng = createRng(next.rng);
   const big = isBigEvent(state);
+  const charmUsed = big && charm && (state.charms?.[charm] ?? 0) > 0 ? charm : null;
   const games = [];
   const events = [];
   const startDay = next.kenshukai.dayNo;
+  const startClass = state.kenshukai ? state.kenshukai.cls : null;
   const startPhase = next.kenshukai.phase;
   // 試験は全局、例会はその日の局を指す(次の日の局が決まったら止める)。
   for (let guard = 0; guard < 12 && next.kenshukai.pending; guard += 1) {
@@ -398,8 +409,9 @@ export function playEvent(state, { plan = null, forced = [], watchedMin = null }
     const member = run.world.members[run.pending.opponentId] ?? run.guests?.[run.pending.opponentId];
     const level = opponentLevel(member, run.cls);
     const battle = member?.style === 'ranging' ? 'ranging' : 'static';
-    const strength = currentStrength(next, { battle, time: 'fast' });
-    const fit = big && plan ? planFit(next, plan, { level }).bonus : 0;
+    const charmed = withCharm(next, charmUsed);
+    const strength = currentStrength(charmed, { battle, time: 'fast' });
+    const fit = big && plan ? planFit(charmed, plan, { level }).bonus : 0;
     const chance = clamp(winChance(effectiveLevel(strength), level) + fit, 0.03, 0.97);
     // 観戦した局は、エンジンが盤の上で決めた勝ち負け(19-6)。乱数は同じだけ進める(観戦してもしなくても、あとの局は同じ)。
     const roll = rng.next();
@@ -415,20 +427,27 @@ export function playEvent(state, { plan = null, forced = [], watchedMin = null }
   const losses = games.length - wins;
   if (big) next.bigWins = (next.bigWins ?? 0) + wins;
   if (games[0]?.watched && games[0].win && Number(watchedMin) <= COMEBACK_EVAL) next.comebacks = (next.comebacks ?? 0) + 1;
+  if (charmUsed) useCharm(next, charmUsed);
+  // 大一番で負け越すとやる気が1段下がる(不屈を覚えていれば下がらない。19-4の15)。
+  const bigLost = big && wins < losses;
+  if (bigLost && !next.skills.includes('unbroken')) next.mood = clamp(next.mood - 1, -2, 2);
+  const promoted = startClass !== null && next.kenshukai.cls > startClass;
+  const overcome = overcomeSlump(next, { big, wins, losses }, MAX_SKILLS);
   const label = kind === 'exam' ? '入会試験' : `第${startDay + 1}回例会`;
   const text = `${label} ${wins}勝${losses}敗${events.length ? `。${events.join('・')}` : ''}`;
   next.log.push({ turn: next.turn, text });
   next.stamina = clamp(next.stamina - 10, 0, 100);
-  next.lastEvent = { kind, label, games, wins, losses, events, big };
+  next.lastEvent = { kind, label, games, wins, losses, events, big, charm: charmUsed, overcome };
   const grown = growth(next);
   next.lastEvent.newSkills = grown.newSkills;
   next.lastEvent.newCards = grown.newCards;
   if (big || losses > 0) next.words = { big, lost: losses > 0 };
+  checkScenes(next, { event: { big, wins, losses, promoted } });
   if (next.kenshukai.cls >= A2 || next.kenshukai.qualified) finish(next, 'qualified');
   else if (next.kenshukai.cls >= TOP) finish(next, 'top');
   else advanceTurn(next, rng);
   next.rng = rng.state;
-  return { state: next, result: { kind, games, wins, losses, text, events, newSkills: grown.newSkills, newCards: grown.newCards } };
+  return { state: next, result: { kind, games, wins, losses, text, events, newSkills: grown.newSkills, newCards: grown.newCards, charm: charmUsed, overcome } };
 }
 
 // ---- 観戦(19-5・19-6・24章)
@@ -442,9 +461,9 @@ export const ENDING_ATTACK = Object.freeze({ attack: 0.3, wait: -0.3 });
  * 観戦する1局(その日のはじめの局)の本局の設定(engine-game.mjsのplayEngineGameに渡す)。授けた作戦は戦法と攻めの向きになる。
  * 研修会の挑戦がまだなければ作った状態も返す(試験の相手を決めるため)。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null }} [options]
+ * @param {{ plan?: { opening?: string, ending?: string } | null, charm?: string | null }} [options] charmは大一番に持たせたお守り
  */
-export function watchSpec(state, { plan = null } = {}) {
+export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return null;
   const next = ensureKenshukai(structuredClone(state));
@@ -453,7 +472,7 @@ export function watchSpec(state, { plan = null } = {}) {
   if (!member) return null;
   const level = opponentLevel(member, run.cls);
   const battle = member.style === 'ranging' ? 'ranging' : 'static';
-  const strength = currentStrength(next, { battle, time: 'fast' });
+  const strength = currentStrength(isBigEvent(state) ? withCharm(next, charm) : next, { battle, time: 'fast' });
   const attack = clamp(strength.attack + (ENDING_ATTACK[plan?.ending ?? ''] ?? 0), -1, 1);
   const side = run.pending.color === 'white' ? 'white' : 'black';
   const other = side === 'black' ? 'white' : 'black';
@@ -590,6 +609,8 @@ export function discipleView(state) {
     trainings: TRAININGS.map((training) => trainingPreview(state, training.id)),
     deck: lessonDeck(state),
     skillProgress: skillProgress(state),
+    charms: charmList(state),
+    scene: pendingScene(state),
     friends: FRIENDS.map((friend) => ({ ...friend, bond: state.bonds[friend.id] ?? 0 })),
     kenshukai: kenshukai ? { classLabel: kenshukai.classLabel, progress: kenshukai.progress, board: kenshukai.board, phase: kenshukai.phase } : null,
     big: isBigEvent(state),
