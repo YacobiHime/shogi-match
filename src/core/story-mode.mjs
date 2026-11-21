@@ -96,6 +96,11 @@ const discipleSubs = () => [
     ['disciple-promote', '師匠の1年で、弟子が研修会ではじめて昇級すると読めます。'],
     ['disciple-family', '師匠の1年で、弟子が例会で勝てない日が続くと読めます。'],
     ['disciple-slump', '師匠の1年で、弟子が大一番で続けて負けると読めます。'],
+    ['disciple-shoreikai', '師匠の1年で、弟子が奨励会に編入すると読めます。'],
+    ['disciple-shodan', '師匠の1年で、弟子が奨励会で初段になると読めます。'],
+    ['disciple-sandan', '師匠の1年で、弟子が三段リーグに入ると読めます。'],
+    ['disciple-pro', '師匠の1年で、弟子が四段になると読めます。'],
+    ['disciple-retired', '師匠の1年で、弟子が奨励会を退会すると読めます。'],
   ].map(([scene, unlock]) => fileSub(scene, '師匠の1年', unlock, { disciple: '弟子' }, 'disciple')),
 ];
 

@@ -2,8 +2,7 @@
 // 遊んでいる枠の中身は今までどおり`disciple:v1`に置き、ほかの枠は`disciple-slots:v1`にしまう(仕組みはsave-slots.mjs。棋士の1年と同じ)。
 // 画面に依存しない。
 
-import { DISCIPLE_RUN_KEY, turnCalendar } from './disciple-run.mjs';
-import { classLabel } from './kenshukai.mjs';
+import { DISCIPLE_RUN_KEY, placeText, turnCalendar } from './disciple-run.mjs';
 import { deleteSlotOf, loadSlotIndexOf, slotContents, switchSlotOf } from './save-slots.mjs';
 
 export const DISCIPLE_SLOTS_KEY = 'yacobihime:shogi-match:disciple-slots:v1';
@@ -33,13 +32,11 @@ export const DISCIPLE_SLOT_TEXT = Object.freeze({
 export function discipleSlotSummary(packed) {
   if (!packed || typeof packed !== 'object' || !packed.stats || !packed.name) return null;
   const calendar = turnCalendar(Number(packed.turn) || 0, packed.startGrade);
-  const ken = packed.kenshukai;
-  const cls = ken ? `研修会 ${classLabel(Number.isFinite(ken.cls) ? ken.cls : 0)}クラス` : '研修会前';
   return {
     name: String(packed.name),
     discipleId: String(packed.discipleId ?? ''),
     head: `${calendar.label}・${calendar.year}年目`,
-    place: cls,
+    place: placeText(packed),
     end: packed.end ? { rank: String(packed.end.rank ?? ''), text: String(packed.end.text ?? '') } : null,
     skills: Array.isArray(packed.skills) ? packed.skills.length : 0,
   };

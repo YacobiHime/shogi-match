@@ -149,6 +149,36 @@ export const DISCIPLE_SCENES = Object.freeze({
     }),
     fits: Object.freeze({ celebrate: ['minato'], next: ['tsumugi'], charm: ['ao'] }),
   }),
+  // 奨励会の節目(28章)。四段と退会は答えのない場面(育成の終わり)。
+  shoreikai: Object.freeze({
+    label: '奨励会へ', script: 'disciple-shoreikai',
+    effects: Object.freeze({
+      serious: { stats: { steady: 15 }, text: '気を引き締めるよう話した' },
+      enjoy: { mood: 1, text: '楽しもうと話した' },
+      peers: { bonds: { hayase: 1, makabe: 1 }, text: '同期と仲良くするよう話した' },
+    }),
+    fits: Object.freeze({ serious: ['tsumugi'], enjoy: ['minato'], peers: ['ao'] }),
+  }),
+  shodan: Object.freeze({
+    label: '初段の日', script: 'disciple-shodan',
+    effects: Object.freeze({
+      celebrate: { mood: 1, stamina: 10, text: 'お祝いをした' },
+      next: { aim: 1.25, text: '三段リーグまでの目標を決めた' },
+      charm: { charm: 'kachi', text: '勝守を渡した' },
+    }),
+    fits: Object.freeze({ celebrate: ['minato'], next: ['tsumugi'], charm: ['ao'] }),
+  }),
+  sandan: Object.freeze({
+    label: '三段リーグ', script: 'disciple-sandan',
+    effects: Object.freeze({
+      calm: { mood: 1, stamina: 10, text: '一期ずつでいいと話した' },
+      push: { stats: { reading: 15 }, mood: -1, text: '一期で抜けようと話した' },
+      study: { aim: 1.5, text: 'リーグの相手の棋譜を一緒に調べた' },
+    }),
+    fits: Object.freeze({ calm: ['minato'], push: ['ao'], study: ['tsumugi'] }),
+  }),
+  pro: Object.freeze({ label: '四段昇段', script: 'disciple-pro', effects: Object.freeze({}), fits: Object.freeze({}) }),
+  retired: Object.freeze({ label: '退会の日', script: 'disciple-retired', effects: Object.freeze({}), fits: Object.freeze({}) }),
 });
 
 /** 学校の試験の場面が起きる時期(期末の試験の前。1年に1回)。 */
@@ -181,6 +211,7 @@ export function queueScene(state, key) {
  */
 export function checkScenes(state, { calendar, event = null } = {}) {
   if (state.end) return;
+  // 学校の試験・家族の心配・スランプは、研修会のあいだと奨励会のあいだで同じ。
   if (calendar && calendar.month === SCHOOL_SCENE.month && calendar.half === SCHOOL_SCENE.half) {
     state.schoolYears ??= [];
     if (!state.schoolYears.includes(calendar.year)) {

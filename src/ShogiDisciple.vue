@@ -84,7 +84,7 @@
 
       <!-- 左の能力 -->
       <aside class="disciple__panel disciple__stats" aria-label="能力">
-        <div class="disciple__who"><b>{{ view.name }}</b><small>{{ view.kenshukai ? `研修会 ${view.kenshukai.classLabel}` : '研修会前' }}</small></div>
+        <div class="disciple__who"><b>{{ view.name }}</b><small>{{ view.place }}<template v-if="view.shoreikai">・{{ view.age }}歳</template></small></div>
         <div v-for="stat in view.stats" :key="stat.key" class="disciple__stat" :data-disciple-stat="stat.key">
           <span class="disciple__stat-name">{{ stat.label }}</span>
           <span class="disciple__rank" :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</span>
@@ -164,8 +164,9 @@
 
       <!-- 入会試験・例会 -->
       <section v-else-if="view.kind === 'exam' || view.kind === 'reikai'" class="disciple__panel disciple__sheet" data-disciple-event>
-        <h3>{{ view.kind === 'exam' ? '研修会 入会試験' : '研修会の例会' }}<small v-if="view.big" class="disciple__bigtag">大一番</small></h3>
+        <h3>{{ view.eventTitle }}<small v-if="view.big" class="disciple__bigtag">大一番</small></h3>
         <p v-if="view.opponent" class="disciple__muted">相手：{{ view.opponent.name }}（{{ view.opponent.label }}）</p>
+        <p v-if="view.stakes" class="disciple__stakes" data-disciple-stakes>{{ view.stakes }}</p>
         <template v-if="view.big">
           <h4>序盤の方針</h4>
           <div class="disciple__choice">
@@ -827,6 +828,8 @@ defineExpose({ goBack });
 .shogi-game .disciple__note { margin: 0.4rem 0 0; }
 .shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
 
+/* 奨励会(28章) */
+.shogi-game .disciple__stakes { margin: 0.1rem 0 0.3rem; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
 /* 弟子の記録(27章) */
 .shogi-game .disciple__slots { left: 50%; top: 4.4rem; transform: translateX(-50%); display: grid; gap: 0.45rem; width: min(30rem, calc(100% - 1.2rem)); max-height: calc(100% - 5.4rem); overflow-y: auto; }
 .shogi-game .disciple__slots > p { margin: 0; font-size: 0.8rem; }
