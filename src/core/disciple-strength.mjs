@@ -326,8 +326,10 @@ export function discipleSelfplaySettings(spec) {
 
 // ---- 観戦しない局の勝ち負け(19-6)
 
-/** 1Lvの差を、勝つ割合のレーティングの差に換える目安(docs/difficulty-calibration.mdの1Lvあたり約100前後。22-3でも合った)。 */
-export const ELO_PER_LEVEL = 100;
+/** 1Lvの差を、勝つ割合のレーティングの差に換える目安(前は100。docs/disciple-mode-design.mdの34-17)。 */
+// 2026-11-21: 弟子と相手が理由で指すようになり(34-16・34-17)、能力値の1Lvは実際の強さで約0.6Lv(約60)に縮んだ。
+// 観戦しない局をそれに合わせて60にすると、休んでばかりの弟子でも運で上がれてしまう(育て方が効かない)ので、間の80にした。
+export const ELO_PER_LEVEL = 80;
 
 /** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせた)。 */
 export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.15, middle: 0.55, ending: 0.3 });

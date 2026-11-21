@@ -12,7 +12,7 @@ import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, 
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
-import { discipleMastery, masteryForLevel } from './strategy-mastery.mjs';
+import { MASTERY_MAX, discipleMastery, masteryForLevel } from './strategy-mastery.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -289,7 +289,8 @@ export function chooseAction(state, action) {
     next.stamina = clamp(next.stamina - STUDY.stamina, 0, 100);
     for (const id of present) next.bonds[id] = (next.bonds[id] ?? 0) + 1;
     const who = present.map((id) => teamOf(next).find((friend) => friend.id === id)?.name).filter(Boolean).join('・');
-    result = { kind: 'study', gains, text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}` };
+    const masteryUp = growMastery(next, MASTERY_GAIN.study);
+    result = { kind: 'study', gains, text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}${masteryUp ? `・戦法熟練度＋${masteryUp}` : ''}` };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
     const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));
@@ -460,7 +461,40 @@ function ensureKenshukai(state) {
  *   watchedMinは観戦した局の弟子から見たいちばん低い評価値(劣勢から勝つと逆境の粘りの条件に数える)
  * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[], charm?: string | null, overcome?: boolean } }}
  */
-export function playEvent(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
+/** 戦法熟練度の伸び(34-17): 対局1局ごとと、研究会。 */
+export const MASTERY_GAIN = Object.freeze({ game: 1, study: 5 });
+/** 弟子の得意戦法の名前(熟練度の札)。 */
+export const MASTERY_LABELS = Object.freeze({ hayaguri: '早繰り銀', yagura: '矢倉', ibisha: '居飛車', 'kakugawari-kg': '角換わり腰掛け銀' });
+/** 熟練度に使う戦法の適性の段(角換わりは角換わり、それ以外は対居飛車)。 */
+const masteryRank = (state, opening) => aptitudeRanks(state)[String(opening).startsWith('kakugawari') ? 'kakugawari' : 'static'];
+
+/** 弟子の得意戦法の熟練度を伸ばす(書き換えてよい写しを渡す)。 */
+function growMastery(next, amount) {
+  const opening = STYLE_OPENINGS[next.style];
+  if (!opening || !(amount > 0)) return 0;
+  next.mastery ??= {};
+  const before = discipleMastery(next, opening, masteryRank(next, opening));
+  next.mastery[opening] = Math.min(MASTERY_MAX, before + amount);
+  return next.mastery[opening] - before;
+}
+
+/** 弟子の得意戦法と熟練度(画面の札)。 */
+export function masteryView(state) {
+  const opening = STYLE_OPENINGS[state?.style];
+  if (!opening) return null;
+  return { opening, label: MASTERY_LABELS[opening] ?? opening, value: discipleMastery(state, opening, masteryRank(state, opening)) };
+}
+
+export function playEvent(state, options = {}) {
+  const played = playEventInner(state, options);
+  const games = played.result?.games?.length ?? 0;
+  if (!games) return played;
+  const next = structuredClone(played.state);
+  growMastery(next, games * MASTERY_GAIN.game);
+  return { ...played, state: next };
+}
+
+function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
   if (state.shoreikai) return playShoreikaiEvent(state, { plan, forced, watchedMin, charm });
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return { state, result: { kind: 'reikai', games: [], wins: 0, losses: 0, text: '', events: [] } };
@@ -924,6 +958,8 @@ export function discipleView(state) {
     eye: { found: state.eye ?? 0, dan: eyeDan(state.eye) },
     /** 崩れ方ごとの見抜いた回数(33-6)。 */
     spotted: spottedCounts(state.spotted),
+    /** 得意戦法の熟練度(34-17)。 */
+    mastery: masteryView(state),
     aptitudes: state.aptitudes,
     trainings: TRAININGS.map((training) => trainingPreview(state, training.id)),
     deck: lessonDeck(state),

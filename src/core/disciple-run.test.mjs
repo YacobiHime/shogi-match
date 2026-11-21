@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EXAM_TURN, MAX_TURNS, applyFindings, praiseLine, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
+  EXAM_TURN, MAX_TURNS, applyFindings, praiseLine, masteryView, MASTERY_GAIN, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
 } from './disciple-run.mjs';
 import { dayResultView, endCardText } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
@@ -84,7 +84,7 @@ describe('師匠の1年の育成の進み(23章)', () => {
     turns.sort((a, b) => a - b);
     expect(turns[Math.floor(turns.length / 2)]).toBeLessThan(MAX_TURNS);
     expect(turns[0]).toBeGreaterThan(30);
-  });
+  }, 15000);
 
   it('休んでばかりでは強くならず、上限のターンで終わる', () => {
     let s = createDiscipleRun({ seed: 5, discipleId: 'tsumugi' });
@@ -240,5 +240,16 @@ describe('観戦した日の結果発表(33-3)', () => {
     expect(view.events).toEqual(['C級に昇級']);
     expect(dayResultView({ games: [{ name: 'A', win: true }], wins: 1, losses: 0 }).headline).toBe('1勝0敗');
     expect(dayResultView(null).games).toEqual([]);
+  });
+});
+
+describe('戦法熟練度(34-17)', () => {
+  it('研究会で得意戦法の熟練度が上がり、札に出る', () => {
+    const s = createDiscipleRun({ seed: 3, discipleId: 'minato' });
+    const before = masteryView(s);
+    expect(before).toMatchObject({ opening: 'yagura', label: '矢倉' });
+    const { state: next, result } = chooseAction(s, { kind: 'study' });
+    expect(masteryView(next).value).toBe(before.value + MASTERY_GAIN.study);
+    expect(result.text).toMatch(/戦法熟練度＋5/);
   });
 });

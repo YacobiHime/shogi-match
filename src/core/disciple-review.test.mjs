@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOOK_MAX, addBookGame, aiHint, bookEntry, bookList, evalWord, reviewRows, sfenAt } from './disciple-review.mjs';
+import { BOOK_MAX, addBookGame, aiHint, bookEntry, bookList, evalWord, reviewRows, sfenAt, thoughtLine } from './disciple-review.mjs';
 import { STANDARD_SFEN } from '../game-state';
 
 const entries = [
@@ -53,5 +53,13 @@ describe('弟子の棋譜帳(33-4)', () => {
     expect(bookList(state)[0]).toMatchObject({ label: `例会${BOOK_MAX + 2}`, when: `${BOOK_MAX + 2}ターン`, marks: [{ cause: 'careless' }], guesses: ['careless'] });
     const again = addBookGame(state, bookEntry(game(BOOK_MAX + 2), { turn: BOOK_MAX + 2 }));
     expect(again.games).toHaveLength(BOOK_MAX);
+  });
+});
+
+describe('弟子の考えの一言(34-17)', () => {
+  it('思考の記録の理由から一言にする。記録がなければ空', () => {
+    expect(thoughtLine({ d: { r: 'edge-pawn' } })).toBe('端歩を突いて様子を見ます');
+    expect(thoughtLine({ d: { r: 'follow' } })).toBe('研究してきた手です');
+    expect(thoughtLine({})).toBe('');
   });
 });
