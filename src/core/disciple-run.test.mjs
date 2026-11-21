@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EXAM_TURN, MAX_TURNS, chooseAction, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit,
+  EXAM_TURN, MAX_TURNS, applyFindings, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit,
   playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind,
 } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
@@ -114,5 +114,50 @@ describe('師匠の1年の育成の進み(23章)', () => {
     expect(loaded.turn).toBe(s.turn);
     expect(discipleView(loaded).kenshukai.classLabel).toBe(discipleView(s).kenshukai.classLabel);
     expect(storage.getItem('yacobihime:shogi-match:disciple:v1')).not.toContain('"players"');
+  });
+});
+
+describe('観戦(24章)', () => {
+  const atExam = () => {
+    let s = createDiscipleRun({ seed: 21, discipleId: 'ao' });
+    for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
+    return s;
+  };
+
+  it('観戦する1局の本局の設定を作り、授けた作戦が戦法と攻めの向きになる', () => {
+    const s = atExam();
+    const own = watchSpec(s, { plan: { opening: 'own', ending: 'attack' } });
+    const wild = watchSpec(s, { plan: { opening: 'wild', ending: 'wait' } });
+    expect(own.spec[own.side].disciple).toBeTruthy();
+    expect(own.spec.openings[own.side]).toBe('hayaguri');
+    expect(wild.spec.openings[wild.side]).toBeNull();
+    expect(own.spec[own.side].disciple.strength.attack).toBeGreaterThan(wild.spec[wild.side].disciple.strength.attack);
+    expect(own.state.kenshukai).toBeTruthy();
+    expect(s.kenshukai).toBeNull();
+  });
+
+  it('観戦した局はエンジンの勝ち負けで記録し、あとの局は観戦しないときと同じ', () => {
+    const s = atExam();
+    const plain = playEvent(s).result;
+    const forcedWin = playEvent(s, { forced: [true] }).result;
+    const forcedLoss = playEvent(s, { forced: [false] }).result;
+    expect(forcedWin.games[0]).toMatchObject({ win: true, watched: true });
+    expect(forcedLoss.games[0]).toMatchObject({ win: false, watched: true });
+    expect(forcedWin.games.slice(1).map((game) => game.win)).toEqual(plain.games.slice(1).map((game) => game.win));
+  });
+
+  it('見立ての答えで狙い目と見抜いた数が増え、同じ理由を3回見抜くと弱点の名前が出る', () => {
+    let s = atExam();
+    // 蒼の隠れた弱点は「うっかり」。
+    const marks = [{ cause: 'careless' }, { cause: 'mate' }];
+    let out = applyFindings(s, marks, ['careless', 'reading']);
+    expect(out.state.aims.steady.boost).toBe(1.5);
+    expect(out.state.aims.mate.boost).toBe(1.25);
+    expect(out.state.eye).toBe(1);
+    expect(out.revealed).toBe('');
+    s = out.state;
+    out = applyFindings(s, [{ cause: 'careless' }, { cause: 'careless' }], ['careless', 'plan']);
+    expect(out.revealed).toBe('うっかりが多い');
+    expect(discipleView(out.state).weakness).toBe('うっかりが多い');
   });
 });

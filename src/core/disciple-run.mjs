@@ -5,8 +5,8 @@
 
 import { createRng } from './ryuo-random.mjs';
 import {
-  APTITUDE_KEYS, DISCIPLES, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, discipleById, discipleStrength, effectiveLevel, failChance,
-  raiseAptitude, statRank, trainingById, trainingGains, winChance,
+  APTITUDE_KEYS, DISCIPLES, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, discipleById, discipleStrength, effectiveLevel, failChance,
+  judgeGuess, raiseAptitude, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 
@@ -292,25 +292,32 @@ export function eventOpponent(state) {
 const round1 = (value) => Math.round(value * 10) / 10;
 
 /**
+ * 入会試験の日なら研修会の挑戦を作る(試験の相手が決まる)。すでにあればそのまま。
+ * @param {any} state 書き換えてよい写し
+ */
+function ensureKenshukai(state) {
+  if (state.kenshukai) return state;
+  // 試験のクラスは、やる気を入れない弟子の強さで決める(調子のよい日に高いクラスを受けすぎない)。
+  const level = effectiveLevel(discipleStrength({ stats: state.stats, aptitudes: aptitudeRanks(state), style: state.style, skills: state.skills }));
+  state.kenshukai = createKenshukaiRun({
+    seed: (state.seed ^ 0x5bd1e995) >>> 0, settings: { shido: false, world: OPPONENT_BASE_LEVEL }, entryClass: examClassFor(level),
+    userName: state.name, userLevel: level,
+  });
+  return state;
+}
+
+/**
  * 入会試験・例会を弟子が指す(観戦しない局)。その日の局を全部決め、ターンを進める。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null }} [options]
+ * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[] }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け
  * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[] } }}
  */
-export function playEvent(state, { plan = null } = {}) {
+export function playEvent(state, { plan = null, forced = [] } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return { state, result: { kind: 'reikai', games: [], wins: 0, losses: 0, text: '', events: [] } };
-  const next = structuredClone(state);
+  const next = ensureKenshukai(structuredClone(state));
   const rng = createRng(next.rng);
   const big = isBigEvent(state);
-  // 試験のクラスは、やる気を入れない弟子の強さで決める(調子のよい日に高いクラスを受けすぎない)。
-  const startLevel = effectiveLevel(discipleStrength({ stats: next.stats, aptitudes: aptitudeRanks(next), style: next.style, skills: next.skills }));
-  if (!next.kenshukai) {
-    next.kenshukai = createKenshukaiRun({
-      seed: (next.seed ^ 0x5bd1e995) >>> 0, settings: { shido: false, world: OPPONENT_BASE_LEVEL }, entryClass: examClassFor(startLevel),
-      userName: next.name, userLevel: startLevel,
-    });
-  }
   const games = [];
   const events = [];
   const startDay = next.kenshukai.dayNo;
@@ -326,8 +333,11 @@ export function playEvent(state, { plan = null } = {}) {
     const strength = currentStrength(next, { battle, time: 'fast' });
     const fit = big && plan ? planFit(next, plan, { level }).bonus : 0;
     const chance = clamp(winChance(effectiveLevel(strength), level) + fit, 0.03, 0.97);
-    const win = rng.next() < chance;
-    games.push({ name: member?.name ?? '', level: round1(level), win, chance: Math.round(chance * 100) / 100 });
+    // 観戦した局は、エンジンが盤の上で決めた勝ち負け(19-6)。乱数は同じだけ進める(観戦してもしなくても、あとの局は同じ)。
+    const roll = rng.next();
+    const watched = games.length < forced.length;
+    const win = watched ? Boolean(forced[games.length]) : roll < chance;
+    games.push({ name: member?.name ?? '', level: round1(level), win, chance: Math.round(chance * 100) / 100, watched });
     const gain = GAME_EXP.played + (win ? GAME_EXP.won : 0);
     next.stats = addGains(next.stats, Object.fromEntries(STAT_KEYS.map((key) => [key, gain])));
     next.kenshukai = recordKenshukaiGame(run, win ? 'win' : 'loss', { userLevel: effectiveLevel(strength) });
@@ -346,6 +356,91 @@ export function playEvent(state, { plan = null } = {}) {
   else advanceTurn(next, rng);
   next.rng = rng.state;
   return { state: next, result: { kind, games, wins, losses, text, events } };
+}
+
+// ---- 観戦(19-5・19-6・24章)
+
+/** 弟子の戦い方ごとの、得意で行くときの戦法(relay-game.mjsのopeningPlanOfの戦法の名前)。 */
+export const STYLE_OPENINGS = Object.freeze({ lead: 'hayaguri', counter: 'yagura', grit: 'ibisha', study: 'kakugawari-kg' });
+/** 終盤の構えで、攻めの向きをどれだけずらすか(作戦がエンジンの指し手にも効く)。 */
+export const ENDING_ATTACK = Object.freeze({ attack: 0.3, wait: -0.3 });
+
+/**
+ * 観戦する1局(その日のはじめの局)の本局の設定(engine-game.mjsのplayEngineGameに渡す)。授けた作戦は戦法と攻めの向きになる。
+ * 研修会の挑戦がまだなければ作った状態も返す(試験の相手を決めるため)。
+ * @param {any} state
+ * @param {{ plan?: { opening?: string, ending?: string } | null }} [options]
+ */
+export function watchSpec(state, { plan = null } = {}) {
+  const kind = turnKind(state);
+  if (kind !== 'exam' && kind !== 'reikai') return null;
+  const next = ensureKenshukai(structuredClone(state));
+  const run = next.kenshukai;
+  const member = run.world.members[run.pending?.opponentId] ?? run.guests?.[run.pending?.opponentId];
+  if (!member) return null;
+  const level = opponentLevel(member, run.cls);
+  const battle = member.style === 'ranging' ? 'ranging' : 'static';
+  const strength = currentStrength(next, { battle, time: 'fast' });
+  const attack = clamp(strength.attack + (ENDING_ATTACK[plan?.ending ?? ''] ?? 0), -1, 1);
+  const side = run.pending.color === 'white' ? 'white' : 'black';
+  const other = side === 'black' ? 'white' : 'black';
+  const opponentOpening = battle === 'ranging' ? 'shiken' : 'aigakari';
+  // 相手の得意を外すなら、相手の戦型に合う形(振り飛車には対抗形の居飛車、居飛車には矢倉)。力戦なら定跡なし。
+  const ownOpening = plan?.opening === 'wild' ? null : plan?.opening === 'avoid' ? (battle === 'ranging' ? 'ibisha' : 'yagura') : STYLE_OPENINGS[next.style] ?? null;
+  const disciple = {
+    id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: 'kenshukai',
+    disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
+  };
+  const opponent = {
+    id: member.id, name: member.name, level: Math.round(level), kind: 'kenshukai', character: member.character ?? null,
+    repertoire: member.repertoire ?? null, style: member.style ?? null,
+  };
+  const spec = {
+    key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
+    event: 'kenshukai', kind: 'game', label: kind === 'exam' ? '入会試験' : `第${run.dayNo}回例会`,
+    [side]: disciple, [other]: opponent,
+    openings: { [side]: ownOpening, [other]: opponentOpening },
+  };
+  return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next };
+}
+
+/** 師匠の眼の段(見抜いた数で上がる。19-5)。 */
+export const eyeDan = (found) => clamp(1 + Math.floor((Number(found) || 0) / 5), 1, 9);
+/** 隠れた弱点と、それを見抜く理由(同じ理由を3回見抜くと名前が出る)。 */
+export const WEAKNESS_CAUSE = Object.freeze({ careless: 'careless', 'time-trouble': 'time', 'big-stage-weak': 'reading', 'loose-when-ahead': 'reading', 'endgame-collapse': 'mate' });
+export const WEAKNESS_LABELS = Object.freeze({
+  careless: 'うっかりが多い', 'time-trouble': '時間に追われる', 'big-stage-weak': '大舞台で硬くなる', 'loose-when-ahead': '優勢で緩む', 'endgame-collapse': '終盤で頓死する',
+});
+
+/**
+ * 観戦の見立ての答えを入れる(19-5)。印ごとの理由の5択から、狙い目・見抜いた数・隠れた弱点の名前を決める。
+ * @param {any} state
+ * @param {readonly { cause: string }[]} marks
+ * @param {readonly (string | null)[]} guesses 印ごとに選んだ理由(選ばなかった印はnull)
+ */
+export function applyFindings(state, marks, guesses) {
+  const next = structuredClone(state);
+  next.causes ??= {};
+  next.eye ??= 0;
+  const results = [];
+  marks.forEach((mark, index) => {
+    const guess = guesses[index];
+    if (!guess) return;
+    const judged = judgeGuess(mark, guess);
+    // 時間切迫は持ち時間の適性(早指しの稽古)の狙い目。
+    const target = judged.target === 'time' ? 'steady' : judged.target;
+    if (target) next.aims[target] = { boost: Math.max(next.aims[target]?.boost ?? 1, judged.boost), turns: judged.turns };
+    next.causes[mark.cause] = (next.causes[mark.cause] ?? 0) + 1;
+    if (judged.right) next.eye += 1;
+    results.push({ ...judged, target });
+  });
+  let revealed = '';
+  if (!next.weaknessKnown && (next.causes[WEAKNESS_CAUSE[next.weakness]] ?? 0) >= REVEAL_AFTER) {
+    next.weaknessKnown = true;
+    revealed = WEAKNESS_LABELS[next.weakness] ?? next.weakness;
+    next.log.push({ turn: next.turn, text: `弱点が分かった：${revealed}` });
+  }
+  return { state: next, results, revealed, dan: eyeDan(next.eye) };
 }
 
 /**
@@ -416,7 +511,8 @@ export function discipleView(state) {
     stamina: state.stamina,
     style: state.style,
     skills: state.skills,
-    weakness: state.weaknessKnown ? state.weakness : null,
+    weakness: state.weaknessKnown ? WEAKNESS_LABELS[state.weakness] ?? state.weakness : null,
+    eye: { found: state.eye ?? 0, dan: eyeDan(state.eye) },
     aptitudes: state.aptitudes,
     trainings: TRAININGS.map((training) => trainingPreview(state, training.id)),
     friends: FRIENDS.map((friend) => ({ ...friend, bond: state.bonds[friend.id] ?? 0 })),

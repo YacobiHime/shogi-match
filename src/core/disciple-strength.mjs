@@ -403,16 +403,25 @@ function clues(move) {
  */
 export function discipleWatchMoves(entries, side) {
   const first = side === 'black' ? 0 : 1;
+  const sign = side === 'black' ? 1 : -1;
   const moves = [];
   for (let index = first; index < entries.length; index += 2) {
     const entry = entries[index];
+    // 指したあとも大きく勝っている手(詰みの手数が延びただけなど)は、崩れた手に数えない。
+    const after = clampEval(sign * (Number(entry?.eval) || 0));
+    const loss = after >= STILL_WINNING ? 0 : Math.min(MAX_MARK_LOSS, Number(entry?.loss) || 0);
     moves.push({
-      ply: index + 1, loss: Number(entry?.loss) || 0, oversights: entry?.d?.o ? [{ kind: 'seen' }] : [],
+      ply: index + 1, loss, oversights: entry?.d?.o ? [{ kind: 'seen' }] : [],
       missedMate: Boolean(entry?.d?.m), clock: entry?.d?.c || null,
     });
   }
   return moves;
 }
+/** 指したあとの形勢(弟子から見た評価値)がこれ以上なら、まだ大きく勝っている。 */
+export const STILL_WINNING = 1000;
+/** 1手の落ち幅の上限(詰みの点数の大きさで印の順が決まらないように)。 */
+export const MAX_MARK_LOSS = 3000;
+const clampEval = (value) => Math.max(-MAX_MARK_LOSS, Math.min(MAX_MARK_LOSS, value));
 
 /** 狙い目の伸びの倍率と長さ(当てた・外した)。 */
 export const AIM = Object.freeze({ right: 1.5, wrong: 1.25, turns: 3 });

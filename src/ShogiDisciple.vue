@@ -130,11 +130,12 @@
           </div>
         </template>
         <div class="disciple__row">
-          <button type="button" class="disciple__btn disciple__btn--main" data-disciple-play @click="play">
-            {{ view.big ? '作戦を授けて対局へ' : '例会へ送り出す' }}
+          <button type="button" class="disciple__btn" data-disciple-play @click="play">結果だけ見る</button>
+          <button v-if="engineFactory" type="button" class="disciple__btn disciple__btn--main" data-disciple-watch @click="startWatch">
+            {{ view.big ? '作戦を授けて観戦する' : '1局目を観戦する' }}
           </button>
         </div>
-        <p class="disciple__muted disciple__note">観戦して弱点を見抜く遊びは、次の段階で足します。</p>
+        <p class="disciple__muted disciple__note">観戦すると、崩れた手の理由を見抜いて、次の稽古を狙い目にできる（師匠の眼 {{ view.eye.dan }}段）。</p>
       </section>
 
       <!-- 稽古を選ぶ -->
@@ -175,18 +176,73 @@
         <button type="button" class="disciple__cmd" data-disciple-action="outing" @click="act('outing')">出かける<small>やる気が上がる</small></button>
       </nav>
     </template>
+
+    <!-- 観戦と見立て(24章) -->
+    <section v-if="watch" class="disciple__watch" role="dialog" aria-modal="true" aria-label="観戦" data-disciple-watching>
+      <header class="disciple__watch-head">
+        <b>観戦　{{ watch.label }}</b>
+        <small>{{ view?.name }}（{{ watch.side === 'black' ? '先手' : '後手' }}）対 {{ watch.opponent.name }}　{{ watch.end ? `${watch.entries.length}手で終局` : `${watch.entries.length}手目` }}</small>
+        <button type="button" class="disciple__watch-close" data-disciple-watch-close @click="closeWatch">{{ watch.done ? '見立てを終える' : 'やめる' }}</button>
+      </header>
+      <div class="disciple__watch-board">
+        <div class="disciple__ban" :class="{ 'disciple__ban--flip': watch.side === 'white' }" aria-label="盤">
+          <i v-for="cell in boardCells" :key="cell.key" :class="{ 'disciple__cell--white': cell.white, 'disciple__cell--last': cell.last }">{{ cell.label }}</i>
+        </div>
+      </div>
+      <div class="disciple__watch-side">
+        <p v-if="watch.error" class="disciple__ask">{{ watch.error }}</p>
+        <p v-else-if="!watch.end" class="disciple__ask">弟子が指しています……<small>終局すると、形勢が大きく落ちた場面に印が付きます</small></p>
+        <template v-else>
+          <p class="disciple__ask"><b>{{ watch.win ? '勝ち' : '負け' }}</b>
+            <small v-if="!watch.marks.length">大きく崩れた手はなかった。いい将棋だったね</small>
+            <small v-else>印を押して、崩れた理由を選ぼう（{{ answeredCount }}/{{ watch.marks.length }}）</small></p>
+          <div v-if="selectedMark" class="disciple__ask">
+            <b>{{ selectedMark.ply }}手目　形勢が{{ selectedMark.loss }}点落ちた。理由は？</b>
+            <div class="disciple__clues"><span v-for="clue in selectedMark.clues" :key="clue">{{ clue }}</span></div>
+            <div class="disciple__reasons">
+              <button v-for="id in CAUSE_ORDER" :key="id" type="button" class="disciple__opt"
+                :class="{ 'disciple__opt--right': guessOf(watch.selected) && selectedMark.cause === id, 'disciple__opt--wrong': guessOf(watch.selected) === id && selectedMark.cause !== id }"
+                :disabled="Boolean(guessOf(watch.selected))" :data-disciple-cause="id" @click="guess(id)">
+                {{ CAUSES[id].label }}<small>{{ CAUSES[id].note }}</small>
+              </button>
+            </div>
+            <p v-if="guessOf(watch.selected)" class="disciple__found">
+              {{ guessOf(watch.selected) === selectedMark.cause ? '正解！' : `答えは「${CAUSES[selectedMark.cause].label}」` }}
+              「{{ STAT_LABELS[targetOf(selectedMark.cause)] }}」の稽古が狙い目になる（伸び×{{ guessOf(watch.selected) === selectedMark.cause ? '1.5' : '1.25' }}）
+            </p>
+          </div>
+        </template>
+      </div>
+      <div class="disciple__graph" aria-label="評価値のグラフ">
+        <svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="50" x2="400" y2="50" stroke="#d9d2c4" stroke-width="1" />
+          <polyline fill="none" stroke="#4f86c6" stroke-width="2.5" :points="graphPoints" />
+        </svg>
+        <button v-for="(mark, index) in watch.marks" :key="mark.ply" type="button" class="disciple__mark"
+          :class="{ 'disciple__mark--done': guessOf(index), 'disciple__mark--on': watch.selected === index }"
+          :style="{ left: `${markLeft(mark.ply)}%` }" :data-disciple-mark="index" @click="watch.selected = index">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, shallowRef } from "vue";
-import { APTITUDE_KEYS, APTITUDE_LABELS, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank } from "./core/disciple-strength.mjs";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, type PropType } from "vue";
 import {
-  FRIENDS, PLANS, WORDS, chooseAction, chooseWords, createDiscipleRun, discipleView, loadDiscipleRun, playEvent, saveDiscipleRun,
+  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, CAUSE_ORDER, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, discipleWatchMoves, skillById, statRank, watchMarks,
+} from "./core/disciple-strength.mjs";
+import {
+  FRIENDS, PLANS, WORDS, applyFindings, chooseAction, chooseWords, createDiscipleRun, discipleView, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
 } from "./core/disciple-run.mjs";
+import { sfenAfter } from "./core/pro-cut.mjs";
+import { parseSfenBoard } from "./core/sfen-board.mjs";
+import { useEngineGame } from "./composables/match/useEngineGame";
+import type { EngineFactory } from "./composables/match/analysisEngines";
 
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
+  /** 観戦の本局を指すエンジン(対局画面のensureEngineFactory)。なければ観戦しない(結果だけ)。 */
+  engineFactory: { type: Function as PropType<(() => Promise<EngineFactory>) | null>, default: null },
 });
 const emit = defineEmits<{ close: [] }>();
 
@@ -274,8 +330,134 @@ function words(id: string) {
   say(text);
 }
 
-/** 戻る操作。稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
+// ---- 観戦と見立て(24章)。その日のはじめの局をエンジンが本当に指し、終局したら崩れた場面に印を付ける。
+type WatchMark = { ply: number; loss: number; cause: string; clues: string[] };
+type Watch = {
+  label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string } | null;
+  entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
+  marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
+};
+const watch = ref<Watch | null>(null);
+/** 観戦の番号(やめたり次の観戦を始めたりしたら変わる。古い本局の知らせは捨てる)。 */
+let watchTicket = 0;
+const engineGame = useEngineGame({ engineFactory: () => props.engineFactory!(), storage });
+onBeforeUnmount(() => engineGame.dispose());
+function startWatch() {
+  const big = Boolean(view.value?.big);
+  const planNow = big ? { ...plan } : null;
+  const made = watchSpec(state.value, { plan: planNow });
+  if (!made) {
+    play();
+    return;
+  }
+  const current: Watch = {
+    label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, entries: [], end: null, win: false, done: false,
+    marks: [], guesses: [], selected: -1, error: "",
+  };
+  watch.value = current;
+  const ticket = ++watchTicket;
+  engineGame.play(made.spec, (entry, index) => {
+    if (ticket !== watchTicket) return;
+    current.entries[index] = entry as Watch["entries"][number];
+    watch.value = { ...current, entries: [...current.entries] };
+  }).then((game) => {
+    if (!game || ticket !== watchTicket) return;
+    finishWatchGame(current, game.end as { winner: string });
+  }).catch((error) => {
+    console.warn("師匠の1年の観戦の本局を指せませんでした", error);
+    if (ticket !== watchTicket) return;
+    current.error = "エンジンを起動できなかったので、結果だけ見ます";
+    watch.value = { ...current };
+    play();
+    current.done = true;
+  });
+}
+function finishWatchGame(current: Watch, end: { winner: string }) {
+  current.end = end;
+  current.win = end?.winner === current.side;
+  // その日の局を記録する(観戦した局はエンジンの勝ち負け)。
+  const { state: next } = playEvent(state.value, { plan: current.plan, forced: [current.win] });
+  commit(next);
+  current.marks = watchMarks(discipleWatchMoves(current.entries, current.side), { dan: eyeDan(state.value?.eye) });
+  current.guesses = current.marks.map(() => null);
+  current.selected = current.marks.length ? 0 : -1;
+  current.done = true;
+  watch.value = { ...current };
+  say(current.win ? "勝ちました。先生、見ててくれましたか" : "負けてしまいました……");
+}
+const guessOf = (index: number) => watch.value?.guesses[index] ?? null;
+const answeredCount = computed(() => watch.value?.guesses.filter(Boolean).length ?? 0);
+const selectedMark = computed(() => (watch.value && watch.value.selected >= 0 ? watch.value.marks[watch.value.selected] : null));
+const targetOf = (cause: string) => (CAUSES[cause as keyof typeof CAUSES]?.target === "time" ? "steady" : CAUSES[cause as keyof typeof CAUSES]?.target ?? "steady") as keyof typeof STAT_LABELS;
+function guess(id: string) {
+  if (!watch.value || watch.value.selected < 0) return;
+  const guesses = [...watch.value.guesses];
+  guesses[watch.value.selected] = id;
+  const nextIndex = guesses.findIndex((value) => !value);
+  watch.value = { ...watch.value, guesses, selected: watch.value.selected };
+  if (nextIndex >= 0) window.setTimeout(() => {
+    if (watch.value && watch.value.guesses === guesses) watch.value = { ...watch.value, selected: nextIndex };
+  }, 1400);
+}
+function closeWatch() {
+  const current = watch.value;
+  if (!current) return;
+  if (!current.done) {
+    // 観戦の途中でやめた: 本局を止め、まだ何も記録しない(もう一度観戦するか、結果だけ見られる)。
+    engineGame.cancel();
+    watchTicket += 1;
+    watch.value = null;
+    return;
+  }
+  watchTicket += 1;
+  watch.value = null;
+  if (current.marks.length && current.guesses.some(Boolean)) {
+    const { state: next, revealed, results } = applyFindings(state.value, current.marks, current.guesses);
+    commit(next);
+    const right = results.filter((item) => item.right).length;
+    say(revealed ? `先生……わたしの弱点、「${revealed}」なんですね` : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
+  }
+}
+/** 盤のマス(選んだ印の局面。印を選んでいなければ最新の局面)。 */
+const boardCells = computed(() => {
+  const current = watch.value;
+  const moves = (current?.entries ?? []).map((entry) => entry.move);
+  const upto = selectedMark.value ? selectedMark.value.ply : moves.length;
+  const sfen = sfenAfter(moves.slice(0, upto)) ?? "";
+  const board = parseSfenBoard(sfen);
+  const last = moves[upto - 1]?.slice(2, 4) ?? "";
+  const cells = [];
+  for (let rank = 0; rank < 9; rank += 1) {
+    for (let file = 9; file >= 1; file -= 1) {
+      const key = `${file}${String.fromCharCode(97 + rank)}`;
+      const piece = board.get(key);
+      cells.push({ key, label: piece ? PIECE_LABELS[piece.kind] ?? "" : "", white: piece?.color === "white", last: key === last });
+    }
+  }
+  return cells;
+});
+const PIECE_LABELS: Record<string, string> = {
+  K: "玉", R: "飛", B: "角", G: "金", S: "銀", N: "桂", L: "香", P: "歩", "+R": "竜", "+B": "馬", "+S": "全", "+N": "圭", "+L": "杏", "+P": "と",
+};
+/** 評価値のグラフ(弟子から見た値。±2000で頭打ち)。 */
+const graphPoints = computed(() => {
+  const current = watch.value;
+  if (!current?.entries.length) return "0,50";
+  const total = Math.max(current.entries.length, 60);
+  return current.entries.map((entry, index) => {
+    const value = (current.side === "black" ? 1 : -1) * (Number(entry.eval) || 0);
+    const y = 50 - Math.max(-2000, Math.min(2000, value)) / 40;
+    return `${((index + 1) / total * 400).toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+});
+const markLeft = (ply: number) => Math.min(92, Math.max(4, (ply / Math.max(watch.value?.entries.length ?? 60, 60)) * 100));
+
+/** 戻る操作。観戦・稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
 function goBack() {
+  if (watch.value) {
+    closeWatch();
+    return true;
+  }
   if (training.value) {
     training.value = false;
     return true;
@@ -414,6 +596,33 @@ defineExpose({ goBack });
 .shogi-game .disciple__pick-card small { color: var(--muted); font-size: 0.7rem; }
 .shogi-game .disciple .disciple__go { position: absolute; z-index: 5; right: 0.6rem; bottom: 0.6rem; min-width: 12rem; min-height: 3.4rem; border: 0; border-radius: 1rem; background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 900; box-shadow: 0 4px 0 #b86f22; }
 
+/* 観戦と見立て(24章) */
+.shogi-game .disciple__watch { position: absolute; inset: 0; z-index: 8; display: grid; grid-template-columns: minmax(0, 1fr) 20rem; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0.5rem; padding: 0.6rem; background: rgba(28, 38, 48, 0.96); color: #fff; }
+.shogi-game .disciple__watch-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; }
+.shogi-game .disciple__watch-head small { color: #b8c6d2; }
+.shogi-game .disciple .disciple__watch-close { margin-left: auto; min-height: 2.6rem; padding: 0 0.9rem; border: 1px solid #50606e; border-radius: 0.6rem; background: transparent; color: #fff; font-weight: 800; }
+.shogi-game .disciple__watch-board { display: grid; place-items: center; min-height: 0; }
+.shogi-game .disciple__ban { height: 100%; max-height: 30rem; aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); background: #e3bd74; border: 3px solid #7a5426; }
+.shogi-game .disciple__ban--flip { transform: rotate(180deg); }
+.shogi-game .disciple__ban i { display: grid; place-items: center; border: 1px solid rgba(80, 50, 20, 0.45); color: #2a1a0a; font-style: normal; font-weight: 900; font-size: clamp(0.6rem, 2.2vh, 1.1rem); }
+.shogi-game .disciple__ban i.disciple__cell--white { transform: rotate(180deg); }
+.shogi-game .disciple__ban i.disciple__cell--last { background: rgba(90, 166, 106, 0.45); }
+.shogi-game .disciple__watch-side { display: grid; align-content: start; gap: 0.5rem; min-height: 0; overflow-y: auto; }
+.shogi-game .disciple__ask { margin: 0; padding: 0.6rem; border-radius: 0.9rem; background: #fffaf0; color: var(--ink); font-size: 0.9rem; }
+.shogi-game .disciple__ask small { display: block; color: var(--muted); font-size: 0.74rem; }
+.shogi-game .disciple__clues { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0; }
+.shogi-game .disciple__clues span { padding: 0.1rem 0.45rem; border-radius: 999px; background: #f0e7d6; font-size: 0.7rem; font-weight: 800; }
+.shogi-game .disciple__reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+.shogi-game .disciple__reasons button:last-child { grid-column: 1 / -1; }
+.shogi-game .disciple .disciple__opt--right, .shogi-game .disciple .disciple__opt--right:disabled { border-color: #3c9a4c; background: #e9f6ea; color: var(--ink); opacity: 1; }
+.shogi-game .disciple .disciple__opt--wrong, .shogi-game .disciple .disciple__opt--wrong:disabled { border-color: #d8655b; background: #fbe9e7; color: var(--ink); opacity: 1; }
+.shogi-game .disciple__found { margin: 0.4rem 0 0; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .disciple__graph { grid-column: 1 / -1; position: relative; height: 7rem; border-radius: 0.8rem; background: #fff; overflow: hidden; }
+.shogi-game .disciple__graph svg { width: 100%; height: 100%; display: block; }
+.shogi-game .disciple .disciple__mark { position: absolute; top: 0.3rem; transform: translateX(-50%); min-height: 2.2rem; padding: 0 0.5rem; border: 0; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.7rem; font-weight: 900; }
+.shogi-game .disciple .disciple__mark--done { background: #3c9a4c; }
+.shogi-game .disciple .disciple__mark--on { outline: 3px solid #1d2a36; }
+
 /* スマホ縦: 立ち絵は真ん中のまま、UIを上下に寄せる(18章) */
 @media (max-width: 640px) {
   .shogi-game .disciple__figure { top: 9%; height: 118%; }
@@ -436,5 +645,9 @@ defineExpose({ goBack });
   .shogi-game .disciple__intro { display: none; }
   .shogi-game .disciple__pick-cards { top: 3.6rem; right: 0.4rem; width: 9.4rem; }
   .shogi-game .disciple .disciple__go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
+  .shogi-game .disciple__watch { grid-template-columns: 1fr; grid-template-rows: auto auto auto minmax(0, 1fr); padding: 0.4rem; overflow-y: auto; }
+  .shogi-game .disciple__watch-head small { display: none; }
+  .shogi-game .disciple__ban { height: auto; width: 100%; max-height: none; }
+  .shogi-game .disciple__graph { grid-column: auto; height: 5.5rem; order: -1; }
 }
 </style>

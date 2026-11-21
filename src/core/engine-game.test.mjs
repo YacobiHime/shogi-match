@@ -6,6 +6,7 @@ import {
   shouldEngineResign,
 } from './engine-game.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
+import { discipleStrength } from './disciple-strength.mjs';
 import { resignStyleById } from './resign-style.mjs';
 import { GROUP_MEAN_RATING, REAL_WORLD, WORLD_BASE_RATING, worldCpuLevel } from './ryuo-strength.mjs';
 import { gameRecordOf } from './ryuo-simulation.mjs';
@@ -95,6 +96,19 @@ describe('本局(20章の段階1)', () => {
     }
     // 60手目からは先手から見て大きく良い(後手の手番でも先手から見た値)。
     expect(game.entries.at(-1).eval).toBeGreaterThan(2000);
+  }, 60000);
+
+  it('師匠の1年の弟子は能力値の設定で指し、手ごとに崩れた理由の記録を残す(docs/disciple-mode-design.mdの24章)', async () => {
+    const { search } = fakeSearch();
+    const strength = discipleStrength({ stats: { reading: 500, plan: 500, steady: 500, mate: 500 }, skills: ['fujii-curve'] });
+    const game = await playEngineGame({
+      spec: { ...spec(20, 20), key: 'disciple:test', black: { id: 'disciple', name: '弟子', level: 26, disciple: { strength, profile: {}, time: 'fast' } } },
+      search,
+    });
+    expect(game.end).toBeTruthy();
+    const mine = game.entries.filter((_, index) => index % 2 === 0);
+    expect(mine.every((entry) => entry.d && typeof entry.d.o === 'number' && typeof entry.d.m === 'number')).toBe(true);
+    expect(game.entries.filter((_, index) => index % 2 === 1).every((entry) => !entry.d)).toBe(true);
   }, 60000);
 
   it('ロジックAIのLvでも指せる', async () => {

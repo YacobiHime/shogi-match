@@ -141,6 +141,10 @@ describe('観戦の見立て(19-5)', () => {
     expect(moves.map((move) => move.ply)).toEqual([1, 3, 5, 7]);
     const marks = watchMarks(moves);
     expect(marks.map((mark) => mark.cause)).toEqual(['careless', 'mate']);
+    // 指したあとも大きく勝っている手(詰みの手数が延びただけ)は数えない。
+    const winning = discipleWatchMoves([{ loss: 5000, eval: 30000, d: { o: 0, m: 0, c: '' } }], 'black');
+    expect(winning[0].loss).toBe(0);
+    expect(discipleWatchMoves([{ loss: 5000, eval: -200 }], 'black')[0].loss).toBe(3000);
   });
 
   it('当てると伸び×1.5、外しても×1.25で正しい理由が分かる', () => {
