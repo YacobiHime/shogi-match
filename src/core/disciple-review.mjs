@@ -151,3 +151,27 @@ export function thoughtLine(entry) {
   const reason = entry?.d?.r;
   return reason ? THOUGHT_LINES[reason] ?? '' : '';
 }
+
+/**
+ * 弟子の読み筋(思考の記録の`l`)と、相手の実際の手(34-18)。読み筋の2手目(弟子が読んだ相手の手)と、相手が実際に指した手が違えば「読んでいなかった手」。
+ * @param {readonly { move: string, d?: { l?: string } }[]} entries
+ * @param {number} ply 弟子の手(1から)
+ * @returns {{ text: string, expected: string, actual: string, actualText: string, surprised: boolean } | null}
+ */
+export function thoughtReading(entries, ply) {
+  const entry = entries[ply - 1];
+  const line = String(entry?.d?.l ?? '').split(/\s+/).filter(Boolean);
+  if (line.length < 2 || line[0] !== entry.move) return null;
+  const record = createGameRecord(sfenAt(entries, ply - 1));
+  const labels = [];
+  let previous = entries[ply - 2]?.move ?? '';
+  for (const usi of line) {
+    const label = moveLabel(record.position.sfen, usi, previous);
+    if (!label || !appendUsiMove(record, usi)) break;
+    labels.push(label);
+    previous = usi;
+  }
+  const actual = entries[ply]?.move ?? '';
+  const actualText = actual ? moveLabel(sfenAt(entries, ply), actual, entry.move) : '';
+  return { text: labels.join(' '), expected: line[1], actual, actualText, surprised: Boolean(actual) && actual !== line[1] };
+}

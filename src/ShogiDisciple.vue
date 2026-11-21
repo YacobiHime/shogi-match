@@ -319,9 +319,10 @@
         <button type="button" aria-label="最後へ" data-disciple-nav-last @click="goPly(watch.entries.length)">⏭</button>
       </div>
       <div class="disciple__watch-side">
+        <p v-if="watchThought" class="disciple__thought" data-disciple-thought><b>{{ view?.name }}の考え</b>{{ watchThought }}
+          <small v-if="watchReading" data-disciple-reading>読み筋 {{ watchReading.text }}<template v-if="watchReading.surprised">　相手は{{ watchReading.actualText }}（読んでいなかった手）</template></small></p>
         <p v-if="watch.error" class="disciple__ask">{{ watch.error }}</p>
         <p v-else-if="!watch.end" class="disciple__ask">弟子が指しています……<small>終局すると、結果を発表してから、一緒に検討できます</small></p>
-        <p v-if="watchThought" class="disciple__thought" data-disciple-thought><b>{{ view?.name }}の考え</b>{{ watchThought }}</p>
         <template v-else-if="watch.phase === 'review'">
           <!-- スマホは、棋譜と見立てをタブで切り替える(広い画面は両方を並べる。33-4)。 -->
           <div class="disciple__watch-tabs" role="tablist">
@@ -478,7 +479,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch 
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
-import { aiHint, addBookGame, bookEntry, bookList, reviewRows, thoughtLine } from "./core/disciple-review.mjs";
+import { aiHint, addBookGame, bookEntry, bookList, reviewRows, thoughtLine, thoughtReading } from "./core/disciple-review.mjs";
 import { REVIEW_CAUSES, REVIEW_CAUSE_ORDER, SEEK_RULES, causeExplain, causeLabel, goodMoves, judgeReviewGuess, judgeSeek, reviewMarks, turningPoint } from "./core/disciple-causes.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
@@ -1033,6 +1034,13 @@ const watchThought = computed(() => {
   }
   return "";
 });
+/** 検討の今の手(弟子の手)の読み筋と、相手の実際の手(34-18)。 */
+const watchReading = computed(() => {
+  const current = watch.value;
+  if (!current || current.phase !== "review" || seeking.value || current.upto < 1) return null;
+  if (((current.upto - 1) % 2 === 0 ? "black" : "white") !== current.side) return null;
+  return thoughtReading(current.entries as any, current.upto);
+});
 /** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
 const watchUpto = computed(() => (watch.value?.phase === "review" ? watch.value.upto : watch.value?.entries.length ?? 0));
 const watchSfen = computed(() => sfenAfter((watch.value?.entries ?? []).slice(0, watchUpto.value).map((entry) => entry.move)) ?? STANDARD_SFEN);
@@ -1347,6 +1355,7 @@ defineExpose({ goBack });
 /* 弟子の考えの一言(34-17)。 */
 .shogi-game .disciple__thought { margin: 0; padding: 0.4rem 0.6rem; border-radius: 0.7rem; background: #fff7e0; color: #5a3410; font-size: 0.82rem; }
 .shogi-game .disciple__thought b { margin-right: 0.45rem; color: #8a5a00; }
+.shogi-game .disciple__thought small { display: block; margin-top: 0.2rem; color: #6b5a3a; font-size: 0.74rem; }
 .shogi-game .disciple .disciple__book-row { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: 0.5rem; width: 100%; padding: 0.45rem; border: 0; border-radius: 0.6rem; background: transparent; color: var(--ink); text-align: left; }
 .shogi-game .disciple__book-row small { display: block; color: var(--muted); font-size: 0.72rem; }
 .shogi-game .disciple__watch-head { grid-area: head; display: flex; align-items: center; gap: 0.6rem; }

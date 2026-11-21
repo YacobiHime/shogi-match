@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOOK_MAX, addBookGame, aiHint, bookEntry, bookList, evalWord, reviewRows, sfenAt, thoughtLine } from './disciple-review.mjs';
+import { BOOK_MAX, addBookGame, aiHint, bookEntry, bookList, evalWord, reviewRows, sfenAt, thoughtLine, thoughtReading } from './disciple-review.mjs';
 import { STANDARD_SFEN } from '../game-state';
 
 const entries = [
@@ -61,5 +61,15 @@ describe('弟子の考えの一言(34-17)', () => {
     expect(thoughtLine({ d: { r: 'edge-pawn' } })).toBe('端歩を突いて様子を見ます');
     expect(thoughtLine({ d: { r: 'follow' } })).toBe('研究してきた手です');
     expect(thoughtLine({})).toBe('');
+  });
+});
+
+describe('弟子の読み筋と相手の実際の手(34-18)', () => {
+  it('読み筋を「▲7六歩 △3四歩」の形にし、相手が読み筋と違う手を指したら印を付ける', () => {
+    const moves = [{ move: '7g7f', d: { l: '7g7f 3c3d 2g2f' } }, { move: '8c8d' }];
+    const reading = thoughtReading(moves, 1);
+    expect(reading).toMatchObject({ text: '▲7六歩 △3四歩 ▲2六歩', expected: '3c3d', actual: '8c8d', actualText: '△8四歩', surprised: true });
+    expect(thoughtReading([{ move: '7g7f', d: { l: '7g7f 3c3d' } }, { move: '3c3d' }], 1).surprised).toBe(false);
+    expect(thoughtReading([{ move: '7g7f' }], 1)).toBeNull();
   });
 });

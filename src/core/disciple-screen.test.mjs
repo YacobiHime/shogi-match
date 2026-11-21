@@ -79,3 +79,14 @@ describe('見立てを面白くする(docs/disciple-mode-design.mdの33-6)', () 
     expect(source).toMatch(/data-disciple-spotted/);
   });
 });
+
+describe('理由で指す棋士の考えの一言と読み筋(34-17・34-18)', () => {
+  it('考えの一言は、観戦の欄のv-if/v-else-ifの並びの前に置く(並びの途中に置くと検討の段が消える)', () => {
+    expect(source).toMatch(/data-disciple-thought>[\s\S]*?<\/p>\s*<p v-if="watch\.error" class="disciple__ask">/);
+    expect(source).toMatch(/<p v-else-if="!watch\.end" class="disciple__ask">[^\n]*\n\s*<template v-else-if="watch\.phase === 'review'">/);
+  });
+  it('検討では、弟子の手の読み筋と、読んでいなかった相手の手を出す', () => {
+    expect(source).toMatch(/return thoughtReading\(current\.entries as any, current\.upto\);/);
+    expect(source).toMatch(/data-disciple-reading/);
+  });
+});
