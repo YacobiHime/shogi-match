@@ -8,7 +8,8 @@ const never = () => 0.99;
 
 describe('理由で指す棋士の考え方(34-16)', () => {
   it('能力値で読みの手数・大局観・うっかり・詰みの手数が変わる', () => {
-    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, shapeScale: 0.2, skip: 0.2, mateDepth: 1 });
+    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, qdepth: 1, shapeScale: 0, skip: 0.35, mateDepth: 1 });
+    expect(thinkProfile({ reading: 18 }).depth).toBe(1);
     expect(strong).toMatchObject({ depth: 6, shapeScale: 1, skip: 0.02, mateDepth: 9 });
   });
   it('詰みがあれば詰ます', () => {

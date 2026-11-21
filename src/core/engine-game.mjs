@@ -4,6 +4,8 @@
 // エンジンの呼び出しは、引数のsearchに任せる(画面に依存しない)。途中までの棋譜(resume)から続きを指せる。
 
 import { discipleMoveSettings } from './disciple-strength.mjs';
+import { thinkHere } from './reason-think.mjs';
+import { createBookTracker, followUpTurn, noteBook } from './strategy-mastery.mjs';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { createRng } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from './strength-settings.mjs';
@@ -180,10 +182,11 @@ export function shouldEngineResign({ ply, best, lastValue, style = resignStyleBy
  *   onMove?: (entry: import('./relay-game.mjs').RelayMoveEntry, index: number) => void,
  *   isCancelled?: () => boolean,
  *   resume?: import('./relay-game.mjs').RelayMoveEntry[],
+ *   think?: (request: { sfen: string, levels: Record<string, number>, planMove: string | null, seed: number }) => Promise<any>,
  * }} options
  * @returns {Promise<import('./relay-game.mjs').RelayGame | null>} 止めたらnull
  */
-export async function playEngineGame({ spec, search, formationMaster = null, onMove = () => {}, isCancelled = () => false, resume = [] }) {
+export async function playEngineGame({ spec, search, formationMaster = null, onMove = () => {}, isCancelled = () => false, resume = [], think = thinkHere }) {
   const light = Boolean(spec.light);
   const strengths = { black: engineStrength(spec.black, { light }), white: engineStrength(spec.white, { light }) };
   // 持ち時間の時計だけに使う筋書き(勝ち負けは決めない。手数の目安で時間を配る)。
@@ -199,6 +202,8 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
   const humanBlunders = { black: [], white: [] };
   const lastBest = { black: null, white: null };
   let formations = createFormationState();
+  /** 理由で指す棋士の定跡の歩み(戦法熟練度で、定跡のあとエンジンで指す手を決める。34-10)。 */
+  let books = createBookTracker();
   let lastEval = 40;
   let lastCapture = false;
 
@@ -257,8 +262,11 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
         : strength.settings);
     const planMove = openingPlanMove({ plans, side, ply, record, moves, legal: allowed, formations, lastCapture });
 
+    const reasoner = player?.reason ?? null;
+    const ownMoves = Math.floor((ply + (side === 'black' ? 1 : 0)) / 2);
+    if (reasoner) books = noteBook(books, side, { planMove, ownMoves });
     const before = withCharacter();
-    const read = strength.logicLevel !== null || !(before.nodes > 0)
+    const read = reasoner || strength.logicLevel !== null || !(before.nodes > 0)
       ? await search({ moves: [...moves], nodes: EVAL_NODES, multiPv: 2 })
       : await search({ moves: [...moves], nodes: before.nodes, multiPv: Math.max(1, before.multiPv), threads: before.searchThreads });
     if (isCancelled()) return null;
@@ -271,7 +279,21 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     lastBest[side] = best?.value ?? null;
 
     let choice = null;
-    if (strength.logicLevel !== null || !(before.nodes > 0)) {
+    if (reasoner) {
+      // 理由で指す棋士(34-16)。定跡のあとの研究の続きだけエンジンで指す(34-10)。エンジンの読み(read)は判定役。
+      const follow = followUpTurn(books, side, ownMoves, reasoner.mastery ?? 0);
+      if (follow) {
+        const deep = await search({ moves: [...moves], nodes: follow.nodes, multiPv: 1 });
+        if (isCancelled()) return null;
+        const pick = rankedCandidates(deep).find(({ move }) => allowed.includes(move));
+        if (pick) choice = { move: pick.move, reason: { stage: 'follow', reason: 'follow', skipped: [] } };
+      }
+      if (!choice) {
+        const thought = await think({ sfen, levels: reasoner.levels ?? {}, planMove, seed: (spec.seed ?? 0) ^ Math.imul(ply + 7, 0x85ebca6b) });
+        if (isCancelled()) return null;
+        if (thought?.move && allowed.includes(thought.move)) choice = { move: thought.move, reason: thought };
+      }
+    } else if (strength.logicLevel !== null || !(before.nodes > 0)) {
       choice = chooseLogicMove({ sfen, legalMoves: allowed, moveHistory: moves, level: strength.logicLevel ?? 1, planMove, random });
     } else {
       const selection = withCharacter(best?.value);
@@ -334,7 +356,17 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     };
     // 弟子の手は、観戦の見立て(崩れた理由。disciple-strength.mjsのcauseOf)のために、気づかなかったこと・詰みを逃したか・時計を残す。
     // 気づかなかったことの種類(hanging・free・mate)も残す(崩れ方の見立て。disciple-causes.mjs、33-5)。
-    if (disciple) entry.d = { o: choice?.oversights?.length ? 1 : 0, m: choice?.ownMateMissed && !(chosen?.score?.type === 'mate' && chosen.score.value > 0) ? 1 : 0, c: pressure ?? '', k: [...new Set((choice?.oversights ?? []).map((item) => item?.kind).filter(Boolean))] };
+    if (disciple && !reasoner) entry.d = { o: choice?.oversights?.length ? 1 : 0, m: choice?.ownMateMissed && !(chosen?.score?.type === 'mate' && chosen.score.value > 0) ? 1 : 0, c: pressure ?? '', k: [...new Set((choice?.oversights ?? []).map((item) => item?.kind).filter(Boolean))] };
+    // 理由で指す棋士の思考の記録(34-7): 決めた段s・理由r・飛ばした確かめk・読み筋l(4手まで)。詰みを逃したかmはエンジンの読みで見る。
+    if (reasoner && (disciple || player?.reasonRecord)) {
+      const thought = choice?.reason ?? {};
+      const bestMate = best?.score?.type === 'mate' && best.score.value > 0;
+      const chosenMate = chosen?.score?.type === 'mate' && chosen.score.value > 0;
+      entry.d = {
+        o: thought.skipped?.length ? 1 : 0, m: bestMate && !chosenMate ? 1 : 0, c: pressure ?? '', k: [...(thought.skipped ?? [])],
+        s: thought.stage ?? '', r: thought.reason ?? '', l: (thought.line ?? []).slice(0, 4).join(' '),
+      };
+    }
     entries.push(entry);
     lastEval = evalCp;
     onMove(entry, entries.length - 1);

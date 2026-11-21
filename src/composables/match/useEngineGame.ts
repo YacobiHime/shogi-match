@@ -1,6 +1,7 @@
 import type { ShogiEngine } from "../../core/engine.js";
 import type { RelayGame, RelayMoveEntry } from "../../core/relay-game.mjs";
 import { clearEngineGameProgress, loadEngineGameProgress, playEngineGame, saveEngineGameProgress } from "../../core/engine-game.mjs";
+import { createThinker } from "./useThinkWorker";
 import { loadRelayStore, recallRelayGame, rememberRelayGame, saveRelayStore } from "../../core/relay-store.mjs";
 import hiraganaFormationMaster from "../../data/hiragana_suisho_formations.json";
 import type { EngineFactory } from "./analysisEngines";
@@ -40,6 +41,8 @@ export function useEngineGame({ engineFactory, storage }: EngineGameDeps) {
   let starting: Promise<void> | null = null;
   let size = 1;
   let generation = 0;
+  /** 理由で指す棋士(師匠の1年の弟子と相手)の考え方を動かすWorker(34-17)。 */
+  const thinker = createThinker();
   let order = 0;
   let priorityOf: (key: string) => number = () => 0;
   const running = new Set<Promise<unknown>>();
@@ -136,6 +139,7 @@ export function useEngineGame({ engineFactory, storage }: EngineGameDeps) {
         const game = await playEngineGame({
           spec, formationMaster: hiraganaFormationMaster, resume, isCancelled: () => id !== generation,
           search: (request: SearchRequest) => enqueue(spec.key, id, request),
+          think: (request: any) => thinker.think(request),
           onMove: (entry: RelayMoveEntry, index: number) => {
             played[index] = entry;
             saveEngineGameProgress(storage(), spec.key, played);
@@ -171,6 +175,7 @@ export function useEngineGame({ engineFactory, storage }: EngineGameDeps) {
   }
 
   function dispose() {
+    thinker.dispose();
     cancel();
     const current = [...workers];
     workers.length = 0;

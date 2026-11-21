@@ -12,6 +12,7 @@ import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, 
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
+import { discipleMastery, masteryForLevel } from './strategy-mastery.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -689,13 +690,19 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const opponentOpening = battle === 'ranging' ? 'shiken' : 'aigakari';
   // 相手の得意を外すなら、相手の戦型に合う形(振り飛車には対抗形の居飛車、居飛車には矢倉)。力戦なら定跡なし。
   const ownOpening = plan?.opening === 'wild' ? null : plan?.opening === 'avoid' ? (battle === 'ranging' ? 'ibisha' : 'yagura') : STYLE_OPENINGS[next.style] ?? null;
+  // 弟子と相手は、評価関数を使わず理由で指す(34-16)。能力値のLvで読みの手数・大局観・うっかり・詰みの手数が決まる。
+  // 定跡のあとの研究の続きだけ、戦法熟練度の手数をエンジンで指す(34-10)。
+  const aptitudeRank = aptitudeRanks(next)[String(ownOpening ?? '').startsWith('kakugawari') ? 'kakugawari' : battle === 'ranging' ? 'ranging' : 'static'];
   const disciple = {
     id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: eventKind,
     disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
+    reason: { levels: { ...strength.levels }, mastery: ownOpening ? discipleMastery(next, ownOpening, aptitudeRank) : 0 },
   };
+  const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const opponent = {
     id: member.id, name: member.name, level: Math.round(level), kind: eventKind, character: member.character ?? null,
     repertoire: member.repertoire ?? null, style: member.style ?? null,
+    reason: { levels: opponentLevels, mastery: masteryForLevel(level) },
   };
   const spec = {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,

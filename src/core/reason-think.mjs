@@ -12,6 +12,7 @@ import { MATE, evaluateTerms, scoreMoves, searchBestMove } from './logic-search.
 import { playLight, stateFromSfen } from './logic-position.mjs';
 import { QUIET_ORDER, quietKind, situationalOrder } from './reason-move.mjs';
 import { legalMoves } from './light-moves.mjs';
+import { createRng } from './ryuo-random.mjs';
 
 const LV_MIN = 12;
 const LV_MAX = 49;
@@ -28,20 +29,23 @@ export function thinkProfile(levels = {}) {
   const p = unit(levels.plan);
   const s = unit(levels.steady);
   const m = unit(levels.mate);
-  const depth = Math.round(lerp(1, 6, r));
+  // 読みはLv18まで1手、そこからLv49で6手(34-17。Lvの低い側が強すぎたので、低い側を1手のまま弱くした)。
+  const depth = 1 + Math.round(5 * clamp(((Number(levels.reading) || LV_MIN) - 18) / (LV_MAX - 18), 0, 1));
   return {
     /** 全部の手を読む手数(1〜6)。 */
     depth,
+    /** 末端の取り合いを読む手数(1〜8)。 */
+    qdepth: Math.round(lerp(1, 8, r)),
     /** 1手に使う時間の上限(ミリ秒)。 */
     timeMs: Math.round(250 + depth * 300),
-    /** 名前のある形の点(大局観)の重み(0.2〜1)。 */
-    shapeScale: Math.round(lerp(0.2, 1, p) * 100) / 100,
+    /** 名前のある形の点(大局観)の重み(0〜1)。 */
+    shapeScale: Math.round(lerp(0, 1, p) * 100) / 100,
     /** 手順表の手を選んでよい、最善との差(作戦が高いほど小さい)。 */
-    quietMargin: Math.round(lerp(120, 30, p)),
+    quietMargin: Math.round(lerp(150, 30, p)),
     /** 何もない局面で、手順表を局面に合わせて選ぶ割合。 */
     situational: Math.round(p * 100) / 100,
-    /** 読みを1手だけにしてしまう確率(うっかり)。 */
-    skip: Math.round(lerp(0.2, 0.02, s) * 1000) / 1000,
+    /** 読みを1手だけにし、取り合いも読まない確率(うっかり)。 */
+    skip: Math.round(lerp(0.35, 0.02, s) * 1000) / 1000,
     /** 自分の詰みを探す手数(1〜9)。 */
     mateDepth: 1 + 2 * Math.round(m * 4),
   };
@@ -87,12 +91,13 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   const careless = random() < profile.skip;
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
-  const options = { depth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6 };
+  const qdepth = careless ? 0 : profile.qdepth ?? 6;
+  const options = { depth, qdepth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6 };
   const best = searchBestMove(sfen, options);
   if (!best) return null;
   // 3. 定跡: 最善より大きく劣らなければ定跡の手。
   const checkDepth = Math.max(1, depth - 1);
-  const scoreOpts = { depth: checkDepth, maxTimeMs: Math.round(profile.timeMs / 2), shapeScale: profile.shapeScale };
+  const scoreOpts = { depth: checkDepth, qdepth, maxTimeMs: Math.round(profile.timeMs / 2), shapeScale: profile.shapeScale };
   if (planMove && planMove !== best.move) {
     const planScore = scoreMoves(sfen, [planMove], scoreOpts).get(planMove);
     if (planScore && planScore.score >= best.score - BOOK_MARGIN) return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv });
@@ -126,4 +131,13 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
     }
   }
   return done(best.move, tactical ? 'read' : 'shape', reason, { score: best.score, line: best.pv });
+}
+
+/**
+ * 理由で指す棋士の1手を、種から決まる乱数で考える(本局から呼ぶ。ブラウザはWorkerで同じ関数を動かす)。
+ * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number }} request
+ */
+export async function thinkHere({ sfen, levels, planMove, seed }) {
+  const rng = createRng(seed >>> 0);
+  return chooseThinkingMove({ sfen, profile: thinkProfile(levels), planMove, random: () => rng.next() });
 }

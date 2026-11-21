@@ -68,3 +68,22 @@ export function followUpTurn(tracker, side, ownMoves, mastery) {
   const index = ownMoves - entry.endedAt;
   return index >= 0 && index < moves ? { nodes, index, of: moves } : null;
 }
+
+/**
+ * 相手(研修会員・奨励会員・羽音の弟子)の熟練度。Lvが高いほど定跡の続きの研究がある(Lv12で0、Lv49で80)。
+ * @param {number} level
+ */
+export function masteryForLevel(level) {
+  return clamp(Math.round(((Number(level) || 12) - 12) / 37 * 80), 0, 80);
+}
+
+/** 弟子のはじめの熟練度(戦法の適性の段から。A=40・B=30・C=20…G=0)。 */
+export function startingMastery(rank) {
+  return { A: 40, B: 30, C: 20, D: 15, E: 10, F: 5, G: 0 }[rank] ?? 20;
+}
+
+/** 弟子の、その戦法の熟練度(記録になければ、戦法の適性から)。 */
+export function discipleMastery(state, openingId, aptitudeRank) {
+  const value = state?.mastery?.[openingId];
+  return Number.isFinite(value) ? clamp(value, 0, MASTERY_MAX) : startingMastery(aptitudeRank);
+}
