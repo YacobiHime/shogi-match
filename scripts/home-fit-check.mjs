@@ -4,6 +4,7 @@
 // 見える大きさ(住所の帯とツールバーを除く)ごとに、ホームの欄(.shogi-home)の中身の下の端が見える高さに入るかを見る。
 // 「長い文」の段では、つぎはこれの説明・記録の帯の札・2つ目の入口・同期の印と一言を、いちばん長くなる形に書き換えて測る。
 // ホームに行を足したら、これで溢れないことを確かめる(新しい1行にせず、すでにある行の中に入れる)。
+// タイルの名前がはみ出していないか(5-7)と、中身が下のタブ・左の列に重なっていないか(6章)も見る。
 // Playwrightはリポジトリの依存に入れない。入っている環境(require('playwright')か/opt/node-tools)のものを使う。
 
 import { createRequire } from 'node:module';
@@ -93,8 +94,13 @@ function measure() {
     const l = label.getBoundingClientRect();
     return l.right > t.right - 2 || l.left < t.left + 2 || label.scrollWidth > label.clientWidth + 1;
   }).map((tile) => tile.querySelector('.shogi-title__label').textContent.trim());
+  // 見えているタブの中身が、下のタブ(左の列)に重なっていないか(6章)。
+  const bar = box(document.querySelector('.shogi-title__tabs'));
+  const underBar = [...home.querySelectorAll('.shogi-title__panel:not(.shogi-title__panel--off) button, .shogi-title__hero')]
+    .filter((el) => el.getBoundingClientRect().width > 0 && overlap(el.getBoundingClientRect(), bar)).length;
   return {
     spill,
+    underBar,
     scroll: home.scrollHeight - home.clientHeight,
     contentTop: Math.round(top - rect.top),
     contentBottom: Math.round(bottom - rect.top),
@@ -128,9 +134,9 @@ for (const mode of ['real', 'stress']) {
     await page.waitForTimeout(100);
     const m = await page.evaluate(measure);
     const portrait = height > width && height >= 540 && width >= 320;
-    const ok = (!portrait || m.scroll <= 0) && m.pageOverflowX <= 0 && !m.subOverGo && m.small.length === 0 && m.spill.length === 0;
+    const ok = (!portrait || m.scroll <= 0) && m.pageOverflowX <= 0 && !m.subOverGo && m.small.length === 0 && m.spill.length === 0 && m.underBar === 0;
     if (!ok) failed += 1;
-    console.log(`${ok ? 'OK ' : 'NG '} ${mode.padEnd(6)} ${name.padEnd(17)} ${width}x${height} 中身 ${m.contentTop}〜${m.contentBottom}/${m.viewHeight}px スクロール ${Math.max(0, m.scroll)}px${m.pageOverflowX > 0 ? ` 横はみ出し${m.pageOverflowX}px` : ''}${m.subOverGo ? ' 2つ目の入口が「はじめる」に重なる' : ''}${m.small.length ? ` 44px未満: ${m.small.join(' ')}` : ''}${m.spill.length ? ` 名前がはみ出す: ${m.spill.join('・')}` : ''}`);
+    console.log(`${ok ? 'OK ' : 'NG '} ${mode.padEnd(6)} ${name.padEnd(17)} ${width}x${height} 中身 ${m.contentTop}〜${m.contentBottom}/${m.viewHeight}px スクロール ${Math.max(0, m.scroll)}px${m.pageOverflowX > 0 ? ` 横はみ出し${m.pageOverflowX}px` : ''}${m.subOverGo ? ' 2つ目の入口が「はじめる」に重なる' : ''}${m.small.length ? ` 44px未満: ${m.small.join(' ')}` : ''}${m.spill.length ? ` 名前がはみ出す: ${m.spill.join('・')}` : ''}${m.underBar ? ` タブに重なる: ${m.underBar}` : ''}`);
     if (out) await page.screenshot({ path: `${out}/${mode}-${name}.png` });
     await page.close();
   }

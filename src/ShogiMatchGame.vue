@@ -49,6 +49,8 @@
           つぎはこれの札。2つ目の入口(香落ち・竜王戦の対策と続き・コツ)は札の中の「はじめる」の右に重ねて置く(札のボタンの中にボタンを入れない)。
           ホームをスマホのブラウザで1画面に収めるため(docs/home-roadmap-design.mdの5章)。
         -->
+        <div class="shogi-title__panels" :data-home-tab="homeTab">
+        <div class="shogi-title__panel shogi-title__panel--home" :class="{ 'shogi-title__panel--off': homeTab !== 'home' }" :inert="homeTab !== 'home'" data-home-panel="home">
         <div class="shogi-title__next-wrap" :class="{ 'shogi-title__next-wrap--sub': homeNextHasSub }">
         <button
           type="button"
@@ -246,7 +248,51 @@
         <p v-if="cloudSyncToast" class="shogi-title__sync-toast" role="status" data-sync-toast>{{ cloudSyncToast }}</p>
         </div>
 
+        <!--
+          ホームの作り直し(docs/home-roadmap-design.mdの6章、案B 下のタブ)。ホームのタブは、つぎはこれ・記録の帯・主役の2枚(大会・物語)・あそぶの3つ。
+          まなぶ・しらべるは下のタブ(広い画面は左の列)で切り替える。ノートのタブはやこびノートを開く。
+        -->
         <div class="shogi-title__groups">
+          <section class="shogi-title__group shogi-title__group--pillars" aria-label="大会と物語" data-home-group="pillars">
+            <div class="shogi-title__tiles shogi-title__tiles--pillars">
+              <button type="button" class="shogi-title__tile shogi-title__tile--pillar shogi-title__tile--ryuo" :class="homeTileClass('tournament')" data-home-pillar="tournament" @click="openTournamentScreen">
+                <span v-if="homeTile('tournament').recommended" class="shogi-title__tile-badge">おすすめ</span>
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="4" y="2" width="8" height="1" />
+                    <rect x="4" y="3" width="8" height="4" />
+                    <rect x="2" y="3" width="2" height="1" />
+                    <rect x="12" y="3" width="2" height="1" />
+                    <rect x="5" y="7" width="6" height="1" />
+                    <rect x="7" y="8" width="2" height="3" />
+                    <rect x="5" y="11" width="6" height="2" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">大会</span>
+              </button>
+              <button type="button" class="shogi-title__tile shogi-title__tile--pillar shogi-title__tile--story" data-story-tile @click="openStory">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4">
+                    <rect x="1" y="3" width="6" height="10" />
+                    <rect x="9" y="3" width="6" height="10" />
+                  </g>
+                  <g fill="#f1a54c">
+                    <rect x="7" y="3" width="2" height="11" />
+                    <rect x="1" y="13" width="14" height="1" />
+                  </g>
+                  <g fill="#1d303f">
+                    <rect x="2" y="5" width="4" height="1" />
+                    <rect x="2" y="7" width="4" height="1" />
+                    <rect x="2" y="9" width="3" height="1" />
+                    <rect x="10" y="5" width="4" height="1" />
+                    <rect x="10" y="7" width="4" height="1" />
+                    <rect x="10" y="9" width="3" height="1" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">物語</span>
+              </button>
+            </div>
+          </section>
           <section class="shogi-title__group shogi-title__group--play" aria-labelledby="shogi-home-play" data-home-group="play">
             <h2 id="shogi-home-play" class="shogi-title__group-title">あそぶ</h2>
             <div class="shogi-title__tiles shogi-title__tiles--play">
@@ -272,21 +318,6 @@
                 </svg>
                 <span class="shogi-title__label">自由対局</span>
               </button>
-              <button type="button" class="shogi-title__tile" :class="homeTileClass('tournament')" @click="openTournamentScreen">
-                <span v-if="homeTile('tournament').recommended" class="shogi-title__tile-badge">おすすめ</span>
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#f1a54c">
-                    <rect x="4" y="2" width="8" height="1" />
-                    <rect x="4" y="3" width="8" height="4" />
-                    <rect x="2" y="3" width="2" height="1" />
-                    <rect x="12" y="3" width="2" height="1" />
-                    <rect x="5" y="7" width="6" height="1" />
-                    <rect x="7" y="8" width="2" height="3" />
-                    <rect x="5" y="11" width="6" height="2" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">大会</span>
-              </button>
               <button type="button" class="shogi-title__tile" :class="homeTileClass('endgame')" data-endgame-tile @click="startEndgameMatch">
                 <span v-if="homeTile('endgame').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
@@ -302,31 +333,6 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">終盤戦</span>
-              </button>
-              <!--
-                物語。大会と並ぶこのゲームの主役。押すとストーリー選択(メインとサブ。docs/story-mode-design.md)。
-                メインの話はまだ準備中で、話を書いたら目録に足していく。
-              -->
-              <button type="button" class="shogi-title__tile" data-story-tile @click="openStory">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#fffcf4">
-                    <rect x="1" y="3" width="6" height="10" />
-                    <rect x="9" y="3" width="6" height="10" />
-                  </g>
-                  <g fill="#f1a54c">
-                    <rect x="7" y="3" width="2" height="11" />
-                    <rect x="1" y="13" width="14" height="1" />
-                  </g>
-                  <g fill="#1d303f">
-                    <rect x="2" y="5" width="4" height="1" />
-                    <rect x="2" y="7" width="4" height="1" />
-                    <rect x="2" y="9" width="3" height="1" />
-                    <rect x="10" y="5" width="4" height="1" />
-                    <rect x="10" y="7" width="4" height="1" />
-                    <rect x="10" y="9" width="3" height="1" />
-                  </g>
-                </svg>
-                <span class="shogi-title__label">物語</span>
               </button>
               <!-- 師匠の1年(docs/disciple-mode-design.md)。弟子をとって育てる。将棋が得意でなくても遊べる。 -->
               <button type="button" class="shogi-title__tile" data-disciple-tile @click="openDisciple">
@@ -345,7 +351,9 @@
             </div>
             <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
           </section>
-          <section class="shogi-title__group shogi-title__group--learn" aria-labelledby="shogi-home-school" data-home-group="learn">
+        </div>
+        </div>
+          <section class="shogi-title__panel shogi-title__group shogi-title__group--learn" :class="{ 'shogi-title__panel--off': homeTab !== 'learn' }" :inert="homeTab !== 'learn'" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
             <div class="shogi-title__tiles shogi-title__tiles--learn">
               <button type="button" class="shogi-title__tile" :class="homeTileClass('tutorial')" @click="tutorialOpen = true">
@@ -408,7 +416,7 @@
             </div>
           </section>
           <!-- 図鑑は5つを1枚のタイルにまとめ、押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。 -->
-          <section class="shogi-title__group shogi-title__group--dex" aria-labelledby="shogi-home-dex" data-home-group="dex">
+          <section class="shogi-title__panel shogi-title__group shogi-title__group--dex" :class="{ 'shogi-title__panel--off': homeTab !== 'dex' }" :inert="homeTab !== 'dex'" aria-labelledby="shogi-home-dex" data-home-group="dex">
             <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
             <div class="shogi-title__tiles--dex">
               <button type="button" class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf">
@@ -435,6 +443,46 @@
           </section>
         </div>
       </nav>
+      <!-- 下のタブ(広い画面は左の列)。まなぶにおすすめがあれば点を付ける(6章)。 -->
+      <div class="shogi-title__tabs" role="tablist" aria-label="ホームの切り替え">
+        <button
+          v-for="tab in HOME_TABS"
+          :key="tab.id"
+          type="button"
+          class="shogi-title__tab"
+          :class="{ 'shogi-title__tab--on': homeTab === tab.id }"
+          :role="tab.id === 'note' ? undefined : 'tab'"
+          :aria-selected="tab.id === 'note' ? undefined : homeTab === tab.id"
+          :data-home-tab-button="tab.id"
+          @click="selectHomeTab(tab.id)"
+        >
+          <svg class="shogi-title__tab-icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+            <template v-if="tab.id === 'home'">
+              <g fill="#f1a54c"><rect x="7" y="1" width="2" height="1" /><rect x="5" y="2" width="6" height="1" /><rect x="3" y="3" width="10" height="2" /><rect x="1" y="5" width="14" height="2" /></g>
+              <g fill="#fffcf4"><rect x="3" y="7" width="10" height="8" /></g>
+              <g fill="#1d303f"><rect x="7" y="10" width="2" height="5" /></g>
+            </template>
+            <template v-else-if="tab.id === 'learn'">
+              <g fill="#f1a54c"><rect x="1" y="5" width="14" height="1" /><rect x="3" y="4" width="10" height="1" /><rect x="6" y="3" width="4" height="1" /><rect x="12" y="6" width="1" height="4" /></g>
+              <g fill="#fffcf4"><rect x="4" y="7" width="8" height="5" /><rect x="3" y="12" width="10" height="1" /></g>
+              <g fill="#f1a54c"><rect x="6" y="9" width="4" height="1" /></g>
+            </template>
+            <template v-else-if="tab.id === 'dex'">
+              <g fill="#fffcf4"><rect x="1" y="2" width="9" height="9" /></g>
+              <g fill="#1d303f"><rect x="2" y="3" width="7" height="7" /></g>
+              <g fill="#fffcf4"><rect x="4" y="5" width="3" height="1" /><rect x="4" y="7" width="3" height="1" /></g>
+              <g fill="#d7d1fd"><rect x="9" y="9" width="2" height="2" /><rect x="11" y="11" width="2" height="2" /><rect x="13" y="13" width="2" height="2" /></g>
+            </template>
+            <template v-else>
+              <g fill="#f1a54c"><rect x="3" y="1" width="10" height="14" /></g>
+              <g fill="#fffcf4"><rect x="4" y="2" width="8" height="12" /></g>
+              <g fill="#1d303f"><rect x="5" y="10" width="2" height="2" /><rect x="8" y="7" width="2" height="5" /><rect x="11" y="4" width="1" height="8" /></g>
+            </template>
+          </svg>
+          <span class="shogi-title__tab-label">{{ tab.label }}</span>
+          <span v-if="tab.id === 'learn' && homeLearnRecommended && homeTab !== 'learn'" class="shogi-title__tab-dot" data-home-tab-dot aria-label="おすすめあり"></span>
+        </button>
+      </div>
     </div>
 
     <ShogiTutorial
@@ -10079,6 +10127,21 @@ const homeRoadmapStep = computed(() => homeRoadmapState.value.steps[homeRoadmapS
 function homeTile(id: string) {
   return roadmapTile(id, homeRoadmapState.value.current);
 }
+/** ホームのタブ(docs/home-roadmap-design.mdの6章、案B)。ノートはやこびノートを開くだけで、タブは切り替えない。 */
+const HOME_TABS = [
+  { id: "home", label: "ホーム" },
+  { id: "learn", label: "まなぶ" },
+  { id: "dex", label: "しらべる" },
+  { id: "note", label: "ノート" },
+] as const;
+type HomeTab = "home" | "learn" | "dex";
+const homeTab = ref<HomeTab>("home");
+function selectHomeTab(id: (typeof HOME_TABS)[number]["id"]) {
+  if (id === "note") openYakobiNote();
+  else homeTab.value = id;
+}
+/** まなぶのタイルに、強くなる道のおすすめがあるか(タブに点を付ける)。 */
+const homeLearnRecommended = computed(() => homeTile("tutorial").recommended || homeTile("problems").recommended);
 function homeTileClass(id: string) {
   const tile = homeTile(id);
   return { "shogi-title__tile--recommended": tile.recommended };
@@ -10478,6 +10541,9 @@ function navigateBack() {
     else closeResearch();
   } else if (dexShelfOpen.value && dexShelfFrom.value === "home") {
     dexShelfOpen.value = false;
+  } else if (homeOpen.value && homeTab.value !== "home") {
+    // まなぶ・しらべるのタブからは、ホームのタブへ戻る(6章)。
+    homeTab.value = "home";
   } else if (homeOpen.value) {
     // ホームが最下段。
   } else if (dexShelfOpen.value) {
@@ -10508,7 +10574,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || discipleOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || homeTab.value !== "home" || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || discipleOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

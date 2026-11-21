@@ -54,7 +54,13 @@ for (const [width, height] of options.sizes.split(',').map((size) => size.split(
   // 段級位の作り直しのお知らせ(対局したことのある保存で1回出る)を閉じる。
   if (await page.locator('[data-ladder-notice-ok]').count()) await page.click('[data-ladder-notice-ok]');
   if (options.tile) {
-    await page.locator('.shogi-title__tile', { hasText: options.tile }).click();
+    // ホームはタブで切り替える(docs/home-roadmap-design.mdの6章)。タイルが見えなければ、そのタイルのあるタブへ。
+    const tile = page.locator('.shogi-title__panel:not(.shogi-title__panel--off) .shogi-title__tile', { hasText: options.tile });
+    for (const tab of ['home', 'learn', 'dex']) {
+      if (await tile.count()) break;
+      await page.click(`[data-home-tab-button="${tab}"]`);
+    }
+    await tile.first().click();
     await page.waitForTimeout(options.wait);
   }
   for (const selector of options.clicks) {

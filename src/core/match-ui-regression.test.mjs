@@ -1040,8 +1040,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(teamFinalePending\.value && !ryuoGame\.value\?\.replay\) return \{ done: false, doneText: "", next: "", back: "チームの結果発表へ" \};/);
   });
 
-  it('ホームのあそぶの行の物語は、押すとストーリー選択を開く(docs/story-mode-design.md)', () => {
-    expect(source).toMatch(/class="shogi-title__tile" data-story-tile @click="openStory"/);
+  it('ホームの主役の2枚の物語は、押すとストーリー選択を開く(docs/story-mode-design.md・docs/home-roadmap-design.mdの6章)', () => {
+    expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--pillar shogi-title__tile--story" data-story-tile @click="openStory"/);
     expect(source).toMatch(/const ShogiStory = lazyScreen\(\(\) => import\("\.\/ShogiStory\.vue"\)\);/);
     // 戻る操作: 話を読んでいるときは話を閉じ、一覧ならホームへ。
     expect(source).toMatch(/\} else if \(storyOpen\.value\) \{\s*\/\/[^\n]*\n\s*if \(!storyView\.value\?\.goBack\(\)\) storyOpen\.value = false;/);
@@ -1050,7 +1050,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/import\("\.\/core\/story-mode\.mjs"\)/);
     expect(source).toMatch(/unlockStorySceneLater\(format === "school" \? "invite-school" : "invite-pro"\);/);
     expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ loadNotice \}\}<\/p>/);
-    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/);
+    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
   });
 
   it('ホームのあそぶの行の師匠の1年は、押すと弟子を育てる画面を開く(docs/disciple-mode-design.mdの23章)', () => {
@@ -1102,7 +1102,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf"/);
     expect(source).toMatch(/'shogi-game__confirm--over-home': dexShelfFrom === 'home'/);
     expect(source).toMatch(/dexShelfFrom === "home" \? "ホームに戻る" : "対局に戻る"/);
-    expect(source).toMatch(/\} else if \(dexShelfOpen\.value && dexShelfFrom\.value === "home"\) \{\s*dexShelfOpen\.value = false;\s*\} else if \(homeOpen\.value\) \{/);
+    expect(source).toMatch(/\} else if \(dexShelfOpen\.value && dexShelfFrom\.value === "home"\) \{\s*dexShelfOpen\.value = false;\s*\} else if \(homeOpen\.value(?: && homeTab\.value !== "home")?\) \{/);
     expect(source).toMatch(/canGoBack: \(\) => [^\n]*\(dexShelfOpen\.value && dexShelfFrom\.value === "home"\)/);
   });
   it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
@@ -1167,7 +1167,19 @@ describe("match screen regressions", () => {
     // 盤の大きさを変えないよう、中継の1行は高さを決めておく。
     expect(source).toMatch(/\.shogi-game__presence-line \{\s*display: block;\s*min-height: 1\.4em;/);
   });
-  it("ホームのあそぶの5つのタイルは、どの大きさでもアイコンの下に名前を置き、名前の大きさをタイルの幅から決める(docs/home-roadmap-design.mdの5-7)", () => {
+  it("ホームは下のタブ(広い画面は左の列)で、ホーム・まなぶ・しらべるを切り替え、ノートはやこびノートを開く(docs/home-roadmap-design.mdの6章)", () => {
+    expect(source).toMatch(/const HOME_TABS = \[\s*\{ id: "home", label: "ホーム" \},\s*\{ id: "learn", label: "まなぶ" \},\s*\{ id: "dex", label: "しらべる" \},\s*\{ id: "note", label: "ノート" \},/);
+    expect(source).toMatch(/if \(id === "note"\) openYakobiNote\(\);\s*else homeTab\.value = id;/);
+    // 戻る操作: まなぶ・しらべるのタブからはホームのタブへ。
+    expect(source).toMatch(/\} else if \(homeOpen\.value && homeTab\.value !== "home"\) \{\s*\/\/[^\n]*\n\s*homeTab\.value = "home";/);
+    expect(source).toMatch(/canGoBack: \(\) => !homeOpen\.value \|\| homeTab\.value !== "home" \|\|/);
+    // タブの中身は同じ場所に重ね、見えないタブは隠す(タブを替えてもタイトルが動かない)。
+    expect(source).toMatch(/\.shogi-title__panel \{ grid-area: 1 \/ 1;/);
+    expect(source).toMatch(/:inert="homeTab !== 'learn'"/);
+    // 主役の2枚と、あそぶの3つ。
+    expect(source).toMatch(/shogi-title__tiles--pillars[\s\S]*?data-home-pillar="tournament"[\s\S]*?data-story-tile[\s\S]*?shogi-title__tiles--play/);
+  });
+  it("ホームのあそぶのタイルは、どの大きさでもアイコンの下に名前を置き、名前の大きさをタイルの幅から決める(docs/home-roadmap-design.mdの5-7)", () => {
     expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__tile \{\s*container-type: inline-size;\s*grid-template-columns: minmax\(0, 1fr\);\s*grid-template-areas: "icon" "label" "desc";/);
     expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__label \{\s*max-width: 100%;\s*font-size: min\(1\.1em, \d+cqi\);/);
     expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__tile-badge \{[^}]*white-space: nowrap;/);
