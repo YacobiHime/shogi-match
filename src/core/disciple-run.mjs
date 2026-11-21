@@ -9,6 +9,7 @@ import {
   failChance, judgeGuess, raiseAptitude, skillById, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
+import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { charmList, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -53,12 +54,10 @@ export const CARD_UNLOCKS = Object.freeze([
   Object.freeze({ card: 'dojo', text: '出かけた先で道場を見つけた', check: (state) => (state.outings ?? 0) >= 3 }),
 ]);
 
-/** 仲間(11章)。段階1は3人(百花と研究会の2人)。likesは顔を出しやすい稽古。 */
-export const FRIENDS = Object.freeze([
-  Object.freeze({ id: 'momoka', name: '百花', likes: Object.freeze(['tsume', 'kifu']), portrait: 'sakurano-momoka-320.webp' }),
-  Object.freeze({ id: 'hayase', name: '早瀬', likes: Object.freeze(['jissen', 'shisho']), portrait: '' }),
-  Object.freeze({ id: 'makabe', name: '真壁', likes: Object.freeze(['fast', 'jissen']), portrait: '' }),
-]);
+/** はじめからいる仲間(11章。百花と研究会の2人)。育成に連れていく仲間は状態の`team`(29章。一門の先輩も入る)。 */
+export const FRIENDS = BASE_FRIENDS;
+/** 育成に連れていく仲間(前の版の保存ははじめからの3人)。 */
+export const teamOf = (state) => (Array.isArray(state?.team) && state.team.length ? state.team : BASE_FRIENDS);
 /** 仲間が顔を出す割合。 */
 export const FRIEND_SHOW = 0.7;
 
@@ -96,9 +95,10 @@ export const shortGrade = (grade) => String(grade ?? '').replace(/^小学(\d)年
 
 /**
  * 新しい育成を始める。
- * @param {{ seed: number, discipleId: string }} input
+ * @param {{ seed: number, discipleId: string, team?: readonly any[] | null }} input teamは連れていく仲間(disciple-ichimon.mjsのpickTeam。なければはじめからの3人)
  */
-export function createDiscipleRun({ seed, discipleId }) {
+export function createDiscipleRun({ seed, discipleId, team = null }) {
+  const members = (team?.length ? team : BASE_FRIENDS).map((friend) => ({ ...friend, likes: [...friend.likes] }));
   const base = discipleById(discipleId) ?? DISCIPLES[0];
   const rng = createRng(seed);
   const state = {
@@ -120,7 +120,10 @@ export function createDiscipleRun({ seed, discipleId }) {
     mood: 1,
     aims: {},
     trainCounts: {},
-    bonds: Object.fromEntries(FRIENDS.map((friend) => [friend.id, 0])),
+    team: members,
+    bonds: Object.fromEntries(members.map((friend) => [friend.id, 0])),
+    // 一門の先輩が残した教え方のカード(受け継ぎ。11-1)。
+    deck: [...new Set(members.map((friend) => friend.card).filter(Boolean))],
     friends: {},
     kenshukai: null,
     words: null,
@@ -132,15 +135,15 @@ export function createDiscipleRun({ seed, discipleId }) {
     log: [{ turn: 0, text: `${base.name}が弟子入りした` }],
     end: null,
   };
-  state.friends = assignFriends(rng);
+  state.friends = assignFriends(rng, members);
   state.rng = rng.state;
   return state;
 }
 
 /** その週に、仲間がどの稽古に顔を出すか(稽古ごとの仲間のid)。 */
-function assignFriends(rng) {
+function assignFriends(rng, team = BASE_FRIENDS) {
   const byTraining = Object.fromEntries(TRAININGS.map((training) => [training.id, []]));
-  for (const friend of FRIENDS) {
+  for (const friend of team) {
     if (rng.next() >= FRIEND_SHOW) continue;
     const pool = rng.next() < 0.75 ? friend.likes : TRAININGS.map((training) => training.id);
     byTraining[pool[Math.floor(rng.next() * pool.length)]].push(friend.id);
@@ -206,7 +209,7 @@ const aimTable = (state) => Object.fromEntries(Object.entries(state.aims).map(([
 export function trainingPreview(state, id, { choice = 'steady' } = {}) {
   const training = trainingById(id);
   const friends = state.friends[id] ?? [];
-  const gains = trainingGains(state.stats, id, { choice, level: trainingLevel(state, id), mood: state.mood, aim: aimTable(state), friends: friends.length });
+  const gains = trainingGains(state.stats, id, { choice, level: trainingLevel(state, id), mood: state.mood, aim: aimTable(state), friends: friendWeight(teamOf(state), friends) });
   const aimed = Object.keys(gains).some((key) => state.aims[key]);
   return {
     id, label: training?.label ?? '', gains, friends, level: trainingLevel(state, id),
@@ -223,7 +226,7 @@ function advanceTurn(state, rng) {
   }
   // やる気は少しずつ真ん中へ戻り、ときどき揺れる。
   if (rng.next() < 0.12) state.mood = clamp(state.mood + (rng.next() < 0.5 ? -1 : 1), -2, 2);
-  state.friends = assignFriends(rng);
+  state.friends = assignFriends(rng, teamOf(state));
   if (!state.end && ((!state.shoreikai && state.turn >= MAX_TURNS) || state.turn >= HARD_TURNS)) finish(state, 'timeup');
   checkScenes(state, { calendar: turnCalendar(state.turn, state.startGrade) });
 }
@@ -270,7 +273,7 @@ export function chooseAction(state, action) {
   } else if (action.kind === 'study') {
     // 研究会: 今週どこかに顔を出した仲間がみんな来る。
     const present = [...new Set(Object.values(next.friends).flat())];
-    const scale = (MOOD_SCALE[clamp(Math.round(next.mood), -2, 2)] ?? 1) * (1 + STUDY.friendBoost * present.length);
+    const scale = (MOOD_SCALE[clamp(Math.round(next.mood), -2, 2)] ?? 1) * (1 + STUDY.friendBoost * friendWeight(teamOf(next), present));
     const gains = {
       reading: Math.round(STUDY.reading * scale * diminish(next.stats.reading) * (next.aims.reading?.boost ?? 1)),
       steady: Math.round(STUDY.steady * scale * diminish(next.stats.steady) * (next.aims.steady?.boost ?? 1)),
@@ -278,7 +281,7 @@ export function chooseAction(state, action) {
     next.stats = addGains(next.stats, gains);
     next.stamina = clamp(next.stamina - STUDY.stamina, 0, 100);
     for (const id of present) next.bonds[id] = (next.bonds[id] ?? 0) + 1;
-    const who = present.map((id) => FRIENDS.find((friend) => friend.id === id)?.name).filter(Boolean).join('・');
+    const who = present.map((id) => teamOf(next).find((friend) => friend.id === id)?.name).filter(Boolean).join('・');
     result = { kind: 'study', gains, text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}` };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
@@ -772,7 +775,7 @@ export function discipleView(state) {
     skillProgress: skillProgress(state),
     charms: charmList(state),
     scene: pendingScene(state),
-    friends: FRIENDS.map((friend) => ({ ...friend, bond: state.bonds[friend.id] ?? 0 })),
+    friends: teamOf(state).map((friend) => ({ ...friend, bond: state.bonds[friend.id] ?? 0 })),
     kenshukai: kenshukai ? { classLabel: kenshukai.classLabel, progress: kenshukai.progress, board: kenshukai.board, phase: kenshukai.phase } : null,
     shoreikai: shoreikai ? { rankLabel: shoreikai.rankLabel, phase: shoreikai.phase, progress: shoreikai.progress, league: shoreikai.league ? { term: shoreikai.league.term, round: shoreikai.league.round, rounds: shoreikai.league.rounds } : null, point: shoreikai.point, age: shoreikai.age } : null,
     place: placeText(state),

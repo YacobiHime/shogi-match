@@ -19,6 +19,11 @@ export const LESSON_CARDS = Object.freeze([
   { id: 'think', kind: 'word', label: '一緒に考える', text: '答えを言わずに待つ', points: 22, stamina: -3, fits: ['tsumugi'] },
   { id: 'tea', kind: 'rest', label: 'お茶にする', text: 'ひと息つく。次のカードがよく効く', points: 6, stamina: 10, nextBonus: 8 },
   { id: 'early', kind: 'rest', label: '早めに切り上げる', text: '体力を残して終える', points: 4, stamina: 15 },
+  // 一門の先輩が残す教え方(受け継ぎ。29章)。どの弟子にもよく効く(先輩はこの子のことも知っている)。
+  { id: 'senpai-vs', kind: 'teach', label: '先輩と練習将棋', text: '一門の先輩が相手をしてくれる', points: 32, stamina: -8, fits: ['minato', 'tsumugi', 'ao'], inherit: 'reading' },
+  { id: 'senpai-note', kind: 'teach', label: '先輩の研究ノート', text: '先輩が残したノートを読む', points: 28, stamina: -2, fits: ['minato', 'tsumugi', 'ao'], inherit: 'plan' },
+  { id: 'senpai-talk', kind: 'word', label: '先輩の話を聞く', text: '大一番の心がまえを教わる', points: 24, stamina: 0, fits: ['minato', 'tsumugi', 'ao'], mood: 1, inherit: 'steady' },
+  { id: 'senpai-tsume', kind: 'teach', label: '先輩の詰将棋', text: '先輩が作った詰将棋を解く', points: 30, stamina: -6, fits: ['minato', 'tsumugi', 'ao'], inherit: 'mate' },
 ].map((card) => Object.freeze(card)));
 export const cardById = (id) => LESSON_CARDS.find((card) => card.id === id) ?? null;
 /** はじめの引き出し(ほかのカードは仲間の絆や出かけた先で増える)。 */

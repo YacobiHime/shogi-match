@@ -46,6 +46,7 @@
         <button type="button" class="disciple__back" data-disciple-back @click="emit('close')">← 戻る</button>
         <b class="disciple__title">師匠の1年　弟子を選ぶ</b>
         <button v-if="otherSlots" type="button" class="disciple__title disciple__slots-link" data-disciple-slots-open @click="showSlots">記録を選ぶ</button>
+        <button v-if="ichimon.members.length" type="button" class="disciple__title disciple__slots-link" data-disciple-ichimon-open @click="ichimonOpen = true">一門 {{ ichimon.members.length }}人</button>
       </div>
       <section class="disciple__panel disciple__pick-info" :aria-label="picked.name">
         <h2>{{ picked.name }}<small>（仮）</small></h2>
@@ -65,6 +66,16 @@
           <b>{{ candidate.name }}</b><small>{{ candidate.grade }}・{{ PLAY_STYLES[candidate.style]?.label }}</small>
         </button>
       </div>
+      <!-- 連れていく仲間(29章)。一門の先輩がいて、候補が4人より多いときだけ選ぶ -->
+      <section v-if="pool.length > TEAM_SIZE" class="disciple__panel disciple__team" data-disciple-team>
+        <h4>連れていく仲間<small>{{ teamIds.length }}/{{ TEAM_SIZE }}人</small></h4>
+        <div class="disciple__team-list">
+          <button v-for="friend in pool" :key="friend.id" type="button" class="disciple__team-chip" :aria-pressed="teamIds.includes(friend.id)"
+            :disabled="!teamIds.includes(friend.id) && teamIds.length >= TEAM_SIZE" :data-disciple-friend="friend.id" @click="toggleFriend(friend.id)">
+            <b>{{ friend.name }}</b><small>{{ friend.senpai ? friend.title : '研究会の仲間' }}</small>
+          </button>
+        </div>
+      </section>
       <button type="button" class="disciple__go" data-disciple-start @click="start">この子を弟子にする</button>
     </template>
 
@@ -138,6 +149,7 @@
         <div class="disciple__stamp">評価 {{ view.end.rank }}</div>
         <p>{{ view.end.text }}</p>
         <p class="disciple__muted">{{ view.calendar.label }}・{{ view.end.turn }}ターン</p>
+        <p v-if="state?.ichimonJoined" class="disciple__extra" data-disciple-ichimon-joined>{{ view.name }}は一門に入った（{{ state.ichimonJoined }}人目）。次の弟子の仲間として連れていける</p>
         <div class="disciple__row">
           <button type="button" class="disciple__btn" @click="emit('close')">ホームへ</button>
           <button type="button" class="disciple__btn disciple__btn--main" data-disciple-again @click="again">もう一度弟子をとる</button>
@@ -323,6 +335,18 @@
       </div>
     </section>
 
+    <!-- 一門の名簿(29章) -->
+    <section v-if="ichimonOpen" class="disciple__panel disciple__skills disciple__ichimon" data-disciple-ichimon>
+      <h4>一門<button type="button" class="disciple__x" aria-label="閉じる" @click="ichimonOpen = false">×</button></h4>
+      <ul>
+        <li v-for="member in [...ichimon.members].reverse()" :key="member.id">
+          <b>{{ member.name }}</b>
+          <small>{{ member.kind === 'pro' ? `四段（棋士番号${member.kishiNumber ?? ''}）` : member.best || '研修会' }}・評価 {{ member.rank }}</small>
+          <small class="disciple__ichimon-stats">読み{{ member.stats.reading }} 作戦{{ member.stats.plan }} 安定{{ member.stats.steady }} 詰み{{ member.stats.mate }}</small>
+        </li>
+      </ul>
+    </section>
+
     <!-- 問題の場面(26章)。予定を止めず、上に重ねて出す。答えたら効き目を入れる。 -->
     <NovelScene
       v-if="sceneData"
@@ -342,6 +366,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
+import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import {
@@ -377,6 +402,8 @@ const storage = (): Storage | null => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const state = shallowRef<any>(null);
 onMounted(() => {
+  ichimon.value = loadIchimon(storage());
+  teamIds.value = defaultTeam(friendPool(ichimon.value));
   state.value = loadDiscipleRun(storage());
   // ほかの枠に記録があれば、どの弟子を育てるかから(27章)。
   refreshSlots();
@@ -429,8 +456,27 @@ const portrait = computed(() => `${props.assetBaseUrl}/characters/sakurano-momok
 const pickedId = ref(DISCIPLES[0].id);
 const picked = computed(() => DISCIPLES.find((entry) => entry.id === pickedId.value) ?? DISCIPLES[0]);
 const pickedStats = computed(() => STAT_KEYS.map((key) => ({ key, label: STAT_LABELS[key], value: picked.value.stats[key], rank: statRank(picked.value.stats[key]) })));
+// ---- 一門と連れていく仲間(29章)
+const ichimon = ref(loadIchimon(null));
+const ichimonOpen = ref(false);
+const pool = computed(() => friendPool(ichimon.value));
+const teamIds = ref<string[]>([]);
+function toggleFriend(id: string) {
+  teamIds.value = teamIds.value.includes(id) ? teamIds.value.filter((item) => item !== id) : teamIds.value.length < TEAM_SIZE ? [...teamIds.value, id] : teamIds.value;
+}
+/** 育成が終わったら、弟子を一門に入れる(1回だけ)。 */
+vueWatch(() => state.value?.end, (end) => {
+  if (!end || !state.value || state.value.ichimonJoined) return;
+  const joined = joinIchimon(ichimon.value, state.value);
+  if (!joined.joined) return;
+  ichimon.value = joined.ichimon;
+  saveIchimon(storage(), joined.ichimon);
+  commit(joined.state);
+  teamIds.value = defaultTeam(pool.value);
+}, { immediate: true });
 function start() {
-  commit(createDiscipleRun({ seed: Date.now() >>> 0, discipleId: pickedId.value }));
+  const team = pool.value.length > TEAM_SIZE ? pickTeam(pool.value, teamIds.value) : pickTeam(pool.value, defaultTeam(pool.value));
+  commit(createDiscipleRun({ seed: Date.now() >>> 0, discipleId: pickedId.value, team }));
   say("先生、今日からよろしくお願いします");
 }
 function again() {
@@ -455,7 +501,7 @@ const selectedId = ref("tsume");
 const choice = ref("steady");
 const selected = computed(() => view.value?.trainings.find((item) => item.id === selectedId.value) ?? null);
 const previewGains = computed<Record<string, number>>(() => (training.value && selected.value ? selected.value.gains : {}));
-const friendName = (id: string) => FRIENDS.find((friend) => friend.id === id)?.name ?? "";
+const friendName = (id: string) => view.value?.friends.find((friend: { id: string }) => friend.id === id)?.name ?? "";
 function openTraining() {
   training.value = true;
 }
@@ -692,6 +738,10 @@ function goBack() {
     if (!sceneEl.value?.goBack()) closeScene();
     return true;
   }
+  if (ichimonOpen.value) {
+    ichimonOpen.value = false;
+    return true;
+  }
   if (watch.value) {
     closeWatch();
     return true;
@@ -828,6 +878,17 @@ defineExpose({ goBack });
 .shogi-game .disciple__note { margin: 0.4rem 0 0; }
 .shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
 
+/* 一門と連れていく仲間(29章) */
+.shogi-game .disciple .disciple__go:not(:disabled):hover { background: #f5b25f; color: #fff; }
+.shogi-game .disciple__team { left: 0.6rem; right: 13.2rem; bottom: 4.6rem; }
+.shogi-game .disciple__team h4 { display: flex; justify-content: space-between; margin: 0 0 0.3rem; font-size: 0.86rem; }
+.shogi-game .disciple__team h4 small { color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple__team-list { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.shogi-game .disciple .disciple__team-chip { display: grid; gap: 0; min-height: 2.6rem; padding: 0.2rem 0.6rem; border: 2px solid var(--line); border-radius: 0.7rem; background: #fff; color: var(--ink); text-align: left; }
+.shogi-game .disciple .disciple__team-chip small { color: var(--muted); font-size: 0.6rem; }
+.shogi-game .disciple .disciple__team-chip[aria-pressed="true"], .shogi-game .disciple .disciple__team-chip[aria-pressed="true"]:not(:disabled):hover { border-color: var(--accent); background: #fff3e2; color: var(--ink); }
+.shogi-game .disciple .disciple__team-chip:disabled { opacity: 0.5; }
+.shogi-game .disciple__ichimon .disciple__ichimon-stats { grid-column: 1 / -1; }
 /* 奨励会(28章) */
 .shogi-game .disciple__stakes { margin: 0.1rem 0 0.3rem; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
 /* 弟子の記録(27章) */
@@ -939,6 +1000,9 @@ defineExpose({ goBack });
   .shogi-game .disciple .disciple__dock--free .disciple__cmd { padding: 0.15rem; font-size: 0.76rem; letter-spacing: -0.03em; }
   .shogi-game .disciple__dock--free .disciple__cmd small { display: none; }
   .shogi-game .disciple .disciple__card { min-height: 4.6rem; font-size: 0.76rem; }
+  /* スマホ縦: 弟子の札は下にあるので、仲間は候補の下(立ち絵の胸のあたり)に置く。 */
+  .shogi-game .disciple__team { top: 14.4rem; bottom: auto; left: 0.4rem; right: 0.4rem; padding: 0.4rem; }
+  .shogi-game .disciple .disciple__team-chip { min-height: 2.3rem; padding: 0.15rem 0.45rem; }
   .shogi-game .disciple .disciple__cmd { min-height: 3.4rem; font-size: 0.9rem; }
   .shogi-game .disciple__preview { bottom: 8.6rem; }
   .shogi-game .disciple__sheet { bottom: 0.4rem; width: calc(100% - 0.8rem); }
