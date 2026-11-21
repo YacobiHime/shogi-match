@@ -105,6 +105,8 @@ const props = defineProps({
   view: { type: Object as PropType<BracketView>, required: true },
   oshiId: { type: String, default: "" },
   rivalId: { type: String, default: "" },
+  /** 師匠の1年で育てた弟子(31章)。行の左の緑の帯。 */
+  discipleIds: { type: Array as PropType<string[]>, default: () => [] },
   /** 決着した棋士どうしの試合を押すと、中継を開く(watchを出す)。 */
   watchable: { type: Boolean, default: false },
   /** 回戦の中継ボードの、試合ごとのようす(18章)。ある試合は札に1行足し、押すと中継を開く。 */
@@ -192,6 +194,7 @@ function rowClass(match: Match, side: "top" | "bottom") {
       "ryuo-bracket__row--opponent": match.pending && !slot.you && Boolean(slot.pid),
       "ryuo-bracket__row--hope": slot.hope,
       "ryuo-bracket__row--rival": isRival(match, side),
+      "ryuo-bracket__row--disciple": Boolean(slot.pid && props.discipleIds.includes(slot.pid)),
     },
   ];
 }
@@ -343,6 +346,8 @@ watch(() => `${props.view.userNext}:${props.view.matches.find((entry) => entry.p
 .shogi-game .ryuo-bracket__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* ライバル: 左の紫の帯と名前の色(札の文字で名前を削らない)。 */
 .shogi-game .ryuo-bracket__row--rival { box-shadow: inset 4px 0 0 #8a5ad1; }
+.shogi-game .ryuo-bracket__row--disciple { box-shadow: inset 4px 0 0 #4fae7b; }
+.shogi-game .ryuo-bracket__row--disciple .ryuo-bracket__name { color: #bfeccf; }
 .shogi-game .ryuo-bracket__row--rival .ryuo-bracket__name { color: #d9c4ff; }
 .shogi-game .ryuo-bracket__row--rival.ryuo-bracket__row--lose .ryuo-bracket__name { color: #9d8bbd; }
 .shogi-game .ryuo-bracket__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

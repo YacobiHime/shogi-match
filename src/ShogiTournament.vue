@@ -810,6 +810,7 @@
               :view="groupTableView ?? groupTable.view"
               :oshi-id="oshi?.id ?? ''"
               :rival-id="view.rivalId ?? ''"
+              :disciple-ids="view.discipleIds ?? []"
               :watchable="Boolean(relayEngineFactory)"
               :live="liveGroupCards"
               @watch="(id: string) => watchMatch(id, groupTable?.key)"
@@ -822,6 +823,7 @@
               :view="finalTableView ?? stages.final"
               :oshi-id="oshi?.id ?? ''"
               :rival-id="view.rivalId ?? ''"
+              :disciple-ids="view.discipleIds ?? []"
               :watchable="Boolean(relayEngineFactory) && !stages.final.preview"
               :live="liveFinalCards"
               @watch="watchMatch"
@@ -1135,6 +1137,7 @@ type View = {
   milestone?: null | { kind: string; weight: string; seal: string; title: string; sub: string; line: string };
   upset?: string;
   rivalId?: string | null;
+  discipleIds?: string[];
   result: null | {
     outcome: string; startGroup: number; newGroup: number; promoted: boolean; relegated: boolean; challenger: boolean;
     wins: number; losses: number; standing: number | null; exitLabel: string; path: { stage: string; label: string; text: string }[];

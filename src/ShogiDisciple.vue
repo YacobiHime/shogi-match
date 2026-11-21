@@ -151,6 +151,7 @@
         <p>{{ view.end.text }}</p>
         <p class="disciple__muted">{{ view.calendar.label }}・{{ view.end.turn }}ターン</p>
         <p v-if="state?.ichimonJoined" class="disciple__extra" data-disciple-ichimon-joined>{{ view.name }}は一門に入った（{{ state.ichimonJoined }}人目）。次の弟子の仲間として連れていける</p>
+        <p v-if="view.end.kind === 'pro'" class="disciple__extra" data-disciple-debut>四段になったので、竜王戦・名人戦の棋士の名簿に新四段として入る（竜王戦6組・C級2組から）。大会であなたと当たる日が来るかもしれない</p>
         <div class="disciple__row">
           <button type="button" class="disciple__btn" @click="emit('close')">ホームへ</button>
           <button type="button" class="disciple__btn disciple__btn--main" data-disciple-again @click="again">もう一度弟子をとる</button>
@@ -344,6 +345,7 @@
           <b>{{ member.name }}</b>
           <small>{{ member.kind === 'pro' ? `四段（棋士番号${member.kishiNumber ?? ''}）` : member.best || '研修会' }}・評価 {{ member.rank }}</small>
           <small class="disciple__ichimon-stats">読み{{ member.stats.reading }} 作戦{{ member.stats.plan }} 安定{{ member.stats.steady }} 詰み{{ member.stats.mate }}</small>
+          <small v-if="member.vsMaster" class="disciple__ichimon-stats">あなたとの公式戦 {{ member.vsMaster.wins }}勝{{ member.vsMaster.losses }}敗（弟子から見て）<template v-if="member.ongaeshi">・恩返し済み</template></small>
         </li>
       </ul>
     </section>

@@ -2767,6 +2767,8 @@
         <p v-if="!ryuoGame.replay && ryuoGame.event === 'team' && teamResultLine" class="shogi-game__tournament-title" data-result-team>{{ teamResultLine }}</p>
         <!-- 棋士の1年は、この1局で決まった節目(予選突破・敗退・タイトル獲得。docs/pro-year-design.md)。 -->
         <p v-if="!ryuoGame.replay && ryuoGame.event === 'pro-year' && proYearResultLine" class="shogi-game__tournament-title" data-result-pro-year>{{ proYearResultLine }}</p>
+        <!-- 相手が師匠の1年で育てた弟子なら、恩返しか師匠の壁(docs/disciple-mode-design.mdの31章)。 -->
+        <p v-if="!ryuoGame.replay && ongaeshiText" class="shogi-game__tournament-title" data-result-ongaeshi>{{ ongaeshiText }}</p>
         <p v-if="ryuoGame.replay" class="shogi-game__tournament-title">千日手になりました。先後を入れ替えて、指し直します。</p>
         <p v-else-if="tournamentResult.done" class="shogi-game__tournament-title">{{ tournamentResult.doneText }}</p>
         <p v-else-if="tournamentResult.next" class="shogi-game__tournament-title">次の対局: {{ tournamentResult.next }}</p>
@@ -3138,6 +3140,8 @@ import { worldRating } from "./core/ryuo-strength.mjs";
 import { defaultWorldDifficulty, loadTournamentWorld, rankTag, resolveWorld, saveTournamentWorld, worldReview } from "./core/tournament-world.mjs";
 import { PLAYER_GENDERS, PLAYER_NAME_MAX, loadPlayerProfile, momokaCallName, normalizePlayerProfile, playerCallName, playerDisplayName, savePlayerProfile } from "./core/player-name.mjs";
 import { USER_HOLDER, applySeasonToRoster, createRoster, loadRoster, saveRoster, withStoryMembers } from "./core/ryuo-roster.mjs";
+import { debutDisciples, noteMasterGame, ongaeshiLine } from "./core/disciple-pro.mjs";
+import { loadIchimon, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { applyCharacter, characterSituation, summarizeTraitMoments } from "./core/player-character.mjs";
 import { abilityRank, abilityValues } from "./core/player-abilities.mjs";
 import { comparableScore } from "./core/move-selection.mjs";
@@ -4007,6 +4011,7 @@ const ryuoRoster = shallowRef<any>(loadRoster(browserStorage()));
 const ryuoOshi = ref<{ id: string; name: string } | null>(null);
 watch(tournamentOpen, (open) => {
   if (!open) return;
+  debutPendingDisciples();
   const id = loadOshi(browserStorage());
   const name = id ? (ryuoSeason.value?.players?.[id]?.name ?? ryuoRoster.value?.players?.[id]?.name ?? "") : "";
   ryuoOshi.value = id && name ? { id, name } : null;
@@ -7717,6 +7722,8 @@ function enterRyuoSeason(settings: {
       saveRoster(browserStorage(), withStory);
     }
   }
+  // 四段になった師匠の1年の弟子は、期の始めに名簿に入る(docs/disciple-mode-design.mdの31章)。
+  debutPendingDisciples();
   // 分身の期の難易度は、その期だけのもの(いつもの世界と能力値の物差しは変えない。40章)。
   const world = commitTournamentWorld(settings.difficulty, { keep: !settings.watch });
   const season = createSeason({
@@ -7926,6 +7933,7 @@ function startRyuoGameNow() {
 
 /** 保留中の大会の対局を始める。相手の棋力・得意戦法・囲いと、手番(振り駒)は、シーズンが決めている。 */
 function startRyuoMatch() {
+  ongaeshiText.value = "";
   const season = tournamentSeasonOf(ryuoGame.value);
   const pending = season?.pending;
   const opponent = pending ? season.players[pending.opponentId] : null;
@@ -8210,6 +8218,7 @@ function enterMeijinSeason(settings: { difficulty: number; scale: string; coachL
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed, userGroup: ryuoCareer.value.group });
     saveRoster(browserStorage(), ryuoRoster.value);
+    debutPendingDisciples();
   }
   // 順位戦の世界にプレイヤーを入れる(初めてならC級2組の最後)。期は世界の写しで指し、終わったら名簿へ書き戻す。
   const migrated = ensureJunniWorld(ryuoRoster.value, meijinCareer.value);
@@ -8363,6 +8372,7 @@ function enterShoreikai({ settings, examRank, mentorId, transfer = false }: { se
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed: Date.now(), userGroup: ryuoCareer.value.group });
     saveRoster(browserStorage(), ryuoRoster.value);
+    debutPendingDisciples();
   }
   const mentor = shoreikaiMentors.value.find((item) => item.id === mentorId) ?? shoreikaiMentors.value[0] ?? null;
   const run = createShoreikaiRun({
@@ -8502,6 +8512,28 @@ function ensureRyuoRoster() {
   if (ryuoRoster.value) return;
   ryuoRoster.value = createRoster({ seed: Date.now(), userGroup: ryuoCareer.value.group });
   saveRoster(browserStorage(), ryuoRoster.value);
+  debutPendingDisciples();
+}
+// ---- 師匠の1年の弟子のデビューと恩返し(docs/disciple-mode-design.mdの31章)
+/** 四段になった一門の弟子を、名簿に新四段として入れる(名簿があるときだけ。まだの人だけ)。 */
+function debutPendingDisciples() {
+  if (!ryuoRoster.value) return;
+  const storage = browserStorage();
+  const result = debutDisciples(ryuoRoster.value, loadIchimon(storage));
+  if (!result.debuts.length) return;
+  ryuoRoster.value = result.roster;
+  saveRoster(storage, result.roster);
+  saveIchimon(storage, result.ichimon);
+}
+/** 大会の1局の相手が弟子だったときの一言(恩返し・師匠の壁)。 */
+const ongaeshiText = ref("");
+/** 終局したら、相手が弟子かを見て、一言と一門の対戦成績を残す。 */
+function noteOngaeshi(opponentId: string, masterWon: boolean) {
+  const member = opponentId ? ryuoRoster.value?.players?.[opponentId] : null;
+  if (!member?.disciple) return;
+  ongaeshiText.value = ongaeshiLine(member, masterWon);
+  const storage = browserStorage();
+  saveIchimon(storage, noteMasterGame(loadIchimon(storage), member.disciple.ichimonId, masterWon));
 }
 /** 入口の「出場する」。プロの団体戦は名簿の棋士と組むので、名簿がなければ作る。 */
 function enterTeam({ format, settings, userSeat, draftPick, draftReason }: { format: "school" | "pro"; settings: { [key: string]: unknown }; userSeat: number; draftPick: string | null; draftReason: string }) {
@@ -9193,6 +9225,7 @@ function enterKenshukai({ settings, entryClass }: { settings: { [key: string]: u
   if (!ryuoRoster.value) {
     ryuoRoster.value = createRoster({ seed: Date.now(), userGroup: ryuoCareer.value.group });
     saveRoster(browserStorage(), ryuoRoster.value);
+    debutPendingDisciples();
   }
   const run = createKenshukaiRun({
     seed: Date.now(),
@@ -12846,6 +12879,8 @@ function finish(matchResult: MatchResult) {
   const tournamentFinish = matchKind.value === "tournament" && Boolean(ryuoGame.value) && Boolean(matchResult.winner);
   finishMilestone = null;
   finishCrowned = false;
+  // 相手が師匠の1年の弟子かを見るため、期を記録する前の相手(docs/disciple-mode-design.mdの31章)。
+  const finishedOpponentId = ryuoGame.value?.opponentId ?? "";
   // 詰ませて勝ったら、最後の寄せを数える(期を記録すると、相手と回戦が次の局に変わるので、その前に)。
   finishMate.value = tournamentFinish && outcome === "win" && matchResult.reason === "checkmate" ? noteMateFinish() : null;
   lastMyRelayKey.value = tournamentFinish ? saveOwnGame(matchResult) : "";
@@ -12856,6 +12891,7 @@ function finish(matchResult: MatchResult) {
     recordTitleMeal(outcome === "win");
   }
   if (tournamentFinish) showFinishStamp(outcome === "win", { event: tournamentEvent, weight: stageWeight });
+  if (tournamentFinish && !ryuoGame.value?.practice) noteOngaeshi(finishedOpponentId, outcome === "win");
   const measuring = measureMode.value && matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value;
   measureMode.value = false;
   measureSession.value = measuring;

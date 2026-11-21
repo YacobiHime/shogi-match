@@ -1146,6 +1146,8 @@ export function describeSeason(season) {
     lastGame: lastGameView(season),
     // ライバル(羽音)のid。この期に出ていなければnull。トーナメント表の印に使う。
     rivalId: Object.keys(season.players).find((pid) => season.players[pid]?.story === HANANE) ?? null,
+    // 師匠の1年で育てた弟子のid(docs/disciple-mode-design.mdの31章。トーナメント表の印)。
+    discipleIds: Object.keys(season.players).filter((pid) => season.players[pid]?.disciple),
     result: season.result,
     resultSeen: season.resultSeen === true,
     champion: season.champion ? playerBrief(season, season.champion) : null,

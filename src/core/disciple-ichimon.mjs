@@ -47,6 +47,8 @@ export function ichimonEntry(state) {
     top,
     skills: [...(state.skills ?? [])],
     turn: Number(state.end?.turn ?? state.turn) || 0,
+    // 終わったときの年齢(四段になった弟子が名簿に入るときの歳。31章)。
+    age: Math.floor(((Number(state.startAge) || 12) * 12 + Math.floor((Number(state.end?.turn ?? state.turn) || 0) / 2)) / 12),
   };
 }
 

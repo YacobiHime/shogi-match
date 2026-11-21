@@ -27,6 +27,7 @@ import {
   createJunniWorld,
   settleLeague,
   syncJunni,
+  writeJunniToMembers,
 } from './ryuo-league.mjs';
 
 export { DAN_ORDER };
@@ -202,6 +203,39 @@ export function withStoryMembers(roster, options) {
 }
 
 /**
+ * 名前の決まった新四段を名簿に入れる(師匠の1年でプロになった弟子。docs/disciple-mode-design.mdの31章)。
+ * 6組・四段・順位戦はC級2組の最後(syncJunni)。得意戦法と棋風は種から作る。もとの名簿は変えない。
+ * @param {any} roster
+ * @param {{ seed: number, name: string, rating: number, age: number, tag?: Record<string, unknown> }} input tagは棋士に足す印(弟子の印など)
+ * @returns {{ roster: any, id: string }}
+ */
+export function addNamedPro(roster, { seed, name, rating, age, tag = {} }) {
+  const next = structuredClone(roster);
+  const rng = createRng(seed >>> 0);
+  const member = createMember(next, rng, usedNames(next), { group: 6, rating, age, dan: '四段' });
+  member.name = name;
+  Object.assign(member, structuredClone(tag));
+  if (next.junni) {
+    syncJunni(next);
+    // C級2組が埋まっていると、新しく入った人はフリークラスへあふれる。新四段はC級2組から(実物の決まり)なので、
+    // C級2組のいちばん後ろの人(プレイヤーを除く)と入れ替える。
+    const world = next.junni;
+    if (world.free?.includes(member.id)) {
+      // 先に入った弟子(師匠の1年の新四段)は押し出さない。
+      const from = world.classes.C2.findLastIndex((id) => id !== USER_HOLDER && id !== member.id && !next.players[id]?.disciple);
+      if (from >= 0) {
+        world.free = [world.classes.C2[from], ...world.free.filter((id) => id !== member.id)];
+        world.classes.C2.splice(from, 1);
+        world.classes.C2.push(member.id);
+        writeJunniToMembers(next);
+      }
+    }
+    for (const player of Object.values(next.players)) applyDanRules(player);
+  }
+  return { roster: next, id: member.id };
+}
+
+/**
  * 組から、この期に出る棋士を選ぶ。6組は、特別枠を人数に比例して混ぜる(実物は約70名中10名)。
  * 羽音は、組にいれば必ず出る(プレイヤーのライバルなので)。
  */
@@ -242,6 +276,8 @@ export function seasonEntry(roster, id) {
     id,
     name: member.name,
     story: member.story ?? null,
+    // 師匠の1年で育てた弟子(31章。トーナメント表の印と恩返し)。
+    disciple: member.disciple ? { ...member.disciple } : null,
     dan: isHolder(roster, id) ? '竜王' : member.dan,
     kind: member.kind,
     group: member.group,
