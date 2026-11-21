@@ -34,6 +34,9 @@ export const REASON_TEXT = Object.freeze({
   castle: "囲いを固める",
   develop: "銀を繰り出す",
   "rook-pawn": "飛車先を伸ばす",
+  check: "王手",
+  "mate-threat": "詰みを読み切る",
+  read: "読み",
   "edge-pawn": "端歩を突く",
   wait: "手待ち",
   natural: "自然な手",
@@ -139,7 +142,7 @@ function opponentMatesInOne(state) {
  * @param {string} usi
  * @param {ReturnType<typeof stateFromSfen>} child 指したあと
  */
-function quietKind(state, usi, child) {
+export function quietKind(state, usi, child) {
   const me = state.turn;
   if (usi.includes("*")) return null;
   const from = usi.slice(0, 2);
@@ -163,10 +166,10 @@ function quietKind(state, usi, child) {
   return null;
 }
 
-const QUIET_ORDER = Object.freeze(["castle", "develop", "rook-pawn", "edge-pawn", "wait"]);
+export const QUIET_ORDER = Object.freeze(["castle", "develop", "rook-pawn", "edge-pawn", "wait"]);
 
 /** 局面に合わせた手順表の並び。相手の駒が自陣に迫っていれば囲いを先に、そうでなければ攻めの準備を先に。 */
-function situationalOrder(state) {
+export function situationalOrder(state) {
   const me = state.turn;
   const opp = opponentOf(me);
   let near = 0;

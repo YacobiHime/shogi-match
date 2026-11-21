@@ -92,9 +92,9 @@ export function evaluateTerms(board, { shape = true } = {}) {
 }
 
 /** 局面の点(手番の側から見た値)。 */
-function evaluate(board, shape) {
+function evaluate(board, shape, scale = 1) {
   const t = evaluateTerms(board, { shape });
-  const total = t.material + t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle;
+  const total = t.material + scale * (t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle);
   return board.turn === 0 ? total : -total;
 }
 
@@ -128,13 +128,13 @@ function tryMake(board, move) {
 /**
  * 1手を読んで選ぶ。
  * @param {string} sfen
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number }} [options] shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number }} [options] shapeScaleは形の点に掛ける重み(大局観)。shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
  * @returns {{ move: string, score: number, depth: number, nodes: number, pv: string[] } | null}
  */
-export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6 } = {}) {
+export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6, shapeScale = 1 } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
   const rootMoves = board.legal();
@@ -270,7 +270,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
   if (timeUp(ctx)) return 0;
   if (board.inCheck()) {
     // 王手されたら、逃げ方をすべて読む(詰みを見落とさない)。深さは静止探索の残りで止める。
-    if (qdepth <= 0) return evaluate(board, ctx.shape);
+    if (qdepth <= 0) return evaluate(board, ctx.shape, ctx.shapeScale);
     let best = -INF;
     let legal = 0;
     for (const move of board.pseudo([])) {
@@ -284,7 +284,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
     }
     return legal ? best : -MATE + ply;
   }
-  const stand = evaluate(board, ctx.shape);
+  const stand = evaluate(board, ctx.shape, ctx.shapeScale);
   if (qdepth <= 0 || stand >= beta) return stand;
   if (stand > alpha) alpha = stand;
   const moves = board.pseudo([], { captures: true })
@@ -306,13 +306,13 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
  * 決めた根の手だけを読み、それぞれの点(手番の側から見た値)と読み筋を出す。定跡の手や手順表の手が、最善より大きく劣らないかを確かめるのに使う。
  * @param {string} sfen
  * @param {string[]} usiMoves
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number }} [options]
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number }} [options]
  * @returns {Map<string, { score: number, pv: string[] }>}
  */
-export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6 } = {}) {
+export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6, shapeScale = 1 } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
   const result = new Map();

@@ -3,7 +3,8 @@
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
 //   選手はL<レベル>、D<読み>-<作戦>-<安定>-<詰み>(師匠の1年の弟子。+fujii-curveのようにスキルを足せる)、
 //   R<読み>-<作戦>-<安定>-<詰み>(評価関数を使わず理由で指す棋士。能力値のLv12〜49。docs/disciple-mode-design.mdの34章)、
-//   S<深さ>(m)(t<ミリ秒>)(全部の手を読む論理の探索。mは駒の損得だけ。34-15)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   S<深さ>(m)(t<ミリ秒>)(全部の手を読む論理の探索。mは駒の損得だけ。34-15)、
+//   T<読み>-<作戦>-<安定>-<詰み>(理由で指す棋士の考え方。34-16)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
@@ -32,6 +33,7 @@ const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 const { chooseReasonMove, reasonProfile } = await import("../src/core/reason-move.mjs");
 const { searchBestMove } = await import("../src/core/logic-search.mjs");
+const { chooseThinkingMove, thinkProfile } = await import("../src/core/reason-think.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
 import { discipleSelfplaySettings } from "../src/core/disciple-strength.mjs";
@@ -131,6 +133,12 @@ export function strengthForPlayer(spec) {
   if (disciple) return disciple;
   // R<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士(34章)。エンジンは使わない。
   // S<深さ>(m)(t<ミリ秒>): 全部の手を読む論理の探索(34-15)。mを付けると駒の損得だけ(形の点なし)。
+  // T<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士の考え方(全部の手を読む探索つき。34-16)。
+  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)$/);
+  if (thinkSpec) {
+    const [reading, plan, steady, mate] = thinkSpec.slice(1).map(Number);
+    return { thinkProfile: thinkProfile({ reading, plan, steady, mate }), nodes: 0 };
+  }
   // xを付けると形の点の段2(玉のまわりの利き・囲いの位置)。
   const fullSpec = spec.match(/^S(\d+)(m|x)?(?:t(\d+))?$/);
   if (fullSpec) return { fullSearch: { depth: Number(fullSpec[1]), shape: fullSpec[2] === 'm' ? 0 : fullSpec[2] === 'x' ? 2 : 1, maxTimeMs: fullSpec[3] ? Number(fullSpec[3]) : 1500 }, nodes: 0 };
@@ -219,7 +227,10 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const sfen = position.sfen;
     const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
-    let choice = strength.fullSearch ? (() => {
+    let choice = strength.thinkProfile ? (() => {
+      const found = chooseThinkingMove({ sfen, profile: strength.thinkProfile, random });
+      return found && moves.includes(found.move) ? { move: found.move } : { move: moves[0] };
+    })() : strength.fullSearch ? (() => {
       const found = searchBestMove(sfen, { ...strength.fullSearch, maxNodes: 2e6 });
       return found && moves.includes(found.move) ? { move: found.move } : { move: moves[0] };
     })() : strength.reasonProfile ? chooseReasonMove({ sfen, profile: strength.reasonProfile, random, maxTimeMs: strength.reasonTimeMs })
