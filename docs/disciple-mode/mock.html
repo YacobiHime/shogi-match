@@ -76,6 +76,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .skills { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
 .skill { padding: 0.08rem 0.45rem; border-radius: 999px; background: linear-gradient(90deg, #ffe6a8, #ffd0a0); color: #6a3a10; font-size: 0.66rem; font-weight: 900; }
 .skill--hidden { background: #e6e1d6; color: var(--muted); }
+.skill--style { background: var(--ink); color: #fff; }
+.apt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; }
+.apt span { display: flex; justify-content: space-between; padding: 0.1rem 0.3rem; border-radius: 0.35rem; background: #f3eee2; font-size: 0.66rem; font-weight: 800; }
+.apt b { color: var(--accent-ink); }
+.gains { grid-template-columns: repeat(4, 1fr) !important; }
+.extra { margin-top: 0.3rem; font-size: 0.72rem; color: #c0661b; font-weight: 800; }
 .tr .aim { position: absolute; top: 0.3rem; right: 0.4rem; padding: 0 0.35rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.58rem; }
 
 /* ---- 右のやる気・体力 */
@@ -256,7 +262,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .stat .rank { width: 1.3rem; height: 1.3rem; font-size: 0.68rem; }
   .stats .who b { font-size: 0.8rem; }
   .mood { top: 3.7rem; right: 0.4rem; width: 7.4rem; padding: 0.4rem 0.45rem; gap: 0.3rem; }
-  .mood .note { display: none; }
+  .apt { grid-template-columns: repeat(2, 1fr); }
   .friend { width: 1.9rem; height: 1.9rem; }
   .say, .say--high { top: 44%; bottom: auto; left: 0.6rem; transform: none; max-width: 60%; font-size: 0.8rem; }
   .dock, .train-row { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -343,7 +349,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
       <div><small>やる気</small><span class="face">好調 ↗</span></div>
       <div><small>体力 72/100</small><div class="hp"><i style="width:72%"></i></div></div>
       <div><small>仲間</small><div class="friends" data-friends></div></div>
-      <div class="note">稽古に顔を出した仲間と一緒だと、よく伸びる</div>
+      <div><small>適性</small><div class="apt" data-apt></div></div>
     </aside>
     <div class="say">先生、今日はなにをしますか</div>
     <nav class="dock">
@@ -368,6 +374,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
     <div class="preview">
       <h4><span id="tr-name">詰将棋</span><small id="tr-note">体力 −20・失敗 4%</small></h4>
       <div class="gains" id="tr-gains"></div>
+      <div class="extra" id="tr-extra"></div>
       <div class="go"><button class="btn-sub" data-go="home">やめる</button><button class="btn-main" data-go="lesson">この稽古にする</button></div>
     </div>
     <nav class="train-row" id="train-row"></nav>
@@ -411,6 +418,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
         <li><span>得意：</span>早い攻め（四間飛車の急戦）</li>
         <li><span>棋風：</span>攻め・序盤が速い</li>
         <li><span>師匠：</span>天鷺羽音</li>
+        <li><span>この対局：</span>長時間・相手は振り飛車 → 湊の適性 <b>対振り飛車 B・長時間 E</b></li>
       </ul>
       <div class="power"><span>戦闘力 湊 <b>412</b></span><span>相手 <b>438</b></span></div>
     </aside>
@@ -511,15 +519,17 @@ function drawFigures() {
 // ---- 能力(5つ)
 const STATS = [
   { name: '読み', rank: 'E', value: 342 }, { name: '作戦', rank: 'F', value: 268 }, { name: '安定', rank: 'D', value: 488 },
-  { name: '詰み', rank: 'E', value: 395 }, { name: '時間', rank: 'F', value: 214 },
+  { name: '詰み', rank: 'E', value: 395 },
 ];
 const SKILLS = [{ name: '早見え', star: 1 }, { name: '？？？', star: 0, hidden: true }];
+const STYLE = 'カウンター型';
+const APTITUDES = [['対居', 'C'], ['対振', 'B'], ['相振', 'E'], ['角換', 'D'], ['早指', 'C'], ['長時間', 'E']];
 const TRAINS = [
-  { id: 'tsume', name: '詰将棋', ic: '🧩', lv: 2, fail: 4, cost: 20, gains: [6, 0, 0, 18, 0], friends: ['momoka'] },
-  { id: 'kifu', name: '棋譜並べ', ic: '📜', lv: 1, fail: 4, cost: 15, gains: [0, 16, 5, 0, 0], friends: [], aim: true },
-  { id: 'jissen', name: '実戦', ic: '♟', lv: 1, fail: 6, cost: 22, gains: [15, 0, 6, 0, 0], friends: ['pro'] },
-  { id: 'fast', name: '早指し', ic: '⏱', lv: 3, fail: 9, cost: 25, gains: [5, 0, 0, 0, 17], friends: [] },
-  { id: 'shisho', name: '師匠と指す', ic: '🏯', lv: 1, fail: 2, cost: 12, gains: [0, 0, 14, 0, 0], friends: [] },
+  { id: 'tsume', name: '詰将棋', ic: '🧩', lv: 2, fail: 4, cost: 20, gains: [6, 0, 0, 18], friends: ['momoka'] },
+  { id: 'kifu', name: '棋譜並べ', ic: '📜', lv: 1, fail: 4, cost: 15, gains: [0, 16, 0, 0], friends: [], aim: true, extra: '対振り飛車の適性 +1目盛り' },
+  { id: 'jissen', name: '実戦', ic: '♟', lv: 1, fail: 6, cost: 22, gains: [15, 0, 5, 0], friends: ['pro'] },
+  { id: 'fast', name: '早指し', ic: '⏱', lv: 3, fail: 9, cost: 25, gains: [0, 0, 17, 0], friends: [], extra: '早指しの適性 +1目盛り' },
+  { id: 'shisho', name: '師匠と指す', ic: '🏯', lv: 1, fail: 2, cost: 12, gains: [0, 0, 14, 0], friends: [], extra: '戦い方を少し寄せる' },
 ];
 const FRIENDS = {
   momoka: { img: '../../public/characters/sakurano-momoka-320.webp', heart: 60, px: false },
@@ -529,7 +539,7 @@ const FRIENDS = {
 const friendHtml = (id) => { const f = FRIENDS[id]; return `<span class="friend${f.px ? ' px' : ''}"><img src="${f.img}" alt=""><span class="heart"><i style="width:${f.heart}%"></i></span></span>`; };
 function statsHtml(gains = null) {
   const d = DISCIPLES[current];
-  const skills = `<div class="skills">${SKILLS.map((skill) => `<span class="skill${skill.hidden ? ' skill--hidden' : ''}">${skill.hidden ? '弱点 ？' : `${skill.name}${'★'.repeat(skill.star)}`}</span>`).join('')}</div>`;
+  const skills = `<div class="skills"><span class="skill skill--style">${STYLE}</span>${SKILLS.map((skill) => `<span class="skill${skill.hidden ? ' skill--hidden' : ''}">${skill.hidden ? '弱点 ？' : `${skill.name}${'★'.repeat(skill.star)}`}</span>`).join('')}</div>`;
   return `<div class="who"><b>${d.name.replace('（仮）', '')}</b><small>研修会前</small></div>` + STATS.map((stat, index) => {
     const rank = stat.rank.replace('+', '');
     const up = gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : `<span></span>`;
@@ -544,12 +554,14 @@ function drawTrain() {
   document.getElementById('tr-name').textContent = t.name + (t.friends.length ? '　仲間と一緒' : '');
   document.getElementById('tr-note').textContent = `体力 −${t.cost}・失敗 ${t.fail}%`;
   document.getElementById('tr-gains').innerHTML = STATS.map((stat, index) => `<div class="${t.gains[index] >= 10 ? 'hot' : ''}">${stat.name}<b>${t.gains[index] ? `+${t.gains[index]}` : '—'}</b></div>`).join('');
+  document.getElementById('tr-extra').textContent = t.extra ?? '';
   document.querySelector('#train [data-stats]').innerHTML = statsHtml(t.gains);
   for (const el of row.querySelectorAll('[data-tr]')) el.addEventListener('click', () => { pickedTrain = Number(el.dataset.tr); drawTrain(); });
   for (const el of row.querySelectorAll('[data-go]')) el.addEventListener('click', () => show(el.dataset.go));
 }
 function drawHome() {
   document.querySelector('#home [data-stats]').innerHTML = statsHtml();
+  document.querySelector('#home [data-apt]').innerHTML = APTITUDES.map(([name, rank]) => `<span>${name}<b>${rank}</b></span>`).join('');
   document.querySelector('#home [data-friends]').innerHTML = ['momoka', 'pro', 'hanane'].map(friendHtml).join('');
   for (const el of document.querySelectorAll('[data-badge]')) el.innerHTML = el.dataset.badge === '2' ? friendHtml('momoka') + friendHtml('pro') : friendHtml('pro');
 }
