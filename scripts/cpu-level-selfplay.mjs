@@ -1,7 +1,8 @@
 // CPU同士を自動対局させ、強さ設定ごとのレーティング差を推定する開発用スクリプト。
 // 使い方:
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
-//   選手はL<レベル>、D<読み>-<作戦>-<安定>-<詰み>(師匠の1年の弟子。+fujii-curveのようにスキルを足せる)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   選手はL<レベル>、D<読み>-<作戦>-<安定>-<詰み>(師匠の1年の弟子。+fujii-curveのようにスキルを足せる)、
+//   R<読み>-<作戦>-<安定>-<詰み>(評価関数を使わず理由で指す棋士。能力値のLv12〜49。docs/disciple-mode-design.mdの34章)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
@@ -28,6 +29,7 @@ import { chooseLegacyCpuMove as chooseCpuMove } from "./lib/legacy-cpu-move-choi
 import "./lib/ts-register.mjs";
 const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
+const { chooseReasonMove, reasonProfile } = await import("../src/core/reason-move.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
 import { discipleSelfplaySettings } from "../src/core/disciple-strength.mjs";
@@ -125,6 +127,16 @@ export function strengthForPlayer(spec) {
   }
   const disciple = discipleSelfplaySettings(spec);
   if (disciple) return disciple;
+  // R<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士(34章)。エンジンは使わない。
+  // 校正用: 末尾のd<手数>・n<局面の数>・t<ミリ秒>で、読みの手数・局面の数・1手の時間を差し替える(例: R49-49-49-49d5n400000t3000)。
+  const reasonSpec = spec.match(/^R(\d+)-(\d+)-(\d+)-(\d+)(?:d(\d+))?(?:n(\d+))?(?:t(\d+))?$/);
+  if (reasonSpec) {
+    const [reading, plan, steady, mate] = reasonSpec.slice(1, 5).map(Number);
+    const profile = reasonProfile({ reading, plan, steady, mate });
+    if (reasonSpec[5]) profile.readDepth = Number(reasonSpec[5]);
+    if (reasonSpec[6]) profile.readNodes = Number(reasonSpec[6]);
+    return { reasonProfile: profile, reasonTimeMs: reasonSpec[7] ? Number(reasonSpec[7]) : 800, nodes: 0 };
+  }
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
@@ -201,7 +213,8 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const sfen = position.sfen;
     const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
-    let choice = logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: logicLevel, random }) : await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
+    let choice = strength.reasonProfile ? chooseReasonMove({ sfen, profile: strength.reasonProfile, random, maxTimeMs: strength.reasonTimeMs })
+      : logicLevel ? chooseLogicMove({ sfen, legalMoves: moves, moveHistory: history, level: logicLevel, random }) : await (strength.logicHybrid ? chooseAwareMove : chooseCpuMove)({
       strength,
       sfen,
       legalMoves: moves,

@@ -49,6 +49,17 @@ describe('考える順番(34-4)', () => {
     expect(got.move.startsWith('5e')).toBe(true);
     expect(['5e4d', '5e6d', '5e5d']).not.toContain(got.move.slice(0, 4));
   });
+  it('4. 飛車を成れるなら成る(龍は将棋AIの駒の価値で飛車より405高い)', () => {
+    const got = chooseReasonMove({ sfen: 'k8/9/9/9/7R1/9/9/9/K8 b - 1', profile: strong, random: never });
+    expect(got).toMatchObject({ stage: 'read', reason: 'promote' });
+    expect(got.move.endsWith('+')).toBe(true);
+  });
+  it('4. 数手先の駒得: 王手飛車取りの桂打ち(両取り)を見つける', () => {
+    // 後手玉2一・飛車4一。3三に桂を打つと、玉と飛車の両取り。
+    const got = chooseReasonMove({ sfen: '5r1k1/9/9/9/9/9/9/9/K8 b N 1', profile: strong, random: never });
+    expect(got).toMatchObject({ move: 'N*3c', stage: 'read', reason: 'attack' });
+    expect(got.delta).toBeGreaterThan(500);
+  });
   it('6. 何もない局面では、取られない端歩を突く', () => {
     const got = chooseReasonMove({ sfen: '4k4/9/9/9/9/9/8P/9/4K4 b - 1', profile: strong, random: never });
     expect(got).toMatchObject({ move: '1g1f', stage: 'quiet', reason: 'edge-pawn' });

@@ -7,7 +7,8 @@
 
 import { Position } from "tsshogi";
 import { attackedSquares, attackersOf, findKing, isKingAttacked, opponentOf, relativeFile, relativeRank, squareXY } from "./piece-movement.mjs";
-import { captureSearch, material, playLight, stateFromSfen, value } from "./logic-position.mjs";
+import { playLight, stateFromSfen } from "./logic-position.mjs";
+import { REASON_VALUES, idleLossOf, readMoves } from "./reason-search.mjs";
 import { hasLegalMove, isCheckmated, legalMoves } from "./light-moves.mjs";
 import { findMateLine } from "./problem-solver";
 
@@ -25,6 +26,8 @@ export const REASON_TEXT = Object.freeze({
   book: "定跡",
   follow: "研究の続き",
   material: "駒得",
+  promote: "成る",
+  attack: "両取り・当たり",
   save: "駒を逃がす",
   mobility: "駒の働き",
   connect: "駒をつなぐ",
@@ -65,8 +68,12 @@ export function reasonProfile(levels = {}) {
   return {
     /** 自分の詰みを探す手数(1・3・5・7・9)。 */
     mateDepth: 1 + 2 * Math.round(m * 4),
-    /** 取り合いを読む手数(段階E1は取る手だけ。2〜6)。 */
+    /** 末端の取り合いを読む手数(取る手・成る手だけ。2〜6)。 */
     captureDepth: 2 + Math.round(r * 4),
+    /** 根の手のあとに読む強い手(取る・成る・王手・両取り・大駒への当たり)の手数(1〜4。段階E2)。 */
+    readDepth: 1 + Math.round(r * 3),
+    /** 1手で読む局面の数の上限。 */
+    readNodes: Math.round(lerp(20000, 120000, r)),
     /** 取られる駒・相手の1手詰めの確かめを飛ばす確率(うっかり)。 */
     skip: Math.round(lerp(0.3, 0.02, s) * 1000) / 1000,
     /** 何もない局面で、手順表を局面に合わせて選ぶ割合(残りは上から順に)。 */
@@ -123,10 +130,6 @@ function opponentMatesInOne(state) {
   return null;
 }
 
-/** 指したあと、相手が取り合いで得をしたあとの、自分から見た駒の損得の変化。 */
-function readMaterial(state, child, depth) {
-  return -captureSearch(child, depth) - material(state, state.turn);
-}
 
 // ---- 何もない局面の手順表(34-5)
 
@@ -181,7 +184,7 @@ function situationalOrder(state) {
  *   sfen: string, profile: ReturnType<typeof reasonProfile>, planMove?: string | null, random?: () => number,
  *   maxTimeMs?: number,
  * }} options
- * @returns {{ move: string, stage: string, reason: string, delta: number, skipped: string[], mate?: number } | null}
+ * @returns {{ move: string, stage: string, reason: string, delta: number, skipped: string[], mate?: number, line?: string[] } | null}
  */
 export function chooseReasonMove({ sfen, profile, planMove = null, random = Math.random, maxTimeMs = 800 }) {
   const deadline = Date.now() + maxTimeMs;
@@ -206,13 +209,18 @@ export function chooseReasonMove({ sfen, profile, planMove = null, random = Math
   const skipHanging = random() < profile.skip;
   if (skipHanging) skipped.push("hanging");
   const entries = [];
+  const value = (kind) => REASON_VALUES[kind] ?? 0;
+  const reads = skipHanging ? null : readMoves(state, legal, {
+    depth: profile.readDepth, qdepth: profile.captureDepth, maxNodes: profile.readNodes, deadline: deadline - 150,
+  });
   for (const usi of legal) {
     const child = playLight(state, usi);
     if (!child) continue;
     const captured = child.captured ? value(child.captured.kind) : 0;
     const promo = usi.endsWith("+") ? value(child.board.get(usi.slice(2, 4))?.kind) - value(state.board.get(usi.slice(0, 2))?.kind) : 0;
-    const delta = skipHanging ? captured + promo : readMaterial(state, child, profile.captureDepth);
-    entries.push({ usi, child, delta, quiet: !captured && !promo });
+    const read = reads?.get(usi);
+    const delta = read ? read.delta : captured + promo;
+    entries.push({ usi, child, delta, line: read?.line ?? [usi], captured, promo, quiet: !captured && !promo });
   }
   // 2. 相手の1手詰めを防ぐ(駒の損得の良い順に、詰まされない手か確かめる)。
   const skipMate = random() < profile.skip;
@@ -241,19 +249,24 @@ export function chooseReasonMove({ sfen, profile, planMove = null, random = Math
   const planEntry = planMove ? pool0.find((entry) => entry.usi === planMove) : null;
   if (planEntry && best - planEntry.delta < REASON_RULES.bookMargin) return done(planEntry.usi, "book", "book", { delta: Math.round(planEntry.delta) });
 
-  // 4. 駒得: 取る・成る手の読みが、いちばん良い静かな手より、はっきり良い。
-  const bestQuiet = pool0.filter((entry) => entry.quiet).reduce((most, entry) => Math.max(most, entry.delta), -Infinity);
-  if (best - bestQuiet >= REASON_RULES.materialEdge) {
-    const top = pool0.filter((entry) => entry.delta >= best - 1);
-    return done(pick(top).usi, "read", "material", { delta: Math.round(best) });
+  // 4. 数手先の駒得・成り・両取り: 何もしないときより、読みの駒の損得がはっきり良い手。
+  //    何もしなければ取られる駒がある局面では、その損を減らす手が「駒を逃がす」。
+  const idle = skipHanging ? 0 : idleLossOf(state, profile.captureDepth);
+  // 同じ得なら、いま取る・いま成る手を先に(得を先に延ばさない)。
+  const tied = pool0.filter((entry) => entry.delta >= best - 1);
+  const nowGain = Math.max(...tied.map((entry) => entry.captured + entry.promo));
+  const top = tied.filter((entry) => entry.captured + entry.promo >= nowGain);
+  if (best >= -idle + REASON_RULES.materialEdge && best > 0) {
+    const chosen = pick(top);
+    const reason = chosen.captured ? "material" : chosen.promo > 0 ? "promote" : "attack";
+    return done(chosen.usi, "read", reason, { delta: Math.round(best), line: chosen.line });
   }
-  // 安全な手(取り合いで損をしない手)だけを残す。取られそうな駒があったなら、それを助ける手が残る。
+  if (idle > 0 && best > -idle + REASON_RULES.safeSlack) {
+    const chosen = pick(top);
+    return done(chosen.usi, "read", "save", { delta: Math.round(best), line: chosen.line });
+  }
+  // 安全な手(数手先まで読んで、駒を損しない手)だけを残す。
   const pool = pool0.filter((entry) => entry.delta >= best - REASON_RULES.safeSlack);
-  // 何もしなければ相手が取り合いで得をする(取られそうな駒がある)局面で、その損を減らす手なら「駒を逃がす」。
-  const opp = opponentOf(me);
-  const idle = captureSearch({ ...state, turn: opp }, profile.captureDepth) - material(state, opp);
-  const threatened = !skipHanging && idle > 0 && best > -idle + REASON_RULES.safeSlack;
-  if (threatened) return done(pick(pool).usi, "read", "save", { delta: Math.round(best) });
 
   // 5. 形をよくする手: 利く升とひもの増え方。
   const mob0 = mobility(state.board, me);
