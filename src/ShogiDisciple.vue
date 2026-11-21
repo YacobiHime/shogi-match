@@ -111,6 +111,7 @@
           <span class="disciple__chip disciple__chip--style">{{ PLAY_STYLES[view.style]?.label }}</span>
           <span v-for="id in view.skills" :key="id" class="disciple__chip">{{ skillById(id)?.name }}{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span>
           <span class="disciple__chip disciple__chip--hidden">弱点 {{ view.weakness ? view.weakness : '？' }}</span>
+          <span v-if="view.spotted?.length" class="disciple__chip disciple__chip--spotted" data-disciple-spotted title="観戦で見抜いた崩れ方の回数">見抜いた {{ view.spotted.map((item) => `${item.label} ${item.count}`).join('・') }}</span>
           <span v-if="view.rival" class="disciple__chip disciple__chip--rival" data-disciple-rival :title="`羽音の弟子（${view.rival.where}）`">ライバル {{ view.rival.name }} {{ view.rival.wins }}勝{{ view.rival.losses }}敗</span>
           <button type="button" class="disciple__chip disciple__chip--btn" data-disciple-skills-open @click="skillsOpen = !skillsOpen">スキルの条件</button>
         </div>
@@ -323,9 +324,33 @@
           <!-- スマホは、棋譜と見立てをタブで切り替える(広い画面は両方を並べる。33-4)。 -->
           <div class="disciple__watch-tabs" role="tablist">
             <button type="button" role="tab" :aria-selected="watchTab === 'kifu'" data-disciple-tab="kifu" @click="watchTab = 'kifu'">棋譜</button>
-            <button type="button" role="tab" :aria-selected="watchTab === 'marks'" data-disciple-tab="marks" @click="watchTab = 'marks'">見立て（{{ watch.marks.length }}）</button>
+            <button type="button" role="tab" :aria-selected="watchTab === 'marks'" data-disciple-tab="marks" @click="watchTab = 'marks'">{{ seeking ? '分かれ目' : `見立て（${watch.marks.length}）` }}</button>
+            <button v-if="watch.good.length" type="button" role="tab" :aria-selected="watchTab === 'good'" :disabled="seeking" data-disciple-tab="good" @click="watchTab = 'good'">好手（{{ watch.good.length }}）</button>
           </div>
-          <div class="disciple__pane disciple__pane--marks" :class="{ 'disciple__pane--on': watchTab === 'marks' }">
+          <!-- 分かれ目さがし(33-6)。印を見る前に、形勢が分かれた手を当てる。印・形勢の言葉・グラフの線は伏せる。 -->
+          <div v-if="seeking && watch.seek" class="disciple__pane disciple__pane--marks disciple__seek" :class="{ 'disciple__pane--on': watchTab === 'marks' }" data-disciple-seek>
+            <p class="disciple__ask"><b>どこで形勢が分かれたと思う？</b>
+              <small>棋譜を動かして、ここだと思う手で「ここが分かれ目」（{{ SEEK_RULES.tries }}回まで。前後{{ SEEK_RULES.near }}手なら見抜いた）</small></p>
+            <p v-if="seekHint" class="disciple__found" :class="{ 'disciple__found--miss': !watch.seek.hit }" data-disciple-seek-hint>{{ seekHint }}</p>
+            <div class="disciple__row disciple__row--left">
+              <button type="button" class="disciple__btn" data-disciple-seek-skip @click="closeSeek">{{ seekDone ? '印を見る' : '印を見る（飛ばす）' }}</button>
+              <button v-if="!seekDone" type="button" class="disciple__btn disciple__btn--main" :disabled="watch.upto === 0" data-disciple-seek-here @click="seekHere">ここが分かれ目（{{ watch.upto }}手目）</button>
+            </div>
+          </div>
+          <!-- 好手をほめる(33-6。D:5-4)。 -->
+          <div v-if="watch.good.length && !seeking" class="disciple__pane disciple__pane--good" :class="{ 'disciple__pane--on': watchTab === 'good' }" data-disciple-good-pane>
+            <p class="disciple__ask"><b>好手</b><small>{{ view?.name }}のいい手。ほめると、やる気が上がる（1局に1回）</small></p>
+            <div class="disciple__row disciple__row--left">
+              <button v-for="(good, index) in watch.good" :key="good.ply" type="button" class="disciple__btn disciple__good-chip" :class="{ 'disciple__good-chip--on': watch.goodSel === index }" :data-disciple-good="index" @click="selectGood(index)">★{{ good.ply }}手目</button>
+            </div>
+            <div v-if="selectedGood" class="disciple__ask disciple__good-card" data-disciple-good-card>
+              <b>好手！「{{ selectedGood.name }}」</b>
+              <small>{{ selectedGood.ply }}手目　{{ watchRows[selectedGood.ply - 1]?.text }}</small>
+              <button v-if="watch.mode !== 'book'" type="button" class="disciple__btn disciple__btn--main" :disabled="Boolean(watch.praised)" data-disciple-praise @click="praiseGood">{{ watch.praised ? (watch.praised === selectedGood.name ? 'ほめた' : 'もうほめた') : 'ほめる' }}</button>
+              <p v-if="watch.praised === selectedGood.name" class="disciple__found" data-disciple-praised>「{{ praiseLine(state?.discipleId ?? '', selectedGood.name) }}」</p>
+            </div>
+          </div>
+          <div v-if="!seeking" class="disciple__pane disciple__pane--marks" :class="{ 'disciple__pane--on': watchTab === 'marks' }">
           <p class="disciple__ask"><b>{{ watch.win ? '勝ち' : '負け' }}</b>
             <small v-if="!watch.marks.length">大きく崩れた手はなかった。いい将棋だったね</small>
             <small v-else-if="watch.mode === 'book'">印の手で、そのとき選んだ答えと、AIの検討が見られます</small>
@@ -360,8 +385,9 @@
           <ol ref="moveListEl" class="disciple__moves disciple__pane disciple__pane--kifu" :class="{ 'disciple__pane--on': watchTab === 'kifu' }" data-disciple-moves>
             <li v-for="row in watchRows" :key="row.ply" :class="{ 'disciple__move--on': row.ply === watch.upto, 'disciple__move--mine': row.mine }">
               <button type="button" :data-disciple-move="row.ply" @click="goPly(row.ply)">
-                <i>{{ row.ply }}</i><span>{{ row.text }}</span><em :class="`disciple__tone--${row.tone}`">{{ row.word }}</em>
+                <i>{{ row.ply }}</i><span>{{ row.text }}</span><em :class="`disciple__tone--${row.tone}`">{{ seeking ? '' : row.word }}</em>
                 <b v-if="markPlies.has(row.ply)" class="disciple__dot disciple__dot--red" aria-label="崩れた手"></b>
+                <b v-else-if="goodPlies.has(row.ply)" class="disciple__dot disciple__dot--gold" aria-label="好手"></b>
               </button>
             </li>
           </ol>
@@ -395,9 +421,12 @@
         <svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="50" x2="400" y2="50" stroke="#d9d2c4" stroke-width="1" />
           <line v-if="watch.phase === 'review'" :x1="graphX(watch.upto)" y1="0" :x2="graphX(watch.upto)" y2="100" stroke="#1d2a36" stroke-width="1.5" />
-          <polyline fill="none" stroke="#4f86c6" stroke-width="2.5" :points="graphPoints" />
+          <polyline v-if="!seeking" fill="none" stroke="#4f86c6" stroke-width="2.5" :points="graphPoints" />
         </svg>
-        <button v-for="(mark, index) in (watch.phase === 'review' ? watch.marks : [])" :key="mark.ply" type="button" class="disciple__mark"
+        <span v-if="seeking" class="disciple__graph-hide">分かれ目を当てるまで、形勢のグラフは伏せています</span>
+        <button v-for="(good, index) in (watch.phase === 'review' && !seeking ? watch.good : [])" :key="`g${good.ply}`" type="button" class="disciple__mark disciple__mark--gold"
+          :class="{ 'disciple__mark--gold-up': index % 2 === 1 }" :style="{ left: `${markLeft(good.ply)}%`, bottom: '0.3rem' }" :data-disciple-good-mark="index" @click.stop="selectGood(index)">★{{ good.ply }}</button>
+        <button v-for="(mark, index) in (watch.phase === 'review' && !seeking ? watch.marks : [])" :key="mark.ply" type="button" class="disciple__mark"
           :class="{ 'disciple__mark--done': guessOf(index), 'disciple__mark--on': watch.selected === index }"
           :style="{ left: `${markLeft(mark.ply)}%`, top: markRaised(index) ? '2.8rem' : '0.3rem' }" :data-disciple-mark="index" @click.stop="selectMark(index)">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
       </div>
@@ -448,7 +477,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
 import { aiHint, addBookGame, bookEntry, bookList, reviewRows } from "./core/disciple-review.mjs";
-import { REVIEW_CAUSES, REVIEW_CAUSE_ORDER, causeExplain, causeLabel, judgeReviewGuess, reviewMarks } from "./core/disciple-causes.mjs";
+import { REVIEW_CAUSES, REVIEW_CAUSE_ORDER, SEEK_RULES, causeExplain, causeLabel, goodMoves, judgeReviewGuess, judgeSeek, reviewMarks, turningPoint } from "./core/disciple-causes.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
@@ -457,7 +486,7 @@ import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import {
-  FRIENDS, PLANS, WORDS, applyFindings, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
+  FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
@@ -695,6 +724,12 @@ type Watch = {
   /** 検討の盤の手数(はじめから何手指した局面か)。 */
   upto: number;
   endReason: string;
+  /** 分かれ目さがし(33-6)。印を見る前に、形勢が分かれた手を当てる。 */
+  seek: { ply: number; tries: number[]; hit: boolean; closed: boolean } | null;
+  /** 弟子の好手(33-6)と、ほめた好手の名前(1局に1回)。 */
+  good: { ply: number; kind: string; name: string }[];
+  goodSel: number;
+  praised: string;
 };
 const watch = ref<Watch | null>(null);
 /** 観戦の番号(やめたり次の観戦を始めたりしたら変わる。古い本局の知らせは捨てる)。 */
@@ -713,6 +748,7 @@ function startWatch() {
   const current: Watch = {
     label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, entries: [], end: null, win: false, done: false,
     marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null, mode: "live", upto: 0, endReason: "",
+    seek: null, good: [], goodSel: -1, praised: "",
   };
   watch.value = current;
   const ticket = ++watchTicket;
@@ -746,6 +782,7 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   current.marks = reviewMarks(current.entries, current.side, { dan: eyeDan(state.value?.eye), big: Boolean(current.plan) });
   current.guesses = current.marks.map(() => null);
   current.selected = current.marks.length ? 0 : -1;
+  current.good = goodMoves(current.entries, current.side);
   current.done = true;
   // 終局の札 → その日の結果発表 → 検討の順に見せる(33-3。結果を先に知らせる)。
   current.endCard = endCardText({ win: current.win, reason: (end as { reason?: string })?.reason, plies: current.entries.length });
@@ -772,17 +809,69 @@ function showDayResult() {
 function startReview() {
   const current = watch.value;
   if (!current) return;
+  // 形勢が分かれた手があれば、印を見る前に分かれ目さがし(33-6)。はじめの局面から並べる。
+  const point = current.marks.length ? turningPoint(current.entries, current.side) : null;
+  if (point) {
+    watchTab.value = "marks";
+    watch.value = { ...current, phase: "review", selected: -1, upto: 0, seek: { ply: point.ply, tries: [], hit: false, closed: false } };
+    return;
+  }
   // 答える印があれば見立てのタブ、なければ棋譜のタブから。
+  watchTab.value = current.marks.length ? "marks" : current.good.length ? "good" : "kifu";
+  watch.value = { ...current, phase: "review", selected: current.marks.length ? 0 : -1, upto: current.marks[0]?.ply ?? current.good[0]?.ply ?? current.entries.length };
+}
+/** 分かれ目さがしの途中か(印・形勢の言葉・グラフの線・AIの検討を伏せる)。 */
+const seeking = computed(() => Boolean(watch.value?.phase === "review" && watch.value.seek && !watch.value.seek.closed));
+const seekDone = computed(() => Boolean(watch.value?.seek && (watch.value.seek.hit || watch.value.seek.tries.length >= SEEK_RULES.tries)));
+const seekHint = computed(() => {
+  const seek = watch.value?.seek;
+  if (!seek || !seek.tries.length) return "";
+  if (seek.hit) return `見抜いた！ 分かれ目は${seek.ply}手目。師匠の眼が1つ上がる`;
+  if (seekDone.value) return `分かれ目は${seek.ply}手目でした`;
+  const judged = judgeSeek(seek.tries[seek.tries.length - 1], seek);
+  return judged.direction === "early" ? "もう少しあと。もう1回" : "もう少し前。もう1回";
+});
+/** 「ここが分かれ目」: 今の手数で答える(2回まで)。 */
+function seekHere() {
+  const current = watch.value;
+  if (!current?.seek || seekDone.value) return;
+  const tries = [...current.seek.tries, current.upto];
+  const hit = judgeSeek(current.upto, current.seek).hit;
+  watch.value = { ...current, seek: { ...current.seek, tries, hit } };
+}
+/** 「印を見る」: 分かれ目さがしを終えて(飛ばして)、印に答える段へ。 */
+function closeSeek() {
+  const current = watch.value;
+  if (!current?.seek) return;
   watchTab.value = current.marks.length ? "marks" : "kifu";
-  watch.value = { ...current, phase: "review", selected: current.marks.length ? 0 : -1, upto: current.marks[0]?.ply ?? current.entries.length };
+  watch.value = { ...current, seek: { ...current.seek, closed: true } };
+  if (current.marks.length) selectMark(0);
+}
+/** 好手を選ぶ(その手の局面へ)。 */
+function selectGood(index: number) {
+  const current = watch.value;
+  const good = current?.good[index];
+  if (!current || !good || seeking.value) return;
+  watchTab.value = "good";
+  watch.value = { ...current, goodSel: index };
+  goPly(good.ply);
+}
+const selectedGood = computed(() => (watch.value && watch.value.goodSel >= 0 ? watch.value.good[watch.value.goodSel] ?? null : null));
+/** ほめる(1局に1回。やる気は検討を終えたときに入れる。D:5-4)。 */
+function praiseGood() {
+  const current = watch.value;
+  const good = selectedGood.value;
+  if (!current || !good || current.praised || current.mode === "book") return;
+  watch.value = { ...current, praised: good.name };
 }
 
 // ---- 検討の盤(33-4)。1手ずつ・手の一覧・グラフで飛ぶ・AIの検討・研究で開く・棋譜帳。
-const watchTab = ref<"kifu" | "marks">("kifu");
+const watchTab = ref<"kifu" | "marks" | "good">("kifu");
 const moveListEl = ref<HTMLElement | null>(null);
 /** 手の一覧(終局したら作る)。 */
 const watchRows = computed(() => (watch.value?.done ? reviewRows(watch.value.entries, watch.value.side) : []));
-const markPlies = computed(() => new Set((watch.value?.marks ?? []).map((mark) => mark.ply)));
+const markPlies = computed(() => new Set(seeking.value ? [] : (watch.value?.marks ?? []).map((mark) => mark.ply)));
+const goodPlies = computed(() => new Set(seeking.value ? [] : (watch.value?.good ?? []).map((good) => good.ply)));
 /** その手が、まだ答えていない印か(答える前はAIの検討を見せない)。 */
 function unansweredMark(ply: number) {
   const current = watch.value;
@@ -793,19 +882,19 @@ function unansweredMark(ply: number) {
 /** 今の局面のAIの検討: 次の手のAIの最善手(矢印)と、今の手のあとのAIの読み筋。 */
 const aiShown = computed(() => {
   const current = watch.value;
-  if (!current || current.phase !== "review") return null;
+  if (!current || current.phase !== "review" || seeking.value) return null;
   const next = unansweredMark(current.upto + 1) ? null : aiHint(current.entries, current.upto + 1);
   const now = current.upto > 0 && !unansweredMark(current.upto) ? aiHint(current.entries, current.upto) : null;
   const shown = { nextBest: next?.bestText ?? "", nextUsi: next?.best ?? "", pv: now?.pvText ?? "" };
   return shown.nextBest || shown.pv ? shown : null;
 });
-const aiLocked = computed(() => Boolean(watch.value?.phase === "review" && (unansweredMark(watch.value.upto) || unansweredMark(watch.value.upto + 1))));
+const aiLocked = computed(() => Boolean(watch.value?.phase === "review" && !seeking.value && (unansweredMark(watch.value.upto) || unansweredMark(watch.value.upto + 1))));
 const watchArrows = computed(() => (aiShown.value?.nextUsi ? [{ usi: aiShown.value.nextUsi, guideKind: "ai" as const }] : []));
 function goPly(ply: number) {
   const current = watch.value;
   if (!current) return;
   const upto = Math.max(0, Math.min(current.entries.length, Math.round(ply)));
-  watch.value = { ...current, upto, selected: current.marks.findIndex((mark) => mark.ply === upto) };
+  watch.value = { ...current, upto, selected: seeking.value ? -1 : current.marks.findIndex((mark) => mark.ply === upto), goodSel: current.good.findIndex((good) => good.ply === upto) };
   // 手の一覧だけを動かす(scrollIntoViewは画面ごと動いて、盤が見えなくなる)。
   requestAnimationFrame(() => {
     const list = moveListEl.value;
@@ -817,7 +906,7 @@ function selectMark(index: number) {
   const current = watch.value;
   const mark = current?.marks[index];
   if (!current || !mark) return;
-  if (current.phase !== "review") return;
+  if (current.phase !== "review" || (current.seek && !current.seek.closed)) return;
   watchTab.value = "marks";
   goPly(mark.ply);
 }
@@ -871,6 +960,7 @@ function openBookGame(game: ReturnType<typeof bookList>[number]) {
     entries: game.entries.map((entry: { move: string; eval: number; best?: string; pv?: string }) => ({ ...entry, loss: 0 })), end: { reason: game.endReason }, win: game.win, done: true,
     marks: game.marks, guesses: game.guesses.length ? game.guesses : game.marks.map(() => null), selected: -1, error: "",
     phase: "review", endCard: null, day: null, mode: "book", upto: game.plies, endReason: game.endReason,
+    seek: null, good: game.good ?? [], goodSel: -1, praised: "",
   };
 }
 const guessOf = (index: number) => watch.value?.guesses[index] ?? null;
@@ -917,12 +1007,14 @@ function closeWatch() {
   watchTicket += 1;
   watch.value = null;
   if (current.mode === "book") return;
-  if (current.phase === "review" && current.guesses.some(Boolean)) saveToBook(current);
-  if (current.phase === "review" && current.marks.length && current.guesses.some(Boolean)) {
-    const { state: next, revealed, results } = applyFindings(state.value, current.marks, current.guesses);
+  if (current.phase !== "review") return;
+  if (current.guesses.some(Boolean)) saveToBook(current);
+  const seekHit = Boolean(current.seek?.hit);
+  if (current.guesses.some(Boolean) || seekHit || current.praised) {
+    const { state: next, revealed, results } = applyFindings(state.value, current.marks, current.guesses, { seekHit, praised: current.praised });
     commit(next);
-    const right = results.filter((item) => item.right).length;
-    say(revealed ? `先生……弱点は「${revealed}」なんですね` : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
+    const right = results.filter((item) => item.right).length + (seekHit ? 1 : 0);
+    say(revealed ? `先生……弱点は「${revealed}」なんですね` : current.praised ? praiseLine(state.value?.discipleId ?? "", current.praised) : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
   }
 }
 /** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
@@ -1207,7 +1299,7 @@ defineExpose({ goBack });
 .shogi-game .disciple__watch-nav span { min-width: 8.5em; text-align: center; font-weight: 800; font-size: 0.85rem; }
 .shogi-game .disciple .disciple__watch-research { margin-left: auto; }
 .shogi-game .disciple .disciple__watch-research + .disciple__watch-close { margin-left: 0; }
-.shogi-game .disciple__watch-tabs { display: none; grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+.shogi-game .disciple__watch-tabs { display: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.3rem; }
 .shogi-game .disciple .disciple__watch-tabs button { min-height: 2.6rem; border: 0; border-radius: 0.6rem; background: #263442; color: #9fb1bd; font-weight: 800; }
 .shogi-game .disciple .disciple__watch-tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
 .shogi-game .disciple__pane--marks { display: grid; gap: 0.5rem; }
@@ -1224,6 +1316,17 @@ defineExpose({ goBack });
 .shogi-game .disciple__tone--bad { color: #ff9b8f !important; }
 .shogi-game .disciple__dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; }
 .shogi-game .disciple__dot--red { background: #e2457a; }
+/* 好手の金(33-6)。崩れた手の赤と見分ける。 */
+.shogi-game .disciple__dot--gold { background: #e3b23c; box-shadow: 0 0 0 2px rgba(227, 178, 60, 0.35); }
+.shogi-game .disciple__pane--good { display: grid; gap: 0.4rem; }
+.shogi-game .disciple .disciple__good-chip { min-height: 2.4rem; border-color: #e3b23c; background: #fff7e0; color: #8a5a00; }
+.shogi-game .disciple .disciple__good-chip--on { outline: 3px solid #e3b23c; }
+.shogi-game .disciple__good-card { display: grid; gap: 0.35rem; border: 2px solid #e3b23c; }
+.shogi-game .disciple__good-card b { color: #8a5a00; }
+.shogi-game .disciple__seek { border-radius: 0.9rem; }
+.shogi-game .disciple__found--miss { color: #2a4f86; }
+.shogi-game .disciple__graph-hide { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 0.75rem; font-weight: 800; pointer-events: none; }
+.shogi-game .disciple__chip--spotted { background: #e9f6ea; color: #2d6b38; }
 .shogi-game .disciple .disciple__book-row { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: 0.5rem; width: 100%; padding: 0.45rem; border: 0; border-radius: 0.6rem; background: transparent; color: var(--ink); text-align: left; }
 .shogi-game .disciple__book-row small { display: block; color: var(--muted); font-size: 0.72rem; }
 .shogi-game .disciple__watch-head { grid-area: head; display: flex; align-items: center; gap: 0.6rem; }
@@ -1233,6 +1336,8 @@ defineExpose({ goBack });
 .shogi-game .disciple__board-box { position: relative; }
 .shogi-game .disciple__board-box .shogi-match-theme-controls { display: none; }
 .shogi-game .disciple__watch-side { grid-area: side; display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; overflow: hidden; }
+/* 広い画面: 右の欄は盤と1手ずつのボタンの段にまたがる。中身の高さで段(auto)を伸ばさないよう、欄の大きさを中身から決めない(33-6の分かれ目さがしの札で、観戦の画面が画面より高くなっていた)。 */
+@media (min-width: 641px) { .shogi-game .disciple__watch-side { contain: size; } }
 .shogi-game .disciple__watch-side > * { flex: none; }
 .shogi-game .disciple__watch-side > .disciple__moves { flex: 1 1 0; }
 .shogi-game .disciple__pane--marks { max-height: 60%; overflow-y: auto; }
@@ -1253,6 +1358,8 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__mark { position: absolute; top: 0.3rem; transform: translateX(-50%); min-height: 2.2rem; padding: 0 0.5rem; border: 0; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.7rem; font-weight: 900; }
 .shogi-game .disciple .disciple__mark--done { background: #3c9a4c; }
 .shogi-game .disciple .disciple__mark--on { outline: 3px solid #1d2a36; }
+.shogi-game .disciple .disciple__mark--gold { top: auto; min-height: 1.9rem; background: #e3b23c; color: #3b2a00; }
+.shogi-game .disciple .disciple__mark--gold-up { bottom: 2.3rem !important; }
 
 /* 終局の札と結果発表(33-3) */
 .shogi-game .disciple .disciple__endcard { position: absolute; z-index: 20; left: 50%; top: 42%; display: grid; justify-items: center; gap: 0.3rem; min-width: 14rem; padding: 1rem 1.6rem; border: 4px solid #c0392b; border-radius: 1rem; background: #fffaf0; color: #c0392b; transform: translate(-50%, -50%) rotate(-4deg); box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.45); animation: disciple-stamp 0.32s cubic-bezier(.2,1.6,.4,1); }

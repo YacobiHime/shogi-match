@@ -14,8 +14,8 @@ describe('観戦の結果発表の順番(docs/disciple-mode-design.mdの33-3)', 
   });
   it('印と理由の5択は検討の段だけ。検討しないで閉じたら答えを入れない', () => {
     expect(source).toMatch(/<template v-else-if="watch\.phase === 'review'">/);
-    expect(source).toMatch(/v-for="\(mark, index\) in \(watch\.phase === 'review' \? watch\.marks : \[\]\)"/);
-    expect(source).toMatch(/if \(current\.phase === "review" && current\.marks\.length && current\.guesses\.some\(Boolean\)\) \{/);
+    expect(source).toMatch(/v-for="\(mark, index\) in \(watch\.phase === 'review' && !seeking \? watch\.marks : \[\]\)"/);
+    expect(source).toMatch(/if \(current\.phase !== "review"\) return;\s*if \(current\.guesses\.some\(Boolean\)\) saveToBook\(current\);/);
   });
   it('観戦の盤の重なりは盤の枠の中に閉じ、終局の札と結果発表を盤の上に出す', () => {
     expect(source).toMatch(/\.disciple__watch-board \{ (?:grid-area: board; )?position: relative; z-index: 0; isolation: isolate;/);
@@ -57,5 +57,25 @@ describe('崩れ方の見立て(docs/disciple-mode-design.mdの33-5)', () => {
     expect(source).toMatch(/selectedJudge\.right \? '見抜いた！' : selectedJudge\.near \? `おしい！/);
     expect(source).toMatch(/:risk-squares="clueRings"\s*:threat-arrows="clueArrows"/);
     expect(source).toMatch(/data-disciple-section-start/);
+  });
+});
+
+describe('見立てを面白くする(docs/disciple-mode-design.mdの33-6)', () => {
+  it('分かれ目さがしは印を見る前。印・形勢の言葉・グラフの線・AIの検討を伏せ、「印を見る」で飛ばせる', () => {
+    expect(source).toMatch(/const point = current\.marks\.length \? turningPoint\(current\.entries, current\.side\) : null;/);
+    expect(source).toMatch(/data-disciple-seek-here @click="seekHere"/);
+    expect(source).toMatch(/data-disciple-seek-skip @click="closeSeek"/);
+    expect(source).toMatch(/<polyline v-if="!seeking"/);
+    expect(source).toMatch(/\{\{ seeking \? '' : row\.word \}\}/);
+    expect(source).toMatch(/if \(!current \|\| current\.phase !== "review" \|\| seeking\.value\) return null;/);
+  });
+  it('好手は金の印で、ほめるのは1局に1回。棋譜帳から開いたものはほめない', () => {
+    expect(source).toMatch(/current\.good = goodMoves\(current\.entries, current\.side\);/);
+    expect(source).toMatch(/disciple__dot--gold/);
+    expect(source).toMatch(/if \(!current \|\| !good \|\| current\.praised \|\| current\.mode === "book"\) return;/);
+    expect(source).toMatch(/applyFindings\(state\.value, current\.marks, current\.guesses, \{ seekHit, praised: current\.praised \}\)/);
+  });
+  it('弟子の札に、崩れ方ごとの見抜いた回数', () => {
+    expect(source).toMatch(/data-disciple-spotted/);
   });
 });

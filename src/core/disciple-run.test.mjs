@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EXAM_TURN, MAX_TURNS, applyFindings, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
+  EXAM_TURN, MAX_TURNS, applyFindings, praiseLine, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
 } from './disciple-run.mjs';
 import { dayResultView, endCardText } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
@@ -160,6 +160,18 @@ describe('観戦(24章)', () => {
     out = applyFindings(s, [{ cause: 'careless' }, { cause: 'careless' }], ['careless', 'plan']);
     expect(out.revealed).toBe('うっかりが多い');
     expect(discipleView(out.state).weakness).toBe('うっかりが多い');
+    // 見抜いた回数は、主の分類を当てたときだけ数える(33-6)。
+    expect(out.state.spotted).toEqual({ careless: 2 });
+  });
+
+  it('分かれ目を見抜くと師匠の眼に1つ、好手をほめるとやる気が1つ上がる(33-6)', () => {
+    const s = { ...atExam(), mood: 0 };
+    const out = applyFindings(s, [], [], { seekHit: true, praised: '叩きの歩' });
+    expect(out.state.eye).toBe((s.eye ?? 0) + 1);
+    expect(out.state.mood).toBe(1);
+    expect(out.state.log.at(-1).text).toBe('好手「叩きの歩」をほめた');
+    expect(applyFindings({ ...s, mood: 2 }, [], [], { praised: 'x' }).state.mood).toBe(2);
+    expect(praiseLine('ao', '叩きの歩')).toMatch(/^あの叩きの歩、/);
   });
 });
 

@@ -9,6 +9,7 @@ import { detectTesujiShape, TESUJI_SHAPES } from './tesuji-shape.mjs';
 import { isSideToMoveInCheck } from './coach-advice.mjs';
 import { discipleWatchMoves, MARK_COUNT, MARK_MIN_LOSS } from './disciple-strength.mjs';
 import { evalWord } from './disciple-review.mjs';
+import { detectWazaTesuji } from './move-waza.mjs';
 
 /** 6つの崩れ方と、狙い目になる能力(33-5の表)。 */
 export const REVIEW_CAUSES = Object.freeze({
@@ -239,4 +240,101 @@ export function causeExplain(mark) {
     case 'plan': return `作戦負け。序盤の駒組みのあいだに、少しずつ形勢を損ねた（${mark.startWord ?? '互角'} → ${mark.endWord ?? ''}）`;
     default: return causeLabel(mark.cause);
   }
+}
+
+/** 段階D(33-6)の物差し。 */
+export const SEEK_RULES = Object.freeze({
+  /** 分かれ目の手からこれだけ以内なら見抜いた。 */
+  near: 2,
+  /** 「ここが分かれ目」を押せる回数。 */
+  tries: 2,
+  /** 分かれ目とみなす、1手の勝つ見込みの動き。 */
+  minSwing: 0.12,
+});
+export const GOOD_RULES = Object.freeze({
+  /** 好手の印の数。 */
+  max: 3,
+  /** 好手とみなす手の損(最善との差)の上限。 */
+  maxLoss: 60,
+});
+
+/**
+ * 分かれ目(33-6): 弟子から見た勝つ見込みが、1手でいちばん大きく動いた手(どちらの手でも)。
+ * 動きが小さい対局(ずっと互角・はじめから差がついた)ならnull。
+ * @param {readonly { eval?: number }[]} entries
+ * @param {'black' | 'white'} side
+ * @returns {{ ply: number, before: number, after: number, swing: number } | null}
+ */
+export function turningPoint(entries, side) {
+  const sign = side === 'black' ? 1 : -1;
+  const chance = (index) => winChanceOf(index >= 0 ? sign * (Number(entries[index]?.eval) || 0) : 0);
+  let best = null;
+  for (let ply = 1; ply <= entries.length; ply += 1) {
+    const before = chance(ply - 2);
+    const after = chance(ply - 1);
+    const swing = Math.abs(after - before);
+    if (swing >= SEEK_RULES.minSwing && (!best || swing > best.swing)) best = { ply, before, after, swing };
+  }
+  return best;
+}
+
+/**
+ * 分かれ目さがしの答え。分かれ目の手から2手以内なら見抜いた。
+ * @param {number} guess 押した手(何手目)
+ * @param {{ ply: number } | null} point
+ */
+export function judgeSeek(guess, point) {
+  if (!point) return { hit: false, diff: 0, direction: '' };
+  const diff = guess - point.ply;
+  return { hit: Math.abs(diff) <= SEEK_RULES.near, diff, direction: diff < 0 ? 'early' : diff > 0 ? 'late' : '' };
+}
+
+const GOOD_ORDER = Object.freeze({ only: 0, mate: 1, tesuji: 2 });
+
+/**
+ * 弟子の好手(33-6)。本局の記録の印(ただ1つの好手・詰みを読み切った最初の手)と、手筋の名前が付く損のない手。
+ * 悪い手を探すだけのふり返りにしないため、いちばん大事な順に3つまで。
+ * @param {readonly { move: string, eval?: number, loss?: number, mark?: string }[]} entries
+ * @param {'black' | 'white'} side
+ * @param {{ sfens?: string[] }} [cache]
+ * @returns {{ ply: number, kind: 'only' | 'mate' | 'tesuji', name: string }[]}
+ */
+export function goodMoves(entries, side, { sfens = sfenList(entries) } = {}) {
+  const found = [];
+  const parity = side === 'black' ? 1 : 0;
+  let mateSeen = false;
+  for (let ply = 1; ply <= entries.length && ply < sfens.length; ply += 1) {
+    if (ply % 2 !== parity) continue;
+    const entry = entries[ply - 1];
+    if ((Number(entry.loss) || 0) > GOOD_RULES.maxLoss) continue;
+    if (entry.mark === 'mate') {
+      // 詰みの手順は最初の1手だけ(読み切ったところ)。
+      if (!mateSeen) found.push({ ply, kind: 'mate', name: '詰みの読み切り' });
+      mateSeen = true;
+      continue;
+    }
+    if (entry.mark === 'only') {
+      found.push({ ply, kind: 'only', name: '最善の一手' });
+      continue;
+    }
+    if (entry.mark === 'book') continue;
+    const waza = detectWazaTesuji({ sfenBefore: sfens[ply - 1], usi: entry.move });
+    if (waza.length) found.push({ ply, kind: 'tesuji', name: waza[0].name });
+  }
+  return found
+    .sort((a, b) => GOOD_ORDER[a.kind] - GOOD_ORDER[b.kind] || a.ply - b.ply)
+    .slice(0, GOOD_RULES.max)
+    .sort((a, b) => a.ply - b.ply);
+}
+
+/**
+ * 弟子の札に出す、崩れ方ごとの見抜いた回数(33-6)。多い順に、0回は出さない。
+ * @param {Record<string, number> | undefined} causes
+ * @returns {{ id: string, label: string, count: number }[]}
+ */
+export function spottedCounts(causes) {
+  return REVIEW_CAUSE_ORDER
+    .map((id) => ({ id, label: REVIEW_CAUSES[id].label, count: Number(causes?.[id]) || 0 }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || REVIEW_CAUSE_ORDER.indexOf(a.id) - REVIEW_CAUSE_ORDER.indexOf(b.id));
 }

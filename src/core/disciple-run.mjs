@@ -11,7 +11,7 @@ import {
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
-import { REVIEW_CAUSES, judgeReviewGuess } from './disciple-causes.mjs';
+import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -746,11 +746,23 @@ export const WEAKNESS_LABELS = Object.freeze({
  * @param {any} state
  * @param {readonly { cause: string, alt?: string | null, tags?: string[] }[]} marks
  * @param {readonly (string | null)[]} guesses 印ごとに選んだ理由(選ばなかった印はnull)
+ * @param {{ seekHit?: boolean, praised?: string }} [extra] 分かれ目さがしを見抜いたか・ほめた好手の名前(33-6)
  */
-export function applyFindings(state, marks, guesses) {
+export function applyFindings(state, marks, guesses, { seekHit = false, praised = '' } = {}) {
   const next = structuredClone(state);
   next.causes ??= {};
+  next.spotted ??= {};
   next.eye ??= 0;
+  // 分かれ目さがしを見抜いたら師匠の眼に1つ(33-6)。
+  if (seekHit) {
+    next.eye += 1;
+    next.log.push({ turn: next.turn, text: '分かれ目を見抜いた' });
+  }
+  // 好手をほめたら、1局に1回やる気が上がる(33-6。D:5-4)。
+  if (praised) {
+    next.mood = clamp((next.mood ?? 0) + 1, -2, 2);
+    next.log.push({ turn: next.turn, text: `好手「${praised}」をほめた` });
+  }
   const results = [];
   marks.forEach((mark, index) => {
     const guess = guesses[index];
@@ -766,7 +778,10 @@ export function applyFindings(state, marks, guesses) {
       next.causes.time = (next.causes.time ?? 0) + 1;
     }
     next.causes[mark.cause] = (next.causes[mark.cause] ?? 0) + 1;
-    if (judged.right) next.eye += 1;
+    if (judged.right) {
+      next.eye += 1;
+      if (REVIEW_CAUSES[mark.cause]) next.spotted[mark.cause] = (next.spotted[mark.cause] ?? 0) + 1;
+    }
     results.push({ ...judged, target });
   });
   let revealed = '';
@@ -776,6 +791,17 @@ export function applyFindings(state, marks, guesses) {
     next.log.push({ turn: next.turn, text: `弱点が分かった：${revealed}` });
   }
   return { state: next, results, revealed, dan: eyeDan(next.eye) };
+}
+
+/** 好手をほめたときの弟子の一言(33-6。仮の台詞)。 */
+const PRAISE_LINES = Object.freeze({
+  minato: (name) => `あの${name}、見ててくれたんですね。ちょっと自信がつきました`,
+  tsumugi: (name) => `あの${name}は、ちゃんと読んで指しました。気づいてもらえてうれしいです`,
+  ao: (name) => `あの${name}、すごかった？　やったー、次もねらってみる！`,
+});
+/** @param {string} discipleId @param {string} name */
+export function praiseLine(discipleId, name) {
+  return (PRAISE_LINES[discipleId] ?? PRAISE_LINES.minato)(name);
 }
 
 /**
@@ -889,6 +915,8 @@ export function discipleView(state) {
     skills: state.skills,
     weakness: state.weaknessKnown ? WEAKNESS_LABELS[state.weakness] ?? state.weakness : null,
     eye: { found: state.eye ?? 0, dan: eyeDan(state.eye) },
+    /** 崩れ方ごとの見抜いた回数(33-6)。 */
+    spotted: spottedCounts(state.spotted),
     aptitudes: state.aptitudes,
     trainings: TRAININGS.map((training) => trainingPreview(state, training.id)),
     deck: lessonDeck(state),

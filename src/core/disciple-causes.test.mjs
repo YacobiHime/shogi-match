@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REVIEW_AIM, causeExplain, causeLabel, classifyMove, judgeReviewGuess, planSection, reviewMarks } from './disciple-causes.mjs';
+import { REVIEW_AIM, causeExplain, causeLabel, classifyMove, goodMoves, judgeReviewGuess, judgeSeek, planSection, reviewMarks, spottedCounts, turningPoint } from './disciple-causes.mjs';
 
 /** 先手から見た評価値つきの棋譜にする。 */
 const game = (moves, evals, extra = {}) => moves.map((move, index) => ({ move, eval: evals[index] ?? evals.at(-1), ...(extra[index] ?? {}) }));
@@ -71,5 +71,43 @@ describe('答えの判定(33-5)', () => {
     expect(causeExplain({ cause: 'policy', sub: 'rush' })).toContain('攻め急ぎ');
     expect(causeLabel('reading')).toBe('読み負け');
     expect(causeLabel('careless')).toBe('うっかり');
+  });
+});
+
+describe('分かれ目さがし(33-6)', () => {
+  const entries = [0, 20, 30, 10, -900, -950, -1000].map((value, index) => ({ move: '', eval: value, n: index }));
+  it('弟子から見た勝つ見込みが1手でいちばん動いた手を分かれ目にし、2手以内なら見抜いた', () => {
+    expect(turningPoint(entries, 'black')).toMatchObject({ ply: 5 });
+    expect(turningPoint(entries, 'white')).toMatchObject({ ply: 5 });
+    expect(judgeSeek(7, { ply: 5 })).toMatchObject({ hit: true, direction: 'late' });
+    expect(judgeSeek(2, { ply: 5 })).toMatchObject({ hit: false, direction: 'early' });
+    expect(judgeSeek(5, null).hit).toBe(false);
+  });
+  it('ずっと互角の対局には分かれ目がない', () => {
+    expect(turningPoint([{ eval: 10 }, { eval: -20 }, { eval: 30 }], 'black')).toBeNull();
+  });
+});
+
+describe('好手をほめる(33-6)', () => {
+  const moves = ['7g7f', '3c3d', '2g2f', '4c4d', '2f2e', '2b3c', '3i4h', '8b4b', '5i6h', '5a6b'];
+  it('ただ1つの好手と詰みを読み切った最初の手を、損の小さい弟子の手から3つまで', () => {
+    const marks = { 3: 'only', 5: 'mate', 7: 'mate', 9: 'only', 4: 'only' };
+    const entries = moves.map((move, index) => ({ move, loss: index === 8 ? 200 : 0, mark: marks[index + 1] ?? '' }));
+    const good = goodMoves(entries, 'black');
+    expect(good).toEqual([
+      { ply: 3, kind: 'only', name: '最善の一手' },
+      { ply: 5, kind: 'mate', name: '詰みの読み切り' },
+    ]);
+    expect(goodMoves(entries, 'white')).toEqual([{ ply: 4, kind: 'only', name: '最善の一手' }]);
+  });
+});
+
+describe('見抜いた回数(33-6)', () => {
+  it('多い順に、0回は出さない', () => {
+    expect(spottedCounts({ policy: 1, careless: 2, yose: 0 })).toEqual([
+      { id: 'careless', label: 'うっかり', count: 2 },
+      { id: 'policy', label: '方針の誤り', count: 1 },
+    ]);
+    expect(spottedCounts(undefined)).toEqual([]);
   });
 });

@@ -115,6 +115,8 @@ export function bookEntry(game, { turn = 0, when = '' } = {}) {
     })),
     marks: (game.marks ?? []).map((mark) => ({ ply: mark.ply, loss: mark.loss, cause: mark.cause, clues: [...(mark.clues ?? [])] })),
     guesses: [...(game.guesses ?? [])],
+    // 弟子の好手(33-6)。棋譜帳には本局の印(ただ1つの好手など)を残さないので、見つけた好手をそのまま残す。
+    good: (game.good ?? []).map((item) => ({ ply: item.ply, kind: item.kind, name: item.name })),
   };
 }
 
