@@ -1056,7 +1056,9 @@ describe("match screen regressions", () => {
   it('ホームのあそぶの行の師匠の1年は、押すと弟子を育てる画面を開く(docs/disciple-mode-design.mdの23章)', () => {
     expect(source).toMatch(/class="shogi-title__tile" data-disciple-tile @click="openDisciple"/);
     expect(source).toMatch(/const ShogiDisciple = lazyScreen\(\(\) => import\("\.\/ShogiDisciple\.vue"\)\);/);
-    expect(source).toMatch(/\} else if \(discipleOpen\.value\) \{\s*\/\/[^\n]*\n\s*if \(!discipleView\.value\?\.goBack\(\)\) discipleOpen\.value = false;/);
+    // 研究で開いた棋譜を見ているあいだは、戻る操作は研究へ(docs/disciple-mode-design.mdの33-4)。
+    expect(source).toMatch(/\} else if \(discipleOpen\.value && !researchOpen\.value\) \{\s*\/\/[^\n]*\n\s*if \(!discipleView\.value\?\.goBack\(\)\) discipleOpen\.value = false;/);
+    expect(source).toMatch(/<ShogiDisciple v-if="discipleOpen" v-show="!researchOpen"[^>]*@research="openResearch\(\$event\)"/);
     expect(source).toMatch(/storyOpen\.value \|\| discipleOpen\.value \|\|/);
     expect(source).toMatch(/:not\(\.shogi-story\):not\(\.disciple\)/);
   });

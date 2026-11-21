@@ -520,7 +520,8 @@
       @start-match="startResearchMatch"
     />
     <!-- 師匠の1年(docs/disciple-mode-design.md)。 -->
-    <ShogiDisciple v-if="discipleOpen" ref="discipleView" :asset-base-url="assetBaseUrl" :engine-factory="ensureEngineFactory" :player-name="playerDisplayName(playerName)" @close="discipleOpen = false" />
+    <!-- 研究で開いた棋譜(docs/disciple-mode-design.mdの33-4)を見ているあいだは隠し、研究を閉じたら師匠の1年へ戻る。 -->
+    <ShogiDisciple v-if="discipleOpen" v-show="!researchOpen" ref="discipleView" :asset-base-url="assetBaseUrl" :engine-factory="ensureEngineFactory" :player-name="playerDisplayName(playerName)" @close="discipleOpen = false" @research="openResearch($event)" />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
       :player-profile="playerProfile"
@@ -10529,7 +10530,7 @@ function navigateBack() {
   } else if (brainTrainingOpen.value) {
     if (brainTrainingView.value) brainTrainingView.value.goBack();
     else brainTrainingOpen.value = false;
-  } else if (discipleOpen.value) {
+  } else if (discipleOpen.value && !researchOpen.value) {
     // 師匠の1年は、稽古の札を開いていれば閉じ、なければホームへ。
     if (!discipleView.value?.goBack()) discipleOpen.value = false;
   } else if (storyOpen.value) {

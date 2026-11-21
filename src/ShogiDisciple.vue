@@ -89,6 +89,7 @@
           <div><small>次の目標</small><b>{{ view.goal.text }}</b></div>
           <div v-if="view.goal.left" class="disciple__left">あと<b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
         </div>
+        <button v-if="bookGames.length" type="button" class="disciple__menu-btn disciple__menu-btn--text" data-disciple-book-open @click="bookOpen = true">棋譜帳</button>
         <button type="button" class="disciple__menu-btn disciple__menu-btn--text" data-disciple-slots-open @click="showSlots">記録</button>
         <button type="button" class="disciple__menu-btn" aria-label="戻る" data-disciple-back @click="emit('close')">←</button>
       </header>
@@ -280,18 +281,20 @@
     </template>
 
     <!-- 観戦と見立て(24章) -->
-    <section v-if="watch" class="disciple__watch" role="dialog" aria-modal="true" aria-label="観戦" data-disciple-watching>
+    <section v-if="watch" class="disciple__watch" :class="{ 'disciple__watch--review': watch.phase === 'review' }" role="dialog" aria-modal="true" aria-label="観戦" data-disciple-watching>
       <header class="disciple__watch-head">
-        <b>観戦　{{ watch.label }}</b>
+        <b>{{ watch.phase === 'review' ? '検討' : '観戦' }}　{{ watch.label }}</b>
         <small>{{ view?.name }}（{{ watch.side === 'black' ? '先手' : '後手' }}）対 {{ watch.opponent.name }}　{{ watch.end ? `${watch.entries.length}手で終局` : `${watch.entries.length}手目` }}</small>
-        <button type="button" class="disciple__watch-close" data-disciple-watch-close @click="closeWatch">{{ watch.phase === 'review' ? '検討を終える' : watch.done ? 'あとで' : 'やめる' }}</button>
+        <button v-if="watch.phase === 'review'" type="button" class="disciple__watch-close disciple__watch-research" data-disciple-research @click="openResearch">研究で開く</button>
+        <button type="button" class="disciple__watch-close" data-disciple-watch-close @click="closeWatch">{{ watch.mode === 'book' ? '閉じる' : watch.phase === 'review' ? '検討を終える' : watch.done ? 'あとで' : 'やめる' }}</button>
       </header>
       <!-- 盤は対局と同じ部品と駒・盤の素材(ShogiMatchBoard)。枠を、描かれる盤と同じ大きさにする(TeamPeekSheet.vueと同じ方法)。 -->
-      <div ref="watchStageEl" class="disciple__watch-board">
+      <div ref="watchStageEl" class="disciple__watch-board" @pointerdown="onBoardPointerDown" @pointerup="onBoardPointerUp">
         <div class="disciple__board-box" :style="boardBoxStyle">
           <ShogiMatchBoard
             :sfen="watchSfen"
             :last-move="watchLastMove"
+            :candidates="watchArrows"
             :allow-move="false"
             :enable-drag-and-drop="false"
             :flip="watch.side === 'white'"
@@ -304,13 +307,27 @@
           />
         </div>
       </div>
+      <div v-if="watch.phase === 'review'" class="disciple__watch-nav" data-disciple-nav>
+        <button type="button" aria-label="最初へ" data-disciple-nav-first @click="goPly(0)">⏮</button>
+        <button type="button" aria-label="1手戻る" data-disciple-nav-prev @click="goPly(watch.upto - 1)">◀</button>
+        <span data-disciple-nav-ply>{{ watch.upto }}手目 / {{ watch.entries.length }}手</span>
+        <button type="button" aria-label="1手進む" data-disciple-nav-next @click="goPly(watch.upto + 1)">▶</button>
+        <button type="button" aria-label="最後へ" data-disciple-nav-last @click="goPly(watch.entries.length)">⏭</button>
+      </div>
       <div class="disciple__watch-side">
         <p v-if="watch.error" class="disciple__ask">{{ watch.error }}</p>
         <p v-else-if="!watch.end" class="disciple__ask">弟子が指しています……<small>終局すると、結果を発表してから、一緒に検討できます</small></p>
         <template v-else-if="watch.phase === 'review'">
+          <!-- スマホは、棋譜と見立てをタブで切り替える(広い画面は両方を並べる。33-4)。 -->
+          <div class="disciple__watch-tabs" role="tablist">
+            <button type="button" role="tab" :aria-selected="watchTab === 'kifu'" data-disciple-tab="kifu" @click="watchTab = 'kifu'">棋譜</button>
+            <button type="button" role="tab" :aria-selected="watchTab === 'marks'" data-disciple-tab="marks" @click="watchTab = 'marks'">見立て（{{ watch.marks.length }}）</button>
+          </div>
+          <div class="disciple__pane disciple__pane--marks" :class="{ 'disciple__pane--on': watchTab === 'marks' }">
           <p class="disciple__ask"><b>{{ watch.win ? '勝ち' : '負け' }}</b>
             <small v-if="!watch.marks.length">大きく崩れた手はなかった。いい将棋だったね</small>
-            <small v-else>印を押して、崩れた理由を選ぼう（{{ answeredCount }}/{{ watch.marks.length }}）</small></p>
+            <small v-else-if="watch.mode === 'book'">印の手で、そのとき選んだ答えと、AIの検討が見られます</small>
+            <small v-else>グラフの印か、手の一覧の赤い点の手で、崩れた理由を選ぼう（{{ answeredCount }}/{{ watch.marks.length }}）</small></p>
           <div v-if="selectedMark" class="disciple__ask">
             <b>{{ selectedMark.ply }}手目　形勢が{{ selectedMark.loss }}点落ちた。理由は？</b>
             <div class="disciple__clues"><span v-for="clue in selectedMark.clues" :key="clue">{{ clue }}</span></div>
@@ -326,6 +343,21 @@
               「{{ STAT_LABELS[targetOf(selectedMark.cause)] }}」の稽古が狙い目になる（伸び×{{ guessOf(watch.selected) === selectedMark.cause ? '1.5' : '1.25' }}）
             </p>
           </div>
+          </div>
+          <p v-if="aiShown" class="disciple__ai" data-disciple-ai>
+            <b>AIの検討</b>
+            <template v-if="aiShown.nextBest">この局面のAIの最善手は {{ aiShown.nextBest }}（矢印）。</template>
+            <template v-if="aiShown.pv">{{ watch.upto }}手目のあとのAIの読み：{{ aiShown.pv }}</template>
+          </p>
+          <p v-else-if="aiLocked" class="disciple__ai disciple__ai--locked">理由を選ぶと、AIの検討が見られます</p>
+          <ol ref="moveListEl" class="disciple__moves disciple__pane disciple__pane--kifu" :class="{ 'disciple__pane--on': watchTab === 'kifu' }" data-disciple-moves>
+            <li v-for="row in watchRows" :key="row.ply" :class="{ 'disciple__move--on': row.ply === watch.upto, 'disciple__move--mine': row.mine }">
+              <button type="button" :data-disciple-move="row.ply" @click="goPly(row.ply)">
+                <i>{{ row.ply }}</i><span>{{ row.text }}</span><em :class="`disciple__tone--${row.tone}`">{{ row.word }}</em>
+                <b v-if="markPlies.has(row.ply)" class="disciple__dot disciple__dot--red" aria-label="崩れた手"></b>
+              </button>
+            </li>
+          </ol>
         </template>
       </div>
       <!-- 終局の札(33-3)。押すか、少し待つと結果発表へ。 -->
@@ -352,15 +384,29 @@
           </div>
         </div>
       </div>
-      <div class="disciple__graph" aria-label="評価値のグラフ">
+      <div class="disciple__graph" aria-label="評価値のグラフ" data-disciple-graph @click="onGraphClick">
         <svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="50" x2="400" y2="50" stroke="#d9d2c4" stroke-width="1" />
+          <line v-if="watch.phase === 'review'" :x1="graphX(watch.upto)" y1="0" :x2="graphX(watch.upto)" y2="100" stroke="#1d2a36" stroke-width="1.5" />
           <polyline fill="none" stroke="#4f86c6" stroke-width="2.5" :points="graphPoints" />
         </svg>
         <button v-for="(mark, index) in (watch.phase === 'review' ? watch.marks : [])" :key="mark.ply" type="button" class="disciple__mark"
           :class="{ 'disciple__mark--done': guessOf(index), 'disciple__mark--on': watch.selected === index }"
-          :style="{ left: `${markLeft(mark.ply)}%`, top: markRaised(index) ? '2.8rem' : '0.3rem' }" :data-disciple-mark="index" @click="watch.selected = index">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
+          :style="{ left: `${markLeft(mark.ply)}%`, top: markRaised(index) ? '2.8rem' : '0.3rem' }" :data-disciple-mark="index" @click.stop="selectMark(index)">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
       </div>
+    </section>
+
+    <!-- 弟子の棋譜帳(33-4)。観戦した対局を、印と答えとAIの検討つきで見返す。 -->
+    <section v-if="bookOpen" class="disciple__panel disciple__skills disciple__book" data-disciple-book>
+      <h4>{{ view?.name }}の棋譜帳<button type="button" class="disciple__x" aria-label="閉じる" @click="bookOpen = false">×</button></h4>
+      <ul>
+        <li v-for="game in bookGames" :key="game.id">
+          <button type="button" class="disciple__book-row" :data-disciple-book-game="game.id" @click="openBookGame(game)">
+            <span class="disciple__star" :class="game.win ? 'disciple__star--win' : 'disciple__star--loss'">{{ game.win ? '○' : '●' }}</span>
+            <span><b>{{ game.label }}</b><small>対 {{ game.opponent }}　{{ game.plies }}手　{{ game.when }}</small></span>
+          </button>
+        </li>
+      </ul>
     </section>
 
     <!-- 一門の名簿(29章) -->
@@ -394,6 +440,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch 
 import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
+import { aiHint, addBookGame, bookEntry, bookList, reviewRows } from "./core/disciple-review.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
@@ -416,7 +463,7 @@ const props = defineProps({
   /** 場面の地の文の名前(師匠)。 */
   playerName: { type: String, default: "" },
 });
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; research: [request: { sfen: string; moves: string[]; ply: number; name?: string }] }>();
 
 const MOOD_LABELS = ["絶不調", "不調", "ふつう", "好調", "絶好調"];
 const APTITUDE_SHORT: Record<string, string> = { static: "対居", ranging: "対振", aifuri: "相振", kakugawari: "角換", fast: "早指", long: "長時間" };
@@ -630,6 +677,11 @@ type Watch = {
   phase: "playing" | "end" | "result" | "review";
   endCard: { stamp: string; line: string } | null;
   day: ReturnType<typeof dayResultView> | null;
+  /** live=観戦した直後、book=棋譜帳から開いた(答えは入れない。33-4)。 */
+  mode: "live" | "book";
+  /** 検討の盤の手数(はじめから何手指した局面か)。 */
+  upto: number;
+  endReason: string;
 };
 const watch = ref<Watch | null>(null);
 /** 観戦の番号(やめたり次の観戦を始めたりしたら変わる。古い本局の知らせは捨てる)。 */
@@ -647,7 +699,7 @@ function startWatch() {
   }
   const current: Watch = {
     label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, entries: [], end: null, win: false, done: false,
-    marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null,
+    marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null, mode: "live", upto: 0, endReason: "",
   };
   watch.value = current;
   const ticket = ++watchTicket;
@@ -685,6 +737,9 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   current.endCard = endCardText({ win: current.win, reason: (end as { reason?: string })?.reason, plies: current.entries.length });
   current.day = dayResultView(state.value?.lastEvent);
   current.phase = "end";
+  current.upto = current.entries.length;
+  current.endReason = String((end as { reason?: string })?.reason ?? "resign");
+  saveToBook(current);
   watch.value = { ...current };
   resultSeen.value = true;
   say(growthLine(result) || (current.win ? "勝ちました。先生、見ててくれましたか" : "負けてしまいました……"));
@@ -701,7 +756,108 @@ function showDayResult() {
   if (watch.value?.phase === "end") watch.value = { ...watch.value, phase: "result" };
 }
 function startReview() {
-  if (watch.value) watch.value = { ...watch.value, phase: "review" };
+  const current = watch.value;
+  if (!current) return;
+  // 答える印があれば見立てのタブ、なければ棋譜のタブから。
+  watchTab.value = current.marks.length ? "marks" : "kifu";
+  watch.value = { ...current, phase: "review", selected: current.marks.length ? 0 : -1, upto: current.marks[0]?.ply ?? current.entries.length };
+}
+
+// ---- 検討の盤(33-4)。1手ずつ・手の一覧・グラフで飛ぶ・AIの検討・研究で開く・棋譜帳。
+const watchTab = ref<"kifu" | "marks">("kifu");
+const moveListEl = ref<HTMLElement | null>(null);
+/** 手の一覧(終局したら作る)。 */
+const watchRows = computed(() => (watch.value?.done ? reviewRows(watch.value.entries, watch.value.side) : []));
+const markPlies = computed(() => new Set((watch.value?.marks ?? []).map((mark) => mark.ply)));
+/** その手が、まだ答えていない印か(答える前はAIの検討を見せない)。 */
+function unansweredMark(ply: number) {
+  const current = watch.value;
+  if (!current || current.mode === "book") return false;
+  const index = current.marks.findIndex((mark) => mark.ply === ply);
+  return index >= 0 && !current.guesses[index];
+}
+/** 今の局面のAIの検討: 次の手のAIの最善手(矢印)と、今の手のあとのAIの読み筋。 */
+const aiShown = computed(() => {
+  const current = watch.value;
+  if (!current || current.phase !== "review") return null;
+  const next = unansweredMark(current.upto + 1) ? null : aiHint(current.entries, current.upto + 1);
+  const now = current.upto > 0 && !unansweredMark(current.upto) ? aiHint(current.entries, current.upto) : null;
+  const shown = { nextBest: next?.bestText ?? "", nextUsi: next?.best ?? "", pv: now?.pvText ?? "" };
+  return shown.nextBest || shown.pv ? shown : null;
+});
+const aiLocked = computed(() => Boolean(watch.value?.phase === "review" && (unansweredMark(watch.value.upto) || unansweredMark(watch.value.upto + 1))));
+const watchArrows = computed(() => (aiShown.value?.nextUsi ? [{ usi: aiShown.value.nextUsi, guideKind: "ai" as const }] : []));
+function goPly(ply: number) {
+  const current = watch.value;
+  if (!current) return;
+  const upto = Math.max(0, Math.min(current.entries.length, Math.round(ply)));
+  watch.value = { ...current, upto, selected: current.marks.findIndex((mark) => mark.ply === upto) };
+  // 手の一覧だけを動かす(scrollIntoViewは画面ごと動いて、盤が見えなくなる)。
+  requestAnimationFrame(() => {
+    const list = moveListEl.value;
+    const row = list?.querySelector<HTMLElement>(".disciple__move--on");
+    if (list && row) list.scrollTop = Math.max(0, row.offsetTop - list.offsetTop - list.clientHeight / 2 + row.offsetHeight / 2);
+  });
+}
+function selectMark(index: number) {
+  const current = watch.value;
+  const mark = current?.marks[index];
+  if (!current || !mark) return;
+  if (current.phase !== "review") return;
+  watchTab.value = "marks";
+  goPly(mark.ply);
+}
+/** グラフの横の位置と手数(graphPointsと同じ物差し)。 */
+const graphTotal = () => Math.max(watch.value?.entries.length ?? 0, 60);
+const graphX = (ply: number) => (ply / graphTotal()) * 400;
+function onGraphClick(event: MouseEvent) {
+  if (watch.value?.phase !== "review") return;
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  goPly(((event.clientX - box.left) / box.width) * graphTotal());
+}
+let boardPointerX: number | null = null;
+function onBoardPointerDown(event: PointerEvent) {
+  boardPointerX = event.clientX;
+}
+/** 盤を左右にはらうと1手ずつ(右へはらうと戻る)。 */
+function onBoardPointerUp(event: PointerEvent) {
+  if (boardPointerX === null || watch.value?.phase !== "review") return;
+  const dx = event.clientX - boardPointerX;
+  boardPointerX = null;
+  if (Math.abs(dx) >= 40) goPly(watch.value.upto + (dx < 0 ? 1 : -1));
+}
+function onWatchKey(event: KeyboardEvent) {
+  if (watch.value?.phase !== "review" || sceneData.value) return;
+  if (event.key === "ArrowLeft") goPly(watch.value.upto - 1);
+  else if (event.key === "ArrowRight") goPly(watch.value.upto + 1);
+  else return;
+  event.preventDefault();
+}
+onMounted(() => window.addEventListener("keydown", onWatchKey));
+onBeforeUnmount(() => window.removeEventListener("keydown", onWatchKey));
+/** 研究モードで開く(好きな局面を読ませたり、別の手を試したりできる)。 */
+function openResearch() {
+  const current = watch.value;
+  if (!current) return;
+  emit("research", { sfen: STANDARD_SFEN, moves: current.entries.map((entry) => entry.move), ply: current.upto, name: `${view.value?.name ?? ""} 対 ${current.opponent.name}` });
+}
+/** 棋譜帳に残す(答えを入れたら、答えつきで入れ替える)。 */
+function saveToBook(current: Watch) {
+  if (!state.value || current.mode === "book" || !current.entries.length) return;
+  const entry = bookEntry({ ...current, endReason: current.endReason }, { turn: Number(state.value.turn) || 0, when: view.value?.calendar?.label ?? "" });
+  commit(addBookGame(structuredClone(state.value), entry));
+}
+const bookOpen = ref(false);
+const bookGames = computed(() => bookList(state.value));
+function openBookGame(game: ReturnType<typeof bookList>[number]) {
+  bookOpen.value = false;
+  watchTab.value = "kifu";
+  watch.value = {
+    label: game.label, side: game.side === "white" ? "white" : "black", opponent: { name: game.opponent, level: 0 }, plan: null, charm: null,
+    entries: game.entries.map((entry: { move: string; eval: number; best?: string; pv?: string }) => ({ ...entry, loss: 0 })), end: { reason: game.endReason }, win: game.win, done: true,
+    marks: game.marks, guesses: game.guesses.length ? game.guesses : game.marks.map(() => null), selected: -1, error: "",
+    phase: "review", endCard: null, day: null, mode: "book", upto: game.plies, endReason: game.endReason,
+  };
 }
 const guessOf = (index: number) => watch.value?.guesses[index] ?? null;
 const answeredCount = computed(() => watch.value?.guesses.filter(Boolean).length ?? 0);
@@ -714,7 +870,7 @@ function guess(id: string) {
   const nextIndex = guesses.findIndex((value) => !value);
   watch.value = { ...watch.value, guesses, selected: watch.value.selected };
   if (nextIndex >= 0) window.setTimeout(() => {
-    if (watch.value && watch.value.guesses === guesses) watch.value = { ...watch.value, selected: nextIndex };
+    if (watch.value && watch.value.guesses === guesses) selectMark(nextIndex);
   }, 1400);
 }
 function closeWatch() {
@@ -729,6 +885,8 @@ function closeWatch() {
   }
   watchTicket += 1;
   watch.value = null;
+  if (current.mode === "book") return;
+  if (current.phase === "review" && current.guesses.some(Boolean)) saveToBook(current);
   if (current.phase === "review" && current.marks.length && current.guesses.some(Boolean)) {
     const { state: next, revealed, results } = applyFindings(state.value, current.marks, current.guesses);
     commit(next);
@@ -737,7 +895,7 @@ function closeWatch() {
   }
 }
 /** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
-const watchUpto = computed(() => (selectedMark.value ? selectedMark.value.ply : watch.value?.entries.length ?? 0));
+const watchUpto = computed(() => (watch.value?.phase === "review" ? watch.value.upto : watch.value?.entries.length ?? 0));
 const watchSfen = computed(() => sfenAfter((watch.value?.entries ?? []).slice(0, watchUpto.value).map((entry) => entry.move)) ?? STANDARD_SFEN);
 const watchLastMove = computed(() => (watchUpto.value > 0 ? watch.value?.entries[watchUpto.value - 1]?.move ?? "" : ""));
 // 盤の枠を、描かれる盤と同じ大きさにする(TeamPeekSheet.vueと同じ方法)。
@@ -793,6 +951,10 @@ function goBack() {
   }
   if (ichimonOpen.value) {
     ichimonOpen.value = false;
+    return true;
+  }
+  if (bookOpen.value) {
+    bookOpen.value = false;
     return true;
   }
   if (watch.value) {
@@ -1008,14 +1170,41 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__go { position: absolute; z-index: 5; right: 0.6rem; bottom: 0.6rem; min-width: 12rem; min-height: 3.4rem; border: 0; border-radius: 1rem; background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 900; box-shadow: 0 4px 0 #b86f22; }
 
 /* 観戦と見立て(24章) */
-.shogi-game .disciple__watch { position: absolute; inset: 0; z-index: 8; display: grid; grid-template-columns: minmax(0, 1fr) 20rem; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0.5rem; padding: 0.6rem; background: #1c2630; color: #fff; }
-.shogi-game .disciple__watch-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; }
+.shogi-game .disciple__watch { position: absolute; inset: 0; z-index: 8; display: grid; grid-template-columns: minmax(0, 1fr) 22rem; grid-template-rows: auto minmax(0, 1fr) auto auto; grid-template-areas: "head head" "board side" "nav side" "graph graph"; gap: 0.5rem; padding: 0.6rem; background: #1c2630; color: #fff; }
+.shogi-game .disciple__watch-nav { grid-area: nav; display: flex; align-items: center; justify-content: center; gap: 0.35rem; }
+.shogi-game .disciple .disciple__watch-nav button { width: 3.2rem; min-height: 2.75rem; border: 0; border-radius: 0.6rem; background: #2f3e4c; color: #fff; font-size: 1rem; }
+.shogi-game .disciple__watch-nav span { min-width: 8.5em; text-align: center; font-weight: 800; font-size: 0.85rem; }
+.shogi-game .disciple .disciple__watch-research { margin-left: auto; }
+.shogi-game .disciple .disciple__watch-research + .disciple__watch-close { margin-left: 0; }
+.shogi-game .disciple__watch-tabs { display: none; grid-template-columns: 1fr 1fr; gap: 0.3rem; }
+.shogi-game .disciple .disciple__watch-tabs button { min-height: 2.6rem; border: 0; border-radius: 0.6rem; background: #263442; color: #9fb1bd; font-weight: 800; }
+.shogi-game .disciple .disciple__watch-tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.shogi-game .disciple__pane--marks { display: grid; gap: 0.5rem; }
+.shogi-game .disciple__ai { margin: 0; padding: 0.45rem 0.6rem; border-radius: 0.7rem; background: #eef3fb; color: #2a4f86; font-size: 0.8rem; line-height: 1.5; }
+.shogi-game .disciple__ai b { margin-right: 0.4rem; }
+.shogi-game .disciple__ai--locked { background: #2a3746; color: #b8c6d2; }
+.shogi-game .disciple__moves { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; overflow-y: auto; min-height: 6rem; }
+.shogi-game .disciple .disciple__moves button { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto 0.9em; align-items: center; gap: 0.4rem; width: 100%; min-height: 2.1rem; padding: 0 0.55rem; border: 0; border-radius: 0.5rem; background: #263442; color: #fff; font-size: 0.85rem; text-align: left; }
+.shogi-game .disciple .disciple__move--mine button { background: #2c3c4c; }
+.shogi-game .disciple .disciple__move--on button { outline: 2px solid var(--accent); background: #3a4b5c; }
+.shogi-game .disciple__moves i { color: #9fb1bd; font-style: normal; font-size: 0.72rem; }
+.shogi-game .disciple__moves em { font-style: normal; font-size: 0.72rem; color: #cfd8de; }
+.shogi-game .disciple__tone--good { color: #7fd3a3 !important; }
+.shogi-game .disciple__tone--bad { color: #ff9b8f !important; }
+.shogi-game .disciple__dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; }
+.shogi-game .disciple__dot--red { background: #e2457a; }
+.shogi-game .disciple .disciple__book-row { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: 0.5rem; width: 100%; padding: 0.45rem; border: 0; border-radius: 0.6rem; background: transparent; color: var(--ink); text-align: left; }
+.shogi-game .disciple__book-row small { display: block; color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple__watch-head { grid-area: head; display: flex; align-items: center; gap: 0.6rem; }
 .shogi-game .disciple__watch-head small { color: #b8c6d2; }
 .shogi-game .disciple .disciple__watch-close { margin-left: auto; min-height: 2.6rem; padding: 0 0.9rem; border: 1px solid #50606e; border-radius: 0.6rem; background: transparent; color: #fff; font-weight: 800; }
-.shogi-game .disciple__watch-board { position: relative; z-index: 0; isolation: isolate; display: grid; place-items: center; min-height: 0; }
+.shogi-game .disciple__watch-board { grid-area: board; position: relative; z-index: 0; isolation: isolate; display: grid; place-items: center; min-height: 0; }
 .shogi-game .disciple__board-box { position: relative; }
 .shogi-game .disciple__board-box .shogi-match-theme-controls { display: none; }
-.shogi-game .disciple__watch-side { display: grid; align-content: start; gap: 0.5rem; min-height: 0; overflow-y: auto; }
+.shogi-game .disciple__watch-side { grid-area: side; display: flex; flex-direction: column; gap: 0.5rem; min-height: 0; overflow: hidden; }
+.shogi-game .disciple__watch-side > * { flex: none; }
+.shogi-game .disciple__watch-side > .disciple__moves { flex: 1 1 0; }
+.shogi-game .disciple__pane--marks { max-height: 60%; overflow-y: auto; }
 .shogi-game .disciple__ask { margin: 0; padding: 0.6rem; border-radius: 0.9rem; background: #fffaf0; color: var(--ink); font-size: 0.9rem; }
 .shogi-game .disciple__ask small { display: block; color: var(--muted); font-size: 0.74rem; }
 .shogi-game .disciple__clues { display: flex; flex-wrap: wrap; gap: 0.25rem; margin: 0.35rem 0; }
@@ -1025,7 +1214,7 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__opt--right, .shogi-game .disciple .disciple__opt--right:disabled { border-color: #3c9a4c; background: #e9f6ea; color: var(--ink); opacity: 1; }
 .shogi-game .disciple .disciple__opt--wrong, .shogi-game .disciple .disciple__opt--wrong:disabled { border-color: #d8655b; background: #fbe9e7; color: var(--ink); opacity: 1; }
 .shogi-game .disciple__found { margin: 0.4rem 0 0; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
-.shogi-game .disciple__graph { grid-column: 1 / -1; position: relative; height: 7rem; border-radius: 0.8rem; background: #fff; overflow: hidden; }
+.shogi-game .disciple__graph { grid-area: graph; cursor: pointer; position: relative; height: 7rem; border-radius: 0.8rem; background: #fff; overflow: hidden; }
 .shogi-game .disciple__graph svg { width: 100%; height: 100%; display: block; }
 .shogi-game .disciple .disciple__mark { position: absolute; top: 0.3rem; transform: translateX(-50%); min-height: 2.2rem; padding: 0 0.5rem; border: 0; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.7rem; font-weight: 900; }
 .shogi-game .disciple .disciple__mark--done { background: #3c9a4c; }
@@ -1082,9 +1271,17 @@ defineExpose({ goBack });
   .shogi-game .disciple__intro { display: none; }
   .shogi-game .disciple__pick-cards { top: 3.6rem; right: 0.4rem; width: 9.4rem; }
   .shogi-game .disciple .disciple__go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
-  .shogi-game .disciple__watch { grid-template-columns: 1fr; grid-template-rows: auto auto auto minmax(0, 1fr); padding: 0.4rem; overflow-y: auto; }
+  .shogi-game .disciple__watch { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto minmax(0, 1fr); grid-template-areas: "graph" "head" "board" "nav" "side"; padding: 0.4rem; overflow-y: auto; }
+  /* 検討の段は、盤と1手ずつのボタンを動かさず、手の一覧と見立ての札だけをその中で動かす(33-4)。 */
+  .shogi-game .disciple__watch--review { overflow: hidden; }
+  .shogi-game .disciple__watch--review .disciple__watch-board { height: min(46vh, calc((100vw - 0.8rem) * 1.285)); }
+  .shogi-game .disciple__watch-side > .disciple__moves { flex: 1 1 0; }
+  .shogi-game .disciple__pane--marks { max-height: none; flex: 1 1 0; min-height: 0; }
+  .shogi-game .disciple__watch-tabs { display: grid; }
+  .shogi-game .disciple__pane:not(.disciple__pane--on) { display: none; }
+  .shogi-game .disciple__moves { overflow-y: auto; }
   .shogi-game .disciple__watch-head small { display: none; }
   .shogi-game .disciple__watch-board { height: min(64vh, calc((100vw - 0.8rem) * 1.285)); }
-  .shogi-game .disciple__graph { grid-column: auto; height: 5.5rem; order: -1; }
+  .shogi-game .disciple__graph { height: 5.5rem; }
 }
 </style>
