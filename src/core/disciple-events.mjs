@@ -114,7 +114,7 @@ export const DISCIPLE_SCENES = Object.freeze({
     fits: Object.freeze({ promise: ['ao'], honest: ['tsumugi'], child: ['minato'] }),
   }),
   school: Object.freeze({
-    label: '学校の試験', script: 'disciple-school', variants: Object.freeze(['disciple-school', 'disciple-school-2', 'disciple-school-3']),
+    label: '学校の試験', script: 'disciple-school', variants: Object.freeze(['disciple-school', 'disciple-school-2', 'disciple-school-3']), max: 3,
     effects: Object.freeze({
       study: { stamina: 30, text: '試験の勉強に集中させた' },
       shogi: { stats: { reading: 14 }, mood: -1, text: '将棋の稽古を続けた' },
@@ -177,6 +177,28 @@ export const DISCIPLE_SCENES = Object.freeze({
     }),
     fits: Object.freeze({ calm: ['minato'], push: ['ao'], study: ['tsumugi'] }),
   }),
+  // 羽音の一門(30章)。勝った日・負けた日の場面は、見た回数で台本を替え、台本の数まで(max)。
+  'rival-first': Object.freeze({
+    label: '羽音の一門', script: 'disciple-rival-first',
+    effects: Object.freeze({
+      respect: { mood: 1, text: '羽音と、互いの弟子をたたえた' },
+      rivalry: { stats: { reading: 12 }, text: '羽音に、次も負けないと言った' },
+      study: { aim: 1.25, text: '羽音の弟子のことを考えた' },
+    }),
+    fits: Object.freeze({ respect: ['minato'], rivalry: ['ao'], study: ['tsumugi'] }),
+  }),
+  'rival-win': Object.freeze({
+    label: '羽音の弟子に勝った日', script: 'disciple-rival-win-1', variants: Object.freeze(['disciple-rival-win-1', 'disciple-rival-win-2']), max: 2,
+    effects: Object.freeze({}), fits: Object.freeze({}),
+  }),
+  'rival-lose': Object.freeze({
+    label: '羽音の弟子に負けた日', script: 'disciple-rival-lose-1', variants: Object.freeze(['disciple-rival-lose-1', 'disciple-rival-lose-2']), max: 2,
+    effects: Object.freeze({
+      rematch: { aim: 1.5, text: '次の一局のために、一緒に並べ直した' },
+      rest: { mood: 1, stamina: 10, text: '焦らせずに休ませた' },
+    }),
+    fits: Object.freeze({ rematch: ['tsumugi', 'ao'], rest: ['minato'] }),
+  }),
   pro: Object.freeze({ label: '四段昇段', script: 'disciple-pro', effects: Object.freeze({}), fits: Object.freeze({}) }),
   retired: Object.freeze({ label: '退会の日', script: 'disciple-retired', effects: Object.freeze({}), fits: Object.freeze({}) }),
 });
@@ -200,6 +222,8 @@ export function queueScene(state, key) {
   if (!DISCIPLE_SCENES[key]) return false;
   state.sceneQueue ??= [];
   if (state.sceneQueue.includes(key)) return false;
+  const max = /** @type {any} */ (DISCIPLE_SCENES[key]).max;
+  if (max && seenOf(state, key).count >= max) return false;
   state.sceneQueue.push(key);
   return true;
 }
@@ -264,7 +288,9 @@ export function pendingScene(state) {
   if (!def) return null;
   const variants = /** @type {readonly string[] | undefined} */ (/** @type {any} */ (def).variants);
   const script = variants ? variants[Math.min(seenOf(state, key).count, variants.length - 1)] : def.script;
-  return { key, label: def.label, script: script.replace('{disciple}', state.discipleId), vars: { disciple: state.name } };
+  const rival = state.rival?.name ?? '';
+  const result = state.rival?.last === 'win' ? `${state.name}の勝ち` : `${rival}の勝ち`;
+  return { key, label: def.label, script: script.replace('{disciple}', state.discipleId), vars: { disciple: state.name, rival, result } };
 }
 
 /**

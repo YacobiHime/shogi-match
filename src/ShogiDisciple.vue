@@ -110,6 +110,7 @@
           <span class="disciple__chip disciple__chip--style">{{ PLAY_STYLES[view.style]?.label }}</span>
           <span v-for="id in view.skills" :key="id" class="disciple__chip">{{ skillById(id)?.name }}{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span>
           <span class="disciple__chip disciple__chip--hidden">弱点 {{ view.weakness ? view.weakness : '？' }}</span>
+          <span v-if="view.rival" class="disciple__chip disciple__chip--rival" data-disciple-rival :title="`羽音の弟子（${view.rival.where}）`">ライバル {{ view.rival.name }} {{ view.rival.wins }}勝{{ view.rival.losses }}敗</span>
           <button type="button" class="disciple__chip disciple__chip--btn" data-disciple-skills-open @click="skillsOpen = !skillsOpen">スキルの条件</button>
         </div>
       </aside>
@@ -889,6 +890,8 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__team-chip[aria-pressed="true"], .shogi-game .disciple .disciple__team-chip[aria-pressed="true"]:not(:disabled):hover { border-color: var(--accent); background: #fff3e2; color: var(--ink); }
 .shogi-game .disciple .disciple__team-chip:disabled { opacity: 0.5; }
 .shogi-game .disciple__ichimon .disciple__ichimon-stats { grid-column: 1 / -1; }
+/* 羽音の一門(30章) */
+.shogi-game .disciple__chip--rival { background: #e4dcf3; color: #4b2f7a; }
 /* 奨励会(28章) */
 .shogi-game .disciple__stakes { margin: 0.1rem 0 0.3rem; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
 /* 弟子の記録(27章) */

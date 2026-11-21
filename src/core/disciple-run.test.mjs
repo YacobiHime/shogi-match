@@ -180,8 +180,11 @@ describe('奨励会へ続く育成(28章)', () => {
     for (let i = 0; i < 6 && turnKind(s) !== 'reikai'; i += 1) s = turnKind(s) === 'words' ? chooseWords(s, 'quiet').state : chooseAction(s, { kind: 'rest' }).state;
     expect(turnKind(s)).toBe('reikai');
     const opponent = eventOpponent(s);
-    expect(opponent.level).toBeGreaterThan(SHOREIKAI_BASE_LEVEL - 3);
-    expect(opponent.level).toBeLessThan(SHOREIKAI_BASE_LEVEL + 4);
+    // 羽音の弟子(30章)は弟子の強さに合わせるので、ほかの6級の相手だけ物差しを見る。
+    if (!opponent.rival) {
+      expect(opponent.level).toBeGreaterThan(SHOREIKAI_BASE_LEVEL - 3);
+      expect(opponent.level).toBeLessThan(SHOREIKAI_BASE_LEVEL + 4);
+    }
     expect(shoreikaiOpponentLevel({ rating: 1320 })).toBeCloseTo(SHOREIKAI_BASE_LEVEL + 11.5 / 2, 5);
     // CPUの強さの上限はLv49(AGENTS.md)。
     expect(shoreikaiOpponentLevel({ rating: 1600 })).toBe(49);
