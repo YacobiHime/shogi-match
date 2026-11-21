@@ -3783,7 +3783,7 @@
  * 対局準備の強さのシートの「棋力を測る」から開くため(docs/first-play-design.mdの13章)。
  */
 .shogi-game__confirm--measure { z-index: 115; }
-.shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home):not(.shogi-skill-test):not(.shogi-story) { display: none !important; }
+.shogi-game--home > :not(.shogi-home):not(.shogi-dex):not(.shogi-game__confirm--over-home):not(.shogi-skill-test):not(.shogi-story):not(.disciple) { display: none !important; }
 .shogi-home {
   position: absolute;
   inset: 0;
@@ -4567,7 +4567,7 @@
 }
 .shogi-title__tiles--learn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* あそぶの行は、自由対局・大会・終盤戦と物語の4つ。 */
-.shogi-title__tiles--play { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.shogi-title__tiles--play { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 /* 読み込めなかったときの一言を読み上げる欄。見た目はやこび姫の吹き出しが受け持つ。 */
 .shogi-title__live {
   position: absolute;

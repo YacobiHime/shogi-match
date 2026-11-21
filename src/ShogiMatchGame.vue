@@ -328,6 +328,20 @@
                 </svg>
                 <span class="shogi-title__label">物語</span>
               </button>
+              <!-- 師匠の1年(docs/disciple-mode-design.md)。弟子をとって育てる。将棋が得意でなくても遊べる。 -->
+              <button type="button" class="shogi-title__tile" data-disciple-tile @click="openDisciple">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="3" y="2" width="4" height="4" />
+                    <rect x="2" y="7" width="6" height="7" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="10" y="5" width="3" height="3" />
+                    <rect x="9" y="9" width="5" height="5" />
+                  </g>
+                </svg>
+                <span class="shogi-title__label">師匠の1年</span>
+              </button>
             </div>
             <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
           </section>
@@ -457,6 +471,8 @@
       @close="closeResearch"
       @start-match="startResearchMatch"
     />
+    <!-- 師匠の1年(docs/disciple-mode-design.md)。 -->
+    <ShogiDisciple v-if="discipleOpen" ref="discipleView" :asset-base-url="assetBaseUrl" @close="discipleOpen = false" />
     <!-- 物語のストーリー選択(docs/story-mode-design.md)。 -->
     <ShogiStory
       :player-profile="playerProfile"
@@ -3464,6 +3480,7 @@ const ShogiTutorial = lazyScreen(loadTutorial);
 const ShogiProblemSet = lazyScreen(loadProblemSet);
 const ShogiBrainTraining = lazyScreen(loadBrainTraining);
 const ShogiStory = lazyScreen(() => import("./ShogiStory.vue"));
+const ShogiDisciple = lazyScreen(() => import("./ShogiDisciple.vue"));
 const ShogiResearch = lazyScreen(() => import("./ShogiResearch.vue"));
 const SaveTransferSheet = lazyScreen(() => import("./SaveTransferSheet.vue"));
 const YakobiNote = lazyScreen(loadYakobiNote);
@@ -3814,6 +3831,12 @@ const storyOpen = ref(false);
 const storyView = ref<{ goBack: () => boolean } | null>(null);
 function openStory() {
   storyOpen.value = true;
+}
+// ---- 師匠の1年(docs/disciple-mode-design.md)。ホームの「師匠の1年」から開く。
+const discipleOpen = ref(false);
+const discipleView = ref<{ goBack: () => boolean } | null>(null);
+function openDisciple() {
+  discipleOpen.value = true;
 }
 /**
  * 団体戦で見たノベルの場面を、物語のサブの話として開く(docs/story-mode-design.mdの3章の7)。
@@ -9881,7 +9904,7 @@ function closeSaveTransfer() {
 let cloudChoicePending = false;
 function canApplyCloudSave() {
   return homeOpen.value && !nameDialogOpen.value && !tournamentOpen.value && !tutorialOpen.value
-    && !problemSetOpen.value && !brainTrainingOpen.value && !storyOpen.value
+    && !problemSetOpen.value && !brainTrainingOpen.value && !storyOpen.value && !discipleOpen.value
     && !yakobiNoteOpen.value && !dexOpen.value && !referenceDexKind.value && !exhibitResetOpen.value;
 }
 function openCloudChoice() {
@@ -10406,6 +10429,9 @@ function navigateBack() {
   } else if (brainTrainingOpen.value) {
     if (brainTrainingView.value) brainTrainingView.value.goBack();
     else brainTrainingOpen.value = false;
+  } else if (discipleOpen.value) {
+    // 師匠の1年は、稽古の札を開いていれば閉じ、なければホームへ。
+    if (!discipleView.value?.goBack()) discipleOpen.value = false;
   } else if (storyOpen.value) {
     // 話を読んでいるときは話(のログ・設定)を閉じ、一覧ならホームへ。
     if (!storyView.value?.goBack()) storyOpen.value = false;
@@ -10445,7 +10471,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || discipleOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

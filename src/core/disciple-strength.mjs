@@ -442,7 +442,7 @@ export const TRAININGS = Object.freeze([
 export const trainingById = (id) => TRAININGS.find((training) => training.id === id) ?? null;
 
 /** 伸びの初期値(主に・少し)と、稽古の段ごとの増し。 */
-export const GAIN = Object.freeze({ main: 16, sub: 6, perLevel: 0.1, maxLevel: 5 });
+export const GAIN = Object.freeze({ main: 28, sub: 10, perLevel: 0.1, maxLevel: 5 });
 /** やる気(-2〜2)の倍率。 */
 export const MOOD_SCALE = Object.freeze({ '-2': 0.8, '-1': 0.9, 0: 1, 1: 1.1, 2: 1.2 });
 

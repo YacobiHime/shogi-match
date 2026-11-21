@@ -1050,7 +1050,15 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/import\("\.\/core\/story-mode\.mjs"\)/);
     expect(source).toMatch(/unlockStorySceneLater\(format === "school" \? "invite-school" : "invite-pro"\);/);
     expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ loadNotice \}\}<\/p>/);
-    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
+    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(5, minmax\(0, 1fr\)\); \}/);
+  });
+
+  it('ホームのあそぶの行の師匠の1年は、押すと弟子を育てる画面を開く(docs/disciple-mode-design.mdの23章)', () => {
+    expect(source).toMatch(/class="shogi-title__tile" data-disciple-tile @click="openDisciple"/);
+    expect(source).toMatch(/const ShogiDisciple = lazyScreen\(\(\) => import\("\.\/ShogiDisciple\.vue"\)\);/);
+    expect(source).toMatch(/\} else if \(discipleOpen\.value\) \{\s*\/\/[^\n]*\n\s*if \(!discipleView\.value\?\.goBack\(\)\) discipleOpen\.value = false;/);
+    expect(source).toMatch(/storyOpen\.value \|\| discipleOpen\.value \|\|/);
+    expect(source).toMatch(/:not\(\.shogi-story\):not\(\.disciple\)/);
   });
 
   it('問題集は解く時間を測り、正解で止めて自己ベストを残す(docs/problem-set-timing-design.md)', () => {

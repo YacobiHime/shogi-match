@@ -1,0 +1,440 @@
+<template>
+  <!--
+    師匠の1年(docs/disciple-mode-design.md)。弟子を選び、半月ごとに予定を選んで育て、研修会の入会試験と例会を弟子が指す。
+    立ち絵を真ん中に大きく置き、ターン・目標・能力・やる気と体力・予定のボタンをその上に重ねる(18章。弟子の絵はまだないので百花の立ち絵で代用)。
+    段階1(23章): 予定は稽古・休む・出かけるの3つ。観戦の見立ては段階2で足す(結果だけ見る)。
+  -->
+  <div class="disciple" role="dialog" aria-modal="true" aria-label="師匠の1年" data-disciple>
+    <div class="disciple__room" aria-hidden="true"></div>
+    <div class="disciple__figure" :class="{ 'disciple__figure--bounce': bounce }" aria-hidden="true">
+      <img :src="portrait" alt="" draggable="false">
+    </div>
+
+    <!-- 弟子を選ぶ -->
+    <template v-if="!state">
+      <div class="disciple__top disciple__top--pick">
+        <button type="button" class="disciple__back" data-disciple-back @click="emit('close')">← 戻る</button>
+        <b class="disciple__title">師匠の1年　弟子を選ぶ</b>
+      </div>
+      <section class="disciple__panel disciple__pick-info" :aria-label="picked.name">
+        <h2>{{ picked.name }}<small>（仮）</small></h2>
+        <p class="disciple__muted">{{ picked.grade }}・{{ picked.age }}歳・{{ PLAY_STYLES[picked.style]?.label }}</p>
+        <p class="disciple__intro">{{ picked.intro }}</p>
+        <dl class="disciple__dl">
+          <template v-for="stat in pickedStats" :key="stat.key">
+            <dt>{{ stat.label }}</dt><dd><span class="disciple__rank" :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</span>{{ stat.value }}</dd>
+          </template>
+          <dt>スキル</dt><dd>{{ picked.skills.map((id) => skillById(id)?.name).join('・') }}</dd>
+          <dt>難しさ</dt><dd class="disciple__diff">{{ '★'.repeat(picked.difficulty) }}{{ '☆'.repeat(3 - picked.difficulty) }}</dd>
+        </dl>
+      </section>
+      <div class="disciple__pick-cards" role="radiogroup" aria-label="弟子の候補">
+        <button v-for="candidate in DISCIPLES" :key="candidate.id" type="button" class="disciple__pick-card" role="radio"
+          :aria-checked="candidate.id === pickedId" :data-disciple-pick="candidate.id" @click="pickedId = candidate.id">
+          <b>{{ candidate.name }}</b><small>{{ candidate.grade }}・{{ PLAY_STYLES[candidate.style]?.label }}</small>
+        </button>
+      </div>
+      <button type="button" class="disciple__go" data-disciple-start @click="start">この子を弟子にする</button>
+    </template>
+
+    <template v-else-if="view">
+      <!-- 上の帯 -->
+      <header class="disciple__top">
+        <div class="disciple__turn" :class="{ 'disciple__turn--big': view.big && !view.end }">
+          <b>{{ view.calendar.label }}</b><small>{{ view.calendar.sub }}</small>
+        </div>
+        <div class="disciple__goal">
+          <div><small>次の目標</small><b>{{ view.goal.text }}</b></div>
+          <div v-if="view.goal.left" class="disciple__left">あと<b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
+        </div>
+        <button type="button" class="disciple__menu-btn" aria-label="戻る" data-disciple-back @click="emit('close')">←</button>
+      </header>
+
+      <!-- 左の能力 -->
+      <aside class="disciple__panel disciple__stats" aria-label="能力">
+        <div class="disciple__who"><b>{{ view.name }}</b><small>{{ view.kenshukai ? `研修会 ${view.kenshukai.classLabel}` : '研修会前' }}</small></div>
+        <div v-for="stat in view.stats" :key="stat.key" class="disciple__stat" :data-disciple-stat="stat.key">
+          <span class="disciple__stat-name">{{ stat.label }}</span>
+          <span class="disciple__rank" :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</span>
+          <span class="disciple__bar"><i :style="{ width: `${Math.min(100, stat.value / 12)}%` }"></i></span>
+          <span class="disciple__num">
+            <template v-if="previewGains[stat.key]"><b class="disciple__up">+{{ previewGains[stat.key] }}</b></template>
+            <template v-else>{{ stat.value }}</template>
+          </span>
+          <span v-if="stat.aimed" class="disciple__aim" title="狙い目">狙</span>
+        </div>
+        <div class="disciple__chips">
+          <span class="disciple__chip disciple__chip--style">{{ PLAY_STYLES[view.style]?.label }}</span>
+          <span v-for="id in view.skills" :key="id" class="disciple__chip">{{ skillById(id)?.name }}{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span>
+          <span class="disciple__chip disciple__chip--hidden">弱点 {{ view.weakness ? view.weakness : '？' }}</span>
+        </div>
+      </aside>
+
+      <!-- 右のやる気・体力・適性 -->
+      <aside class="disciple__panel disciple__mood" aria-label="調子">
+        <div><small>やる気</small><b class="disciple__mood-face">{{ MOOD_LABELS[view.mood + 2] }}</b></div>
+        <div><small>体力 {{ view.stamina }}/100</small><span class="disciple__hp"><i :style="{ width: `${view.stamina}%` }"></i></span></div>
+        <div>
+          <small>適性</small>
+          <div class="disciple__apt">
+            <span v-for="key in APTITUDE_KEYS" :key="key">{{ APTITUDE_SHORT[key] }}<b>{{ view.aptitudes[key].rank }}</b></span>
+          </div>
+        </div>
+      </aside>
+
+      <p v-if="line" class="disciple__say" data-disciple-say>{{ line }}</p>
+
+      <!-- 終わり -->
+      <section v-if="view.end" class="disciple__panel disciple__sheet" data-disciple-end>
+        <div class="disciple__stamp">評価 {{ view.end.rank }}</div>
+        <p>{{ view.end.text }}</p>
+        <p class="disciple__muted">{{ view.calendar.label }}・{{ view.end.turn }}ターン</p>
+        <div class="disciple__row">
+          <button type="button" class="disciple__btn" @click="emit('close')">ホームへ</button>
+          <button type="button" class="disciple__btn disciple__btn--main" data-disciple-again @click="again">もう一度弟子をとる</button>
+        </div>
+      </section>
+
+      <!-- 対局のあとの言葉 -->
+      <section v-else-if="view.kind === 'words'" class="disciple__panel disciple__sheet" data-disciple-words>
+        <h3>{{ view.lastEvent?.label }}　{{ view.lastEvent?.wins }}勝{{ view.lastEvent?.losses }}敗</h3>
+        <ul class="disciple__games">
+          <li v-for="(game, index) in view.lastEvent?.games ?? []" :key="index">
+            <span class="disciple__star" :class="game.win ? 'disciple__star--win' : 'disciple__star--loss'">{{ game.win ? '○' : '●' }}</span>
+            <span>{{ Number(index) + 1 }}局目　対 {{ game.name }}</span><small>勝つ見込み{{ Math.round(game.chance * 100) }}%</small>
+          </li>
+        </ul>
+        <p v-if="view.lastEvent?.events.length" class="disciple__events">{{ view.lastEvent.events.join('・') }}</p>
+        <h4>なんて声をかける？</h4>
+        <div class="disciple__choice">
+          <button v-for="word in WORDS" :key="word.id" type="button" class="disciple__opt" :data-disciple-word="word.id" @click="words(word.id)">
+            {{ word.label }}<small>{{ word.note }}</small>
+          </button>
+        </div>
+      </section>
+
+      <!-- 入会試験・例会 -->
+      <section v-else-if="view.kind === 'exam' || view.kind === 'reikai'" class="disciple__panel disciple__sheet" data-disciple-event>
+        <h3>{{ view.kind === 'exam' ? '研修会 入会試験' : '研修会の例会' }}<small v-if="view.big" class="disciple__bigtag">大一番</small></h3>
+        <p v-if="view.opponent" class="disciple__muted">相手：{{ view.opponent.name }}（{{ view.opponent.label }}）</p>
+        <template v-if="view.big">
+          <h4>序盤の方針</h4>
+          <div class="disciple__choice">
+            <button v-for="option in PLANS.opening" :key="option.id" type="button" class="disciple__opt" :aria-pressed="plan.opening === option.id"
+              :data-disciple-plan="option.id" @click="plan.opening = option.id">{{ option.label }}<small>{{ option.note }}</small></button>
+          </div>
+          <h4>終盤の構え</h4>
+          <div class="disciple__choice disciple__choice--two">
+            <button v-for="option in PLANS.ending" :key="option.id" type="button" class="disciple__opt" :aria-pressed="plan.ending === option.id"
+              :data-disciple-plan="option.id" @click="plan.ending = option.id">{{ option.label }}<small>{{ option.note }}</small></button>
+          </div>
+        </template>
+        <div class="disciple__row">
+          <button type="button" class="disciple__btn disciple__btn--main" data-disciple-play @click="play">
+            {{ view.big ? '作戦を授けて対局へ' : '例会へ送り出す' }}
+          </button>
+        </div>
+        <p class="disciple__muted disciple__note">観戦して弱点を見抜く遊びは、次の段階で足します。</p>
+      </section>
+
+      <!-- 稽古を選ぶ -->
+      <template v-else-if="training">
+        <section class="disciple__panel disciple__preview" data-disciple-preview>
+          <h4>{{ selected?.label }}<small>体力 −{{ selected?.stamina }}・失敗 {{ selected?.fail }}%</small></h4>
+          <div class="disciple__gains">
+            <div v-for="stat in view.stats" :key="stat.key" :class="{ 'disciple__gain--hot': (selected?.gains[stat.key] ?? 0) >= 15 }">
+              {{ stat.label }}<b>{{ selected?.gains[stat.key] ? `+${selected.gains[stat.key]}` : '—' }}</b>
+            </div>
+          </div>
+          <div v-if="selectedId === 'shisho'" class="disciple__choice disciple__choice--four">
+            <button v-for="stat in view.stats" :key="stat.key" type="button" class="disciple__opt" :aria-pressed="choice === stat.key"
+              @click="choice = stat.key">{{ stat.label }}</button>
+          </div>
+          <p v-if="selected?.aptitude" class="disciple__extra">{{ APTITUDE_LABELS[selected.aptitude] }}の適性 +1目盛り</p>
+          <p v-if="selected?.friends.length" class="disciple__extra">{{ selected.friends.map(friendName).join('・') }}が一緒（伸びが増える）</p>
+          <div class="disciple__row">
+            <button type="button" class="disciple__btn" @click="training = false">やめる</button>
+            <button type="button" class="disciple__btn disciple__btn--main" data-disciple-train-go @click="train">この稽古にする</button>
+          </div>
+        </section>
+        <nav class="disciple__dock disciple__dock--train" aria-label="稽古">
+          <button v-for="item in view.trainings" :key="item.id" type="button" class="disciple__cmd disciple__cmd--train"
+            :aria-pressed="item.id === selectedId" :data-disciple-train="item.id" @click="selectedId = item.id">
+            <small class="disciple__lv">Lv{{ item.level }}</small>
+            <span v-if="item.aimed" class="disciple__aimtag">狙い目</span>
+            <span v-if="item.friends.length" class="disciple__friend-dot">{{ item.friends.map(friendName).join('・') }}</span>
+            <b>{{ item.label }}</b><small :class="{ 'disciple__warn': item.fail >= 8 }">失敗 {{ item.fail }}%</small>
+          </button>
+        </nav>
+      </template>
+
+      <!-- 予定 -->
+      <nav v-else class="disciple__dock" aria-label="予定">
+        <button type="button" class="disciple__cmd disciple__cmd--main" data-disciple-action="train" @click="openTraining">稽古<small>能力を伸ばす</small></button>
+        <button type="button" class="disciple__cmd" data-disciple-action="rest" @click="act('rest')">休む<small>体力が戻る</small></button>
+        <button type="button" class="disciple__cmd" data-disciple-action="outing" @click="act('outing')">出かける<small>やる気が上がる</small></button>
+      </nav>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref, shallowRef } from "vue";
+import { APTITUDE_KEYS, APTITUDE_LABELS, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank } from "./core/disciple-strength.mjs";
+import {
+  FRIENDS, PLANS, WORDS, chooseAction, chooseWords, createDiscipleRun, discipleView, loadDiscipleRun, playEvent, saveDiscipleRun,
+} from "./core/disciple-run.mjs";
+
+const props = defineProps({
+  assetBaseUrl: { type: String, default: "." },
+});
+const emit = defineEmits<{ close: [] }>();
+
+const MOOD_LABELS = ["絶不調", "不調", "ふつう", "好調", "絶好調"];
+const APTITUDE_SHORT: Record<string, string> = { static: "対居", ranging: "対振", aifuri: "相振", kakugawari: "角換", fast: "早指", long: "長時間" };
+
+const storage = (): Storage | null => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const state = shallowRef<any>(null);
+onMounted(() => {
+  state.value = loadDiscipleRun(storage());
+});
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function commit(next: any) {
+  state.value = next;
+  saveDiscipleRun(storage(), next);
+}
+const view = computed(() => (state.value ? discipleView(state.value) : null));
+// 弟子の絵ができるまで、百花の立ち絵で代用する(19-9)。
+const portrait = computed(() => `${props.assetBaseUrl}/characters/sakurano-momoka.webp?v=1`);
+
+// ---- 弟子を選ぶ
+const pickedId = ref(DISCIPLES[0].id);
+const picked = computed(() => DISCIPLES.find((entry) => entry.id === pickedId.value) ?? DISCIPLES[0]);
+const pickedStats = computed(() => STAT_KEYS.map((key) => ({ key, label: STAT_LABELS[key], value: picked.value.stats[key], rank: statRank(picked.value.stats[key]) })));
+function start() {
+  commit(createDiscipleRun({ seed: Date.now() >>> 0, discipleId: pickedId.value }));
+  say("先生、今日からよろしくお願いします");
+}
+function again() {
+  commit(null);
+  line.value = "";
+}
+
+// ---- 弟子の一言と、跳ねる動き(D:3-1 無反応をなくす)
+const line = ref("");
+const bounce = ref(false);
+function say(text: string) {
+  line.value = text;
+  bounce.value = false;
+  requestAnimationFrame(() => {
+    bounce.value = true;
+  });
+}
+
+// ---- 予定
+const training = ref(false);
+const selectedId = ref("tsume");
+const choice = ref("steady");
+const selected = computed(() => view.value?.trainings.find((item) => item.id === selectedId.value) ?? null);
+const previewGains = computed<Record<string, number>>(() => (training.value && selected.value ? selected.value.gains : {}));
+const friendName = (id: string) => FRIENDS.find((friend) => friend.id === id)?.name ?? "";
+function openTraining() {
+  training.value = true;
+}
+function train() {
+  const { state: next, result } = chooseAction(state.value, { kind: "train", id: selectedId.value, choice: choice.value });
+  training.value = false;
+  commit(next);
+  say(result.failed ? "……ごめんなさい、今日は集中できませんでした" : result.text);
+}
+function act(kind: "rest" | "outing") {
+  const { state: next, result } = chooseAction(state.value, { kind });
+  commit(next);
+  say(result.text);
+}
+
+// ---- 入会試験・例会
+const plan = reactive({ opening: "own", ending: "wait" });
+function play() {
+  const big = Boolean(view.value?.big);
+  const { state: next, result } = playEvent(state.value, { plan: big ? { ...plan } : null });
+  commit(next);
+  say(result.losses === 0 ? `${result.wins}勝！ 先生、勝ちました` : result.wins === 0 ? "……全部負けてしまいました" : `${result.wins}勝${result.losses}敗でした`);
+}
+function words(id: string) {
+  const { state: next, text } = chooseWords(state.value, id);
+  commit(next);
+  say(text);
+}
+
+/** 戻る操作。稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
+function goBack() {
+  if (training.value) {
+    training.value = false;
+    return true;
+  }
+  return false;
+}
+defineExpose({ goBack });
+</script>
+
+<style>
+.shogi-game .disciple {
+  --ink: #1d2a36; --accent: #f1a54c; --accent-ink: #5a3410; --muted: #6b7a88; --panel: rgba(255, 252, 244, 0.93); --line: rgba(29, 42, 54, 0.14);
+  position: absolute; inset: 0; z-index: 6; overflow: hidden; color: var(--ink);
+  background: linear-gradient(180deg, #f6e7c9, #dcebf2 70%, #c9dccf);
+}
+.shogi-game .disciple__room { position: absolute; inset: 0; pointer-events: none; }
+.shogi-game .disciple__room::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+  background: repeating-linear-gradient(90deg, #cdb88a 0 2px, #d9c79c 2px 46px), #d9c79c; border-top: 6px solid #9c7f4e;
+}
+.shogi-game .disciple__room::after {
+  content: ""; position: absolute; left: 8%; right: 8%; top: 8%; height: 58%; opacity: 0.7;
+  background: linear-gradient(90deg, transparent 49.6%, #b99d6b 49.6% 50.4%, transparent 50.4%),
+    repeating-linear-gradient(0deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px),
+    repeating-linear-gradient(90deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px), rgba(255, 252, 240, 0.55);
+  border: 6px solid #b99d6b; border-bottom: 0;
+}
+.shogi-game .disciple__figure { position: absolute; z-index: 1; left: 50%; top: 5%; height: 150%; aspect-ratio: 0.344; transform: translateX(-50%); pointer-events: none; }
+.shogi-game .disciple__figure img { width: 100%; height: 100%; display: block; object-fit: contain; object-position: 50% 0; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
+.shogi-game .disciple__figure--bounce { animation: disciple-bounce 0.5s ease; }
+@keyframes disciple-bounce { 30% { transform: translateX(-50%) translateY(-10px); } 60% { transform: translateX(-50%) translateY(0); } }
+
+.shogi-game .disciple__top { position: absolute; z-index: 5; top: 0.6rem; left: 0.6rem; right: 0.6rem; display: flex; gap: 0.5rem; align-items: stretch; }
+.shogi-game .disciple__top--pick { right: auto; align-items: center; }
+.shogi-game .disciple__title { padding: 0.35rem 0.9rem; border-radius: 0.6rem; background: var(--panel); }
+.shogi-game .disciple .disciple__back { min-height: 2.75rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font-weight: 900; }
+.shogi-game .disciple__turn { display: grid; place-items: center; min-width: 6rem; padding: 0.3rem 0.6rem; border-radius: 0.8rem; background: var(--ink); color: #fff; line-height: 1.15; text-align: center; }
+.shogi-game .disciple__turn--big { background: #d8655b; }
+.shogi-game .disciple__turn b { font-size: 1rem; }
+.shogi-game .disciple__turn small { color: #c6d2dc; font-size: 0.66rem; }
+.shogi-game .disciple__goal { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.8rem; border: 2px solid var(--accent); border-radius: 0.8rem; background: var(--panel); }
+.shogi-game .disciple__goal small { display: block; color: var(--accent-ink); font-size: 0.68rem; font-weight: 900; }
+.shogi-game .disciple__goal b { font-size: 0.92rem; }
+.shogi-game .disciple__left { font-size: 0.72rem; color: var(--muted); text-align: right; }
+.shogi-game .disciple__left b { display: inline-block; margin: 0 0.1rem; color: #d8655b; font-size: 1.25rem; }
+.shogi-game .disciple .disciple__menu-btn { width: 2.8rem; border: 0; border-radius: 0.8rem; background: var(--panel); color: var(--ink); font-size: 1.1rem; font-weight: 900; }
+
+.shogi-game .disciple__panel { position: absolute; z-index: 5; padding: 0.55rem 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); }
+.shogi-game .disciple__stats { left: 0.6rem; top: 4.6rem; width: 14rem; display: grid; gap: 0.35rem; }
+.shogi-game .disciple__who { display: flex; justify-content: space-between; align-items: baseline; }
+.shogi-game .disciple__who small, .shogi-game .disciple__muted { color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple__stat { position: relative; display: grid; grid-template-columns: 2.4rem 1.7rem 1fr 2.4rem; align-items: center; gap: 0.3rem; font-size: 0.82rem; }
+.shogi-game .disciple__stat-name { font-weight: 900; }
+.shogi-game .disciple__rank { display: inline-grid; place-items: center; min-width: 1.6rem; height: 1.6rem; margin-right: 0.25rem; border-radius: 0.4rem; color: #fff; font-weight: 900; font-size: 0.8rem; background: #9aa4ad; }
+.shogi-game .disciple__rank--F { background: #7fa0b8; } .shogi-game .disciple__rank--E { background: #5aa66a; } .shogi-game .disciple__rank--D { background: #4f86c6; }
+.shogi-game .disciple__rank--C { background: #9a6fc4; } .shogi-game .disciple__rank--B { background: #d8655b; } .shogi-game .disciple__rank--A { background: #e08a2e; }
+.shogi-game .disciple__rank--S, .shogi-game .disciple__rank--SS { background: #e2b33f; }
+.shogi-game .disciple__bar { height: 0.55rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
+.shogi-game .disciple__bar i { display: block; height: 100%; background: #4f86c6; }
+.shogi-game .disciple__num { text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; }
+.shogi-game .disciple__up { color: #3c9a4c; }
+.shogi-game .disciple__aim { position: absolute; right: -0.4rem; top: -0.3rem; padding: 0 0.25rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.56rem; }
+.shogi-game .disciple__chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.shogi-game .disciple__chip { padding: 0.08rem 0.45rem; border-radius: 999px; background: linear-gradient(90deg, #ffe6a8, #ffd0a0); color: #6a3a10; font-size: 0.66rem; font-weight: 900; }
+.shogi-game .disciple__chip--style { background: var(--ink); color: #fff; }
+.shogi-game .disciple__chip--hidden { background: #e6e1d6; color: var(--muted); }
+.shogi-game .disciple__mood { right: 0.6rem; top: 4.6rem; width: 11.5rem; display: grid; gap: 0.45rem; }
+.shogi-game .disciple__mood small { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 700; }
+.shogi-game .disciple__mood-face { color: #d8655b; }
+.shogi-game .disciple__hp { display: block; height: 0.8rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
+.shogi-game .disciple__hp i { display: block; height: 100%; background: linear-gradient(90deg, #6cc07a, #a6d86a); }
+.shogi-game .disciple__apt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; }
+.shogi-game .disciple__apt span { display: flex; justify-content: space-between; padding: 0.1rem 0.3rem; border-radius: 0.35rem; background: #f3eee2; font-size: 0.66rem; font-weight: 800; }
+.shogi-game .disciple__apt b { color: var(--accent-ink); }
+.shogi-game .disciple__say { position: absolute; z-index: 6; left: 50%; top: 30%; transform: translateX(-125%); max-width: 14rem; margin: 0; padding: 0.55rem 0.8rem; border-radius: 1rem 1rem 0.2rem 1rem; background: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); font-size: 0.86rem; font-weight: 700; }
+
+.shogi-game .disciple__dock { position: absolute; z-index: 5; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; }
+.shogi-game .disciple__dock--train { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.shogi-game .disciple .disciple__cmd { position: relative; display: grid; place-items: center; align-content: center; gap: 0.1rem; min-height: 4.4rem; padding: 0.3rem; border: 3px solid transparent; border-radius: 1rem; background: #fff; color: var(--ink); box-shadow: 0 4px 0 #c9bfa8; font-size: 1rem; font-weight: 900; }
+.shogi-game .disciple .disciple__cmd small { color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.shogi-game .disciple .disciple__cmd--main { background: var(--accent); color: #fff; box-shadow: 0 4px 0 #b86f22; }
+.shogi-game .disciple .disciple__cmd--main small { color: #fff4e0; }
+.shogi-game .disciple .disciple__cmd:not(:disabled):hover, .shogi-game .disciple .disciple__cmd:not(:disabled):focus-visible { background: #fffaf0; color: var(--ink); }
+.shogi-game .disciple .disciple__cmd--main:not(:disabled):hover { background: #f5b25f; color: #fff; }
+.shogi-game .disciple .disciple__cmd--train[aria-pressed="true"], .shogi-game .disciple .disciple__cmd--train[aria-pressed="true"]:not(:disabled):hover { border-color: var(--accent); background: #fff3e2; color: var(--ink); transform: translateY(-0.4rem); }
+.shogi-game .disciple .disciple__opt:not(:disabled):hover { background: #fffaf0; color: var(--ink); }
+.shogi-game .disciple .disciple__opt[aria-pressed="true"]:not(:disabled):hover { background: #fff3e2; }
+.shogi-game .disciple .disciple__pick-card:not(:disabled):hover { background: #fffaf0; color: var(--ink); }
+.shogi-game .disciple .disciple__btn:not(:disabled):hover { filter: brightness(1.04); }
+.shogi-game .disciple__lv { position: absolute; top: 0.25rem; left: 0.45rem; }
+.shogi-game .disciple__aimtag { position: absolute; top: 0.25rem; right: 0.4rem; padding: 0 0.35rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.58rem; }
+.shogi-game .disciple__friend-dot { position: absolute; top: -0.75rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: #f3b4c8; color: #6a1f3a; font-size: 0.62rem; white-space: nowrap; }
+.shogi-game .disciple .disciple__warn { color: #d8655b; }
+
+.shogi-game .disciple__preview { left: 50%; bottom: 7.4rem; transform: translateX(-50%); width: min(26rem, calc(100% - 1.2rem)); }
+.shogi-game .disciple__preview h4, .shogi-game .disciple__sheet h4 { display: flex; justify-content: space-between; margin: 0.2rem 0 0.35rem; font-size: 0.9rem; }
+.shogi-game .disciple__preview h4 small { color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple__gains { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; text-align: center; font-size: 0.72rem; }
+.shogi-game .disciple__gains div { padding: 0.25rem 0; border-radius: 0.5rem; background: #f3eee2; }
+.shogi-game .disciple__gains b { display: block; font-size: 1rem; }
+.shogi-game .disciple__gain--hot { background: #ffe7c6 !important; color: #c0661b; }
+.shogi-game .disciple__extra { margin: 0.3rem 0 0; color: #c0661b; font-size: 0.74rem; font-weight: 800; }
+.shogi-game .disciple__row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.shogi-game .disciple .disciple__btn { flex: 1; min-height: 2.9rem; border: 0; border-radius: 0.8rem; background: #e9e2d2; color: var(--ink); font-weight: 900; }
+.shogi-game .disciple .disciple__btn--main { background: var(--accent); color: #fff; box-shadow: 0 3px 0 #b86f22; }
+
+.shogi-game .disciple__sheet { left: 50%; bottom: 0.6rem; transform: translateX(-50%); width: min(34rem, calc(100% - 1.2rem)); max-height: calc(100% - 6rem); overflow-y: auto; }
+.shogi-game .disciple__sheet h3 { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.3rem; font-size: 1rem; }
+.shogi-game .disciple__bigtag { padding: 0.05rem 0.5rem; border-radius: 999px; background: #d8655b; color: #fff; font-size: 0.7rem; }
+.shogi-game .disciple__choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.shogi-game .disciple__choice--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shogi-game .disciple__choice--four { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0.4rem; }
+.shogi-game .disciple .disciple__opt { min-height: 3rem; padding: 0.3rem; border: 2px solid var(--line); border-radius: 0.8rem; background: #fff; color: var(--ink); font-size: 0.84rem; font-weight: 900; }
+.shogi-game .disciple .disciple__opt small { display: block; color: var(--muted); font-size: 0.64rem; font-weight: 700; }
+.shogi-game .disciple .disciple__opt[aria-pressed="true"] { border-color: var(--accent); background: #fff3e2; }
+.shogi-game .disciple__games { display: grid; gap: 0.2rem; margin: 0.2rem 0; padding: 0; list-style: none; font-size: 0.82rem; }
+.shogi-game .disciple__games li { display: flex; align-items: center; gap: 0.4rem; }
+.shogi-game .disciple__games small { margin-left: auto; color: var(--muted); }
+.shogi-game .disciple__star { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; color: #fff; font-weight: 900; }
+.shogi-game .disciple__star--win { background: #d8655b; } .shogi-game .disciple__star--loss { background: #7a8794; }
+.shogi-game .disciple__events { margin: 0.2rem 0; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
+.shogi-game .disciple__note { margin: 0.4rem 0 0; }
+.shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
+
+.shogi-game .disciple__pick-info { left: 0.6rem; top: 4.2rem; width: 16rem; }
+.shogi-game .disciple__pick-info h2 { margin: 0; font-size: 1.2rem; }
+.shogi-game .disciple__pick-info h2 small { color: var(--muted); font-size: 0.7rem; }
+.shogi-game .disciple__intro { margin: 0.35rem 0; font-size: 0.82rem; line-height: 1.5; }
+.shogi-game .disciple__dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.5rem; margin: 0; font-size: 0.8rem; }
+.shogi-game .disciple__dl dt { color: var(--muted); }
+.shogi-game .disciple__dl dd { margin: 0; font-weight: 700; }
+.shogi-game .disciple__diff { color: #d8655b; }
+.shogi-game .disciple__pick-cards { position: absolute; z-index: 5; right: 0.6rem; top: 4.2rem; display: grid; gap: 0.45rem; width: 12rem; }
+.shogi-game .disciple .disciple__pick-card { display: grid; gap: 0.1rem; padding: 0.5rem 0.6rem; border: 3px solid transparent; border-radius: 0.9rem; background: var(--panel); color: var(--ink); text-align: left; }
+.shogi-game .disciple .disciple__pick-card[aria-checked="true"] { border-color: var(--accent); }
+.shogi-game .disciple__pick-card small { color: var(--muted); font-size: 0.7rem; }
+.shogi-game .disciple .disciple__go { position: absolute; z-index: 5; right: 0.6rem; bottom: 0.6rem; min-width: 12rem; min-height: 3.4rem; border: 0; border-radius: 1rem; background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 900; box-shadow: 0 4px 0 #b86f22; }
+
+/* スマホ縦: 立ち絵は真ん中のまま、UIを上下に寄せる(18章) */
+@media (max-width: 640px) {
+  .shogi-game .disciple__figure { top: 9%; height: 118%; }
+  .shogi-game .disciple__top { top: 0.4rem; left: 0.4rem; right: 0.4rem; }
+  .shogi-game .disciple__turn { min-width: 4.6rem; }
+  .shogi-game .disciple__turn b { font-size: 0.86rem; }
+  .shogi-game .disciple__goal b { font-size: 0.78rem; }
+  .shogi-game .disciple__stats { top: 3.8rem; left: 0.4rem; width: 9.8rem; padding: 0.4rem 0.45rem; gap: 0.2rem; }
+  .shogi-game .disciple__stat { grid-template-columns: 2rem 1.4rem 1fr 2rem; font-size: 0.68rem; gap: 0.2rem; }
+  .shogi-game .disciple__rank { min-width: 1.3rem; height: 1.3rem; font-size: 0.68rem; }
+  .shogi-game .disciple__mood { top: 3.8rem; right: 0.4rem; width: 7.6rem; padding: 0.4rem 0.45rem; gap: 0.3rem; }
+  .shogi-game .disciple__apt { grid-template-columns: repeat(2, 1fr); }
+  .shogi-game .disciple__say { top: 46%; left: 0.6rem; transform: none; max-width: 62%; font-size: 0.8rem; }
+  .shogi-game .disciple__dock { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; }
+  .shogi-game .disciple__dock--train { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shogi-game .disciple .disciple__cmd { min-height: 3.4rem; font-size: 0.9rem; }
+  .shogi-game .disciple__preview { bottom: 8.6rem; }
+  .shogi-game .disciple__sheet { bottom: 0.4rem; width: calc(100% - 0.8rem); }
+  .shogi-game .disciple__pick-info { top: auto; bottom: 4.6rem; left: 0.4rem; right: 0.4rem; width: auto; }
+  .shogi-game .disciple__intro { display: none; }
+  .shogi-game .disciple__pick-cards { top: 3.6rem; right: 0.4rem; width: 9.4rem; }
+  .shogi-game .disciple .disciple__go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
+}
+</style>
