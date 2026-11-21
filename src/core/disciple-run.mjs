@@ -706,6 +706,32 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
 }
 
 /** 師匠の眼の段(見抜いた数で上がる。19-5)。 */
+/** 終局の札の言葉(33-3)。reasonは本局の終わり方(engine-game.mjsのend.reason)。 */
+export function endCardText({ win, reason = 'resign', plies = 0 }) {
+  const how = reason === 'mate' ? (win ? '詰ませて' : '詰まされて') : (win ? '相手が投了' : '投了');
+  return { stamp: win ? '勝ち' : '負け', line: `${plies}手で終局　${how}` };
+}
+
+/**
+ * 観戦した日の結果発表の札(33-3)。その日の局の○●・勝ち負けの数・知らせ・大一番か。観戦した局に印。
+ * @param {{ label?: string, games?: { name: string, win: boolean, chance?: number, watched?: boolean, rival?: boolean }[], wins?: number, losses?: number, events?: string[], big?: boolean } | null | undefined} event その日の記録(lastEvent)
+ */
+export function dayResultView(event) {
+  const games = (event?.games ?? []).map((game, index) => ({
+    no: index + 1, name: game.name, win: Boolean(game.win), watched: Boolean(game.watched), rival: Boolean(game.rival),
+    chance: Math.round((Number(game.chance) || 0) * 100),
+  }));
+  const wins = event?.wins ?? games.filter((game) => game.win).length;
+  const losses = event?.losses ?? games.length - wins;
+  const big = Boolean(event?.big);
+  const headline = big ? `大一番　${wins > losses ? '勝ち越し' : wins === losses ? '五分' : '負け越し'}` : `${wins}勝${losses}敗`;
+  return {
+    label: event?.label ?? '', games, wins, losses, big, headline,
+    marks: games.map((game) => (game.win ? '○' : '●')).join(''),
+    events: [...(event?.events ?? [])],
+  };
+}
+
 export const eyeDan = (found) => clamp(1 + Math.floor((Number(found) || 0) / 5), 1, 9);
 /** 隠れた弱点と、それを見抜く理由(同じ理由を3回見抜くと名前が出る)。 */
 export const WEAKNESS_CAUSE = Object.freeze({ careless: 'careless', 'time-trouble': 'time', 'big-stage-weak': 'reading', 'loose-when-ahead': 'reading', 'endgame-collapse': 'mate' });

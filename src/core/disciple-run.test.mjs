@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXAM_TURN, MAX_TURNS, applyFindings, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
 } from './disciple-run.mjs';
+import { dayResultView, endCardText } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
 
 function memoryStorage() {
@@ -210,5 +211,22 @@ describe('奨励会へ続く育成(28章)', () => {
 
   it('研修会のあいだはMAX_TURNSで終わるが、奨励会ではHARD_TURNSまで続けられる', () => {
     expect(HARD_TURNS).toBeGreaterThan(MAX_TURNS);
+  });
+});
+
+describe('観戦した日の結果発表(33-3)', () => {
+  it('終局の札は勝ち負けと終わり方', () => {
+    expect(endCardText({ win: true, reason: 'mate', plies: 97 })).toEqual({ stamp: '勝ち', line: '97手で終局　詰ませて' });
+    expect(endCardText({ win: false, reason: 'resign', plies: 88 })).toEqual({ stamp: '負け', line: '88手で終局　投了' });
+    expect(endCardText({ win: true, plies: 120 }).line).toContain('相手が投了');
+  });
+  it('その日の局を○●で並べ、観戦した局に印。大一番は見出しを変える', () => {
+    const view = dayResultView({ label: '例会', games: [{ name: 'A', win: true, chance: 0.6, watched: true }, { name: 'B', win: false, chance: 0.45 }], wins: 1, losses: 1, events: ['C級に昇級'], big: true });
+    expect(view.marks).toBe('○●');
+    expect(view.games[0]).toMatchObject({ no: 1, watched: true, chance: 60 });
+    expect(view.headline).toBe('大一番　五分');
+    expect(view.events).toEqual(['C級に昇級']);
+    expect(dayResultView({ games: [{ name: 'A', win: true }], wins: 1, losses: 0 }).headline).toBe('1勝0敗');
+    expect(dayResultView(null).games).toEqual([]);
   });
 });
