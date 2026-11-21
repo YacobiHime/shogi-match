@@ -30,7 +30,7 @@ describe('全部の手を読む論理の探索(34-15)', () => {
   it('初形は互角に近く、形の点は名前ごとに分けて出せる', () => {
     const terms = evaluateTerms(FastBoard.fromSfen(START));
     expect(terms.material).toBe(0);
-    expect(Object.keys(terms)).toEqual(['material', 'hand', 'guard', 'kingCenter', 'attacker', 'mobility']);
+    expect(Object.keys(terms)).toEqual(['material', 'hand', 'guard', 'kingCenter', 'attacker', 'mobility', 'kingZone', 'castle']);
     expect(Math.abs(searchBestMove(START, { depth: 3 }).score)).toBeLessThan(200);
   });
 });

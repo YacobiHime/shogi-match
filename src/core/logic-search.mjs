@@ -4,7 +4,7 @@
 // 形の点は1つずつ名前を持ち、思考の記録で「玉の守りが2枚減る」のように言えるようにする(evaluateTerms)。
 
 import { AI_PIECE_POINTS } from './piece-points.mjs';
-import { FastBoard, BISHOP, GOLD, KING, PAWN, ROOK, SILVER, fileOf, rankOf, slidesOf } from './fast-board.mjs';
+import { FastBoard, BISHOP, GOLD, KING, PAWN, ROOK, SILVER, fileOf, rankOf, slidesOf, stepsOf } from './fast-board.mjs';
 
 const KIND_NAMES = [null, 'P', 'L', 'N', 'S', 'G', 'B', 'R', 'K', '+P', '+L', '+N', '+S', null, '+B', '+R'];
 /** 駒の種類ごとの価値(盤上)。 */
@@ -25,7 +25,10 @@ export const SHAPE_WEIGHTS = Object.freeze({
   attacker: 28,
   /** 飛車・角(竜・馬)の利く升1つ。 */
   mobility: 3,
-  /** 敵陣(相手から3段目まで)に入った、成っていない歩以外の自分の駒…は成りで数えるので、と金・成り駒の近さは攻め駒で数える。 */
+  /** 玉のまわり8升のうち、相手の駒が利いている升1つ(形の点の段2)。 */
+  kingZone: -16,
+  /** 玉が囲いの位置(自陣の下2段で、端から3筋以内)にいる(形の点の段2)。 */
+  castle: 50,
 });
 
 const isGuard = (abs) => abs === GOLD || abs === SILVER || (abs >= 9 && abs <= 12);
@@ -36,7 +39,9 @@ const isGuard = (abs) => abs === GOLD || abs === SILVER || (abs >= 9 && abs <= 1
  * @param {{ shape?: boolean }} [options] shapeが偽なら駒の損得だけ
  */
 export function evaluateTerms(board, { shape = true } = {}) {
-  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0 };
+  const level = shape === true ? 1 : Number(shape) || 0;
+  shape = level > 0;
+  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0, kingZone: 0, castle: 0 };
   const kings = board.king;
   for (let s = 0; s < 81; s += 1) {
     const p = board.sq[s];
@@ -73,6 +78,15 @@ export function evaluateTerms(board, { shape = true } = {}) {
       if (shape) terms.hand += sign * n * VALUE[kind] * SHAPE_WEIGHTS.hand;
     }
     if (shape && kings[color] >= 0 && [4, 5, 6].includes(fileOf(kings[color]))) terms.kingCenter += sign * SHAPE_WEIGHTS.kingCenter;
+    if (level >= 2 && kings[color] >= 0) {
+      const k = kings[color];
+      let hit = 0;
+      for (const t of stepsOf(color, KING, k)) if (board.attacked(t, color ^ 1)) hit += 1;
+      terms.kingZone += sign * SHAPE_WEIGHTS.kingZone * hit;
+      const relRank = color === 0 ? rankOf(k) : 8 - rankOf(k);
+      const relFile = color === 0 ? fileOf(k) : 10 - fileOf(k);
+      if (relRank >= 7 && (relFile <= 3 || relFile >= 7)) terms.castle += sign * SHAPE_WEIGHTS.castle;
+    }
   }
   return terms;
 }
@@ -80,7 +94,7 @@ export function evaluateTerms(board, { shape = true } = {}) {
 /** 局面の点(手番の側から見た値)。 */
 function evaluate(board, shape) {
   const t = evaluateTerms(board, { shape });
-  const total = t.material + t.hand + t.guard + t.kingCenter + t.attacker + t.mobility;
+  const total = t.material + t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle;
   return board.turn === 0 ? total : -total;
 }
 
@@ -114,7 +128,7 @@ function tryMake(board, move) {
 /**
  * 1手を読んで選ぶ。
  * @param {string} sfen
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean, qdepth?: number }} [options]
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number }} [options] shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
  * @returns {{ move: string, score: number, depth: number, nodes: number, pv: string[] } | null}
  */
 export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6 } = {}) {
@@ -275,4 +289,31 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
     if (alpha >= beta) break;
   }
   return best;
+}
+
+/**
+ * 決めた根の手だけを読み、それぞれの点(手番の側から見た値)と読み筋を出す。定跡の手や手順表の手が、最善より大きく劣らないかを確かめるのに使う。
+ * @param {string} sfen
+ * @param {string[]} usiMoves
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number }} [options]
+ * @returns {Map<string, { score: number, pv: string[] }>}
+ */
+export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6 } = {}) {
+  const board = FastBoard.fromSfen(sfen);
+  const ctx = {
+    board, shape, qdepth, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    tt: new Map(), killers: [], history: new Int32Array(1 << 15),
+  };
+  const result = new Map();
+  const legal = board.legal();
+  for (const usi of usiMoves) {
+    const move = legal.find((m) => board.toUsi(m) === usi);
+    if (!move) continue;
+    board.make(move);
+    const child = search(ctx, depth - 1, -INF, INF, 1, true);
+    board.unmake(move);
+    if (ctx.stopped) break;
+    result.set(usi, { score: -child.score, pv: [usi, ...child.pv.map((m) => board.toUsi(m))] });
+  }
+  return result;
 }

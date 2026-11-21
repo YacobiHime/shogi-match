@@ -131,8 +131,9 @@ export function strengthForPlayer(spec) {
   if (disciple) return disciple;
   // R<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士(34章)。エンジンは使わない。
   // S<深さ>(m)(t<ミリ秒>): 全部の手を読む論理の探索(34-15)。mを付けると駒の損得だけ(形の点なし)。
-  const fullSpec = spec.match(/^S(\d+)(m?)(?:t(\d+))?$/);
-  if (fullSpec) return { fullSearch: { depth: Number(fullSpec[1]), shape: !fullSpec[2], maxTimeMs: fullSpec[3] ? Number(fullSpec[3]) : 1500 }, nodes: 0 };
+  // xを付けると形の点の段2(玉のまわりの利き・囲いの位置)。
+  const fullSpec = spec.match(/^S(\d+)(m|x)?(?:t(\d+))?$/);
+  if (fullSpec) return { fullSearch: { depth: Number(fullSpec[1]), shape: fullSpec[2] === 'm' ? 0 : fullSpec[2] === 'x' ? 2 : 1, maxTimeMs: fullSpec[3] ? Number(fullSpec[3]) : 1500 }, nodes: 0 };
   // 校正用: 末尾のd<手数>・n<局面の数>・t<ミリ秒>で、読みの手数・局面の数・1手の時間を差し替える(例: R49-49-49-49d5n400000t3000)。
   const reasonSpec = spec.match(/^R(\d+)-(\d+)-(\d+)-(\d+)(?:d(\d+))?(?:n(\d+))?(?:t(\d+))?$/);
   if (reasonSpec) {
