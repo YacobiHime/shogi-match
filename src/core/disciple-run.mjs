@@ -5,9 +5,10 @@
 
 import { createRng } from './ryuo-random.mjs';
 import {
-  APTITUDE_KEYS, DISCIPLES, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, discipleById, discipleStrength, effectiveLevel, failChance,
-  judgeGuess, raiseAptitude, statRank, trainingById, trainingGains, winChance,
+  APTITUDE_KEYS, DISCIPLES, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
+  failChance, judgeGuess, raiseAptitude, skillById, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
+import { cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 
 export const DISCIPLE_RUN_KEY = 'yacobihime:shogi-match:disciple:v1';
@@ -22,11 +23,26 @@ export const OPPONENT_BASE_LEVEL = 17;
 export const OPPONENT_CLASS_STEP = 2.2;
 /** 例会と試験の1局のあとに弟子が伸びる量(実戦の経験)。 */
 export const GAME_EXP = Object.freeze({ played: 2, won: 2 });
+/** 観戦した局で、ここまで劣勢になってから勝つと「劣勢から勝った」(逆境の粘りの条件)。 */
+export const COMEBACK_EVAL = -300;
 /** 大一番の作戦が合ったとき・合わないときの勝つ割合の増減(10章)。 */
 export const PLAN_FIT = Object.freeze({ good: 0.06, bad: -0.04 });
 
 /** 予定(9-1)。研究会と師匠の予定は段階2で足す。 */
-export const ACTIONS = Object.freeze({ train: '稽古', rest: '休む', outing: '出かける' });
+export const ACTIONS = Object.freeze({ train: '稽古', rest: '休む', outing: '出かける', study: '研究会', master: '師匠の予定' });
+/** 研究会(9-1。25-2): 読みと安定が伸び、顔を出した仲間みんなと絆が深まる。 */
+export const STUDY = Object.freeze({ reading: 14, steady: 8, stamina: 18, friendBoost: 0.15 });
+/** 師匠の予定(9-1。25-2): 連れていく先は3つから(暦で決まる)。 */
+export const MASTER_EVENTS = Object.freeze([
+  Object.freeze({ id: 'kengaku', label: '対局の見学', text: '師匠の対局を控室で見学した', gains: { plan: 12 }, mood: 1, stamina: -5 }),
+  Object.freeze({ id: 'kaisetsu', label: '解説の仕事', text: '師匠の大盤解説を手伝った', gains: { plan: 8, reading: 6 }, mood: 0, stamina: -8 }),
+  Object.freeze({ id: 'matsuri', label: '将棋まつり', text: '将棋まつりで指導対局を手伝った', gains: { steady: 6 }, mood: 2, stamina: 5 }),
+]);
+/** 引き出しに増えるカード(25-1)。 */
+export const CARD_UNLOCKS = Object.freeze([
+  Object.freeze({ card: 'notebook', text: '百花との絆が深まった', check: (state) => (state.bonds?.momoka ?? 0) >= 5 }),
+  Object.freeze({ card: 'dojo', text: '出かけた先で道場を見つけた', check: (state) => (state.outings ?? 0) >= 3 }),
+]);
 
 /** 仲間(11章)。段階1は3人(百花と研究会の2人)。likesは顔を出しやすい稽古。 */
 export const FRIENDS = Object.freeze([
@@ -194,8 +210,8 @@ function advanceTurn(state, rng) {
 /**
  * 予定を1つ選んでターンを進める(このターンが予定を選ぶターンのときだけ)。
  * @param {any} state
- * @param {{ kind: 'train' | 'rest' | 'outing', id?: string, choice?: string }} action
- * @returns {{ state: any, result: { kind: string, gains?: Record<string, number>, failed?: boolean, text: string } }}
+ * @param {{ kind: 'train' | 'rest' | 'outing' | 'study' | 'master', id?: string, choice?: string, cards?: string[] }} action cardsは指導の引き出しで選んだカード(25-1)
+ * @returns {{ state: any, result: { kind: string, gains?: Record<string, number>, failed?: boolean, text: string, newSkills?: string[], newCards?: string[], [key: string]: any } }}
  */
 export function chooseAction(state, action) {
   if (turnKind(state) !== 'free') return { state, result: { kind: 'none', text: '' } };
@@ -206,34 +222,85 @@ export function chooseAction(state, action) {
     const training = trainingById(action.id ?? '');
     if (!training) return { state, result: { kind: 'none', text: '' } };
     const preview = trainingPreview(next, training.id, { choice: action.choice });
+    // 指導の引き出しで選んだカード(25-1)。手札にないカードは数えない。
+    const hands = lessonHands(next, training.id);
+    const cards = (action.cards ?? []).filter((id, index) => hands[index]?.includes(id));
+    const lesson = cards.length ? scoreLesson(next, cards) : null;
     if (rng.next() < failChance(next.stamina)) {
       next.stamina = clamp(next.stamina - Math.round(training.stamina / 2), 0, 100);
       next.mood = clamp(next.mood - 1, -2, 2);
-      result = { kind: 'train', failed: true, gains: {}, text: `${training.label}の稽古は、疲れて身が入らなかった` };
+      result = { kind: 'train', failed: true, gains: {}, lesson, text: `${training.label}の稽古は、疲れて身が入らなかった` };
     } else {
-      next.stats = addGains(next.stats, preview.gains);
-      next.stamina = clamp(next.stamina - training.stamina, 0, 100);
+      const scale = lesson?.grade.scale ?? 1;
+      const gains = Object.fromEntries(Object.entries(preview.gains).map(([key, value]) => [key, Math.round(value * scale)]));
+      next.stats = addGains(next.stats, gains);
+      next.stamina = clamp(next.stamina - training.stamina + (lesson?.stamina ?? 0), 0, 100);
+      next.mood = clamp(next.mood + (lesson?.mood ?? 0), -2, 2);
       next.trainCounts[training.id] = (next.trainCounts[training.id] ?? 0) + 1;
       for (const id of preview.friends) next.bonds[id] = (next.bonds[id] ?? 0) + 1;
       if (preview.aptitude) next.aptitudes[preview.aptitude] = raiseAptitude(next.aptitudes[preview.aptitude], 1);
-      const text = Object.entries(preview.gains).map(([key, value]) => `${STAT_LABELS[key]}＋${value}`).join('・');
-      result = { kind: 'train', failed: false, gains: preview.gains, text: `${training.label}の稽古。${text}` };
+      const text = Object.entries(gains).map(([key, value]) => `${STAT_LABELS[key]}＋${value}`).join('・');
+      result = { kind: 'train', failed: false, gains, lesson, text: `${training.label}の稽古${lesson ? `（${lesson.grade.label}）` : ''}。${text}` };
     }
   } else if (action.kind === 'rest') {
     next.stamina = clamp(next.stamina + 40, 0, 100);
     if (rng.next() < 0.3) next.mood = clamp(next.mood + 1, -2, 2);
     result = { kind: 'rest', text: 'ゆっくり休んだ。体力が戻った' };
+  } else if (action.kind === 'study') {
+    // 研究会: 今週どこかに顔を出した仲間がみんな来る。
+    const present = [...new Set(Object.values(next.friends).flat())];
+    const scale = (MOOD_SCALE[clamp(Math.round(next.mood), -2, 2)] ?? 1) * (1 + STUDY.friendBoost * present.length);
+    const gains = {
+      reading: Math.round(STUDY.reading * scale * diminish(next.stats.reading) * (next.aims.reading?.boost ?? 1)),
+      steady: Math.round(STUDY.steady * scale * diminish(next.stats.steady) * (next.aims.steady?.boost ?? 1)),
+    };
+    next.stats = addGains(next.stats, gains);
+    next.stamina = clamp(next.stamina - STUDY.stamina, 0, 100);
+    for (const id of present) next.bonds[id] = (next.bonds[id] ?? 0) + 1;
+    const who = present.map((id) => FRIENDS.find((friend) => friend.id === id)?.name).filter(Boolean).join('・');
+    result = { kind: 'study', gains, text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}` };
+  } else if (action.kind === 'master') {
+    const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
+    const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));
+    next.stats = addGains(next.stats, gains);
+    next.mood = clamp(next.mood + event.mood, -2, 2);
+    next.stamina = clamp(next.stamina + event.stamina, 0, 100);
+    const text = Object.entries(gains).map(([key, value]) => `${STAT_LABELS[key]}＋${value}`).join('・');
+    result = { kind: 'master', gains, event: event.id, text: `${event.label}：${event.text}。${text}` };
   } else {
     next.mood = clamp(next.mood + 1, -2, 2);
     next.stamina = clamp(next.stamina + 10, 0, 100);
+    next.outings = (next.outings ?? 0) + 1;
     const key = STAT_KEYS[Math.floor(rng.next() * STAT_KEYS.length)];
     next.stats = addGains(next.stats, { [key]: 5 });
     result = { kind: 'outing', gains: { [key]: 5 }, text: `一緒に出かけた。やる気が上がった（${STAT_LABELS[key]}＋5）` };
   }
   next.log.push({ turn: next.turn, text: result.text });
+  Object.assign(result, growth(next));
   advanceTurn(next, rng);
   next.rng = rng.state;
   return { state: next, result };
+}
+
+/**
+ * 引き出しに増えたカードと、覚えたスキル(25章)。状態に書き足し、知らせる中身を返す。
+ * @param {any} state 書き換えてよい写し
+ */
+function growth(state) {
+  state.deck ??= [];
+  const newCards = [];
+  for (const unlock of CARD_UNLOCKS) {
+    if (state.deck.includes(unlock.card) || !unlock.check(state)) continue;
+    state.deck.push(unlock.card);
+    newCards.push(unlock.card);
+    state.log.push({ turn: state.turn, text: `${unlock.text}。引き出しに「${cardById(unlock.card)?.label}」が増えた` });
+  }
+  const learned = newSkills(state);
+  for (const id of learned) {
+    state.skills.push(id);
+    state.log.push({ turn: state.turn, text: `スキル「${skillById(id)?.name}」を覚えた` });
+  }
+  return { newCards, newSkills: learned };
 }
 
 /** 入会試験を受けるクラス。相手が弟子より少しだけ弱いクラス(大一番の勝つ見込みが6割前後になる。23-3)。 */
@@ -309,10 +376,11 @@ function ensureKenshukai(state) {
 /**
  * 入会試験・例会を弟子が指す(観戦しない局)。その日の局を全部決め、ターンを進める。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[] }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け
- * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[] } }}
+ * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[], watchedMin?: number | null }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け。
+ *   watchedMinは観戦した局の弟子から見たいちばん低い評価値(劣勢から勝つと逆境の粘りの条件に数える)
+ * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[] } }}
  */
-export function playEvent(state, { plan = null, forced = [] } = {}) {
+export function playEvent(state, { plan = null, forced = [], watchedMin = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return { state, result: { kind: 'reikai', games: [], wins: 0, losses: 0, text: '', events: [] } };
   const next = ensureKenshukai(structuredClone(state));
@@ -345,17 +413,22 @@ export function playEvent(state, { plan = null, forced = [] } = {}) {
   }
   const wins = games.filter((game) => game.win).length;
   const losses = games.length - wins;
+  if (big) next.bigWins = (next.bigWins ?? 0) + wins;
+  if (games[0]?.watched && games[0].win && Number(watchedMin) <= COMEBACK_EVAL) next.comebacks = (next.comebacks ?? 0) + 1;
   const label = kind === 'exam' ? '入会試験' : `第${startDay + 1}回例会`;
   const text = `${label} ${wins}勝${losses}敗${events.length ? `。${events.join('・')}` : ''}`;
   next.log.push({ turn: next.turn, text });
   next.stamina = clamp(next.stamina - 10, 0, 100);
   next.lastEvent = { kind, label, games, wins, losses, events, big };
+  const grown = growth(next);
+  next.lastEvent.newSkills = grown.newSkills;
+  next.lastEvent.newCards = grown.newCards;
   if (big || losses > 0) next.words = { big, lost: losses > 0 };
   if (next.kenshukai.cls >= A2 || next.kenshukai.qualified) finish(next, 'qualified');
   else if (next.kenshukai.cls >= TOP) finish(next, 'top');
   else advanceTurn(next, rng);
   next.rng = rng.state;
-  return { state: next, result: { kind, games, wins, losses, text, events } };
+  return { state: next, result: { kind, games, wins, losses, text, events, newSkills: grown.newSkills, newCards: grown.newCards } };
 }
 
 // ---- 観戦(19-5・19-6・24章)
@@ -515,6 +588,8 @@ export function discipleView(state) {
     eye: { found: state.eye ?? 0, dan: eyeDan(state.eye) },
     aptitudes: state.aptitudes,
     trainings: TRAININGS.map((training) => trainingPreview(state, training.id)),
+    deck: lessonDeck(state),
+    skillProgress: skillProgress(state),
     friends: FRIENDS.map((friend) => ({ ...friend, bond: state.bonds[friend.id] ?? 0 })),
     kenshukai: kenshukai ? { classLabel: kenshukai.classLabel, progress: kenshukai.progress, board: kenshukai.board, phase: kenshukai.phase } : null,
     big: isBigEvent(state),

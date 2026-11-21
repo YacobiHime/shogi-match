@@ -130,7 +130,7 @@ export const STYLE_SKILL_BOOST = 1.1;
 export function skillEffects(skills, { advantage = 0, phase = 'middle', clock = null, style = '' } = {}) {
   const has = (id) => skills?.includes(id);
   const fit = (id) => (PLAY_STYLES[style]?.skills.includes(id) ? STYLE_SKILL_BOOST : 1);
-  const effect = { levelPlus: 0, nodes: 1, sigma: 1, missScale: 1, ruinLimitZero: false, mateSightPlus: 0, mateFindPlus: 0, clockScale: 1, noLoosening: false, active: [] };
+  const effect = { levelPlus: 0, nodes: 1, sigma: 1, missScale: 1, ruinLimitZero: false, mateSightPlus: 0, mateFindPlus: 0, clockScale: 1, noLoosening: false, candidatesMin: 0, active: [] };
   if (has('fujii-curve')) {
     // どの局面も隙がない: 局面のLvを＋3し、ぶれを小さく、見落としと台無しをなくす(22-3で測って決めた)。
     effect.levelPlus += 3;
@@ -158,6 +158,19 @@ export function skillEffects(skills, { advantage = 0, phase = 'middle', clock = 
   if (has('byoyomi') && (clock === 'byoyomi' || clock === 'low')) {
     effect.clockScale *= 0.5;
     effect.active.push('byoyomi');
+  }
+  // 25章で足した3つ(効き目は仮。自己対局で測り直す)。
+  if (has('researcher') && phase === 'opening') {
+    effect.levelPlus += 1.5 * fit('researcher');
+    effect.active.push('researcher');
+  }
+  if (has('clairvoyance')) {
+    effect.missScale *= 0.5;
+    effect.active.push('clairvoyance');
+  }
+  if (has('quick-sight')) {
+    effect.candidatesMin = 8;
+    effect.active.push('quick-sight');
   }
   return effect;
 }
@@ -284,6 +297,7 @@ export function discipleMoveSettings(strength, disciple, situation = {}) {
       human.prevent = { A: 1, B: 1, small: 1 };
     }
     if (effect.mateSightPlus) human.belief = { ...human.belief, mateSight: human.belief.mateSight + effect.mateSightPlus };
+    if (effect.candidatesMin && Number.isFinite(human.candidates)) human.candidates = Math.max(human.candidates, effect.candidatesMin);
     next.human = human;
   }
   if (effect.mateFindPlus && next.mateFinding && next.mateFinding.center !== Infinity) {
@@ -317,8 +331,8 @@ export const ELO_PER_LEVEL = 100;
 
 /** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせた)。 */
 export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.15, middle: 0.55, ending: 0.3 });
-/** いつも効くスキルが、観戦しない局の強さに足すLv(22-3で測った値。藤井曲線は約＋230のレーティング)。 */
-export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 2.3 });
+/** いつも効くスキルが、観戦しない局の強さに足すLv(藤井曲線は22-3で測った約＋230のレーティング。ほかは仮の見積もり)。 */
+export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 2.3, researcher: 0.2, clairvoyance: 0.5, 'quick-sight': 0.3 });
 
 /**
  * 観戦しない局で使う弟子の強さ(Lv)。局面ごとのLvの重みつきの平均と、いつも効くスキル。

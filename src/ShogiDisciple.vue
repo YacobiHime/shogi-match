@@ -67,6 +67,7 @@
           <span class="disciple__chip disciple__chip--style">{{ PLAY_STYLES[view.style]?.label }}</span>
           <span v-for="id in view.skills" :key="id" class="disciple__chip">{{ skillById(id)?.name }}{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span>
           <span class="disciple__chip disciple__chip--hidden">弱点 {{ view.weakness ? view.weakness : '？' }}</span>
+          <button type="button" class="disciple__chip disciple__chip--btn" data-disciple-skills-open @click="skillsOpen = !skillsOpen">スキルの条件</button>
         </div>
       </aside>
 
@@ -81,6 +82,18 @@
           </div>
         </div>
       </aside>
+
+      <!-- スキルを覚える条件(25-3) -->
+      <section v-if="skillsOpen && !view.end" class="disciple__panel disciple__skills" data-disciple-skills>
+        <h4>スキルを覚える条件<button type="button" class="disciple__x" aria-label="閉じる" @click="skillsOpen = false">×</button></h4>
+        <ul>
+          <li v-for="row in view.skillProgress" :key="row.id" :class="{ 'disciple__skill--have': row.have }">
+            <b>{{ skillById(row.id)?.name }}{{ '★'.repeat(skillById(row.id)?.star ?? 0) }}</b>
+            <small>{{ row.have ? '覚えた' : row.text }}</small>
+            <span v-if="!row.have" class="disciple__skill-bar"><i :style="{ width: `${(row.now / row.need) * 100}%` }"></i></span>
+          </li>
+        </ul>
+      </section>
 
       <p v-if="line" class="disciple__say" data-disciple-say>{{ line }}</p>
 
@@ -138,6 +151,32 @@
         <p class="disciple__muted disciple__note">観戦すると、崩れた手の理由を見抜いて、次の稽古を狙い目にできる（師匠の眼 {{ view.eye.dan }}段）。</p>
       </section>
 
+      <!-- 指導の引き出し(25-1): 3回、手札の3枚から1枚ずつ選ぶ -->
+      <section v-else-if="lesson" class="disciple__panel disciple__sheet disciple__lesson" data-disciple-lesson>
+        <h3>{{ selected?.label }}の稽古<small class="disciple__muted">{{ lesson.picks.length + 1 > LESSON_ROUNDS ? '' : `${lesson.picks.length + 1}/${LESSON_ROUNDS}枚目` }}</small></h3>
+        <div class="disciple__meter" aria-label="稽古の出来">
+          <i :style="{ width: `${Math.min(100, lessonScore.points)}%` }"></i>
+          <span class="disciple__meter-line" style="left: 60%">よく</span>
+          <span class="disciple__meter-line" style="left: 85%">完璧</span>
+        </div>
+        <p class="disciple__muted">出来 {{ lessonScore.points }}　<b>{{ lessonScore.grade.label }}</b>（伸び×{{ lessonScore.grade.scale }}）</p>
+        <ol v-if="lessonScore.steps.length" class="disciple__steps">
+          <li v-for="step in lessonScore.steps" :key="step.id + step.gained">{{ cardById(step.id)?.label }}<b>+{{ step.gained }}</b><span v-if="step.fit" class="disciple__fit">この子に合う</span></li>
+        </ol>
+        <div v-if="lessonHand.length" class="disciple__choice">
+          <button v-for="id in lessonHand" :key="id" type="button" class="disciple__opt disciple__card" :data-disciple-card="id" @click="pickCard(id)">
+            <span v-if="cardFits(cardById(id), state.discipleId)" class="disciple__fit">この子に合う</span>
+            {{ cardById(id)?.label }}<small>{{ cardById(id)?.text }}</small>
+            <small class="disciple__card-cost">{{ cardCost(id) }}</small>
+          </button>
+        </div>
+        <div class="disciple__row">
+          <button type="button" class="disciple__btn" @click="lesson = null">稽古を選び直す</button>
+          <button type="button" class="disciple__btn" data-disciple-card-auto @click="pickCard(autoPick(state, lessonHand, lesson.picks))">おまかせ</button>
+          <button type="button" class="disciple__btn disciple__btn--main" data-disciple-lesson-rest @click="finishLesson">残りはおまかせで稽古</button>
+        </div>
+      </section>
+
       <!-- 稽古を選ぶ -->
       <template v-else-if="training">
         <section class="disciple__panel disciple__preview" data-disciple-preview>
@@ -155,7 +194,7 @@
           <p v-if="selected?.friends.length" class="disciple__extra">{{ selected.friends.map(friendName).join('・') }}が一緒（伸びが増える）</p>
           <div class="disciple__row">
             <button type="button" class="disciple__btn" @click="training = false">やめる</button>
-            <button type="button" class="disciple__btn disciple__btn--main" data-disciple-train-go @click="train">この稽古にする</button>
+            <button type="button" class="disciple__btn disciple__btn--main" data-disciple-train-go @click="openLesson">この稽古にする</button>
           </div>
         </section>
         <nav class="disciple__dock disciple__dock--train" aria-label="稽古">
@@ -170,8 +209,10 @@
       </template>
 
       <!-- 予定 -->
-      <nav v-else class="disciple__dock" aria-label="予定">
+      <nav v-else class="disciple__dock disciple__dock--free" aria-label="予定">
         <button type="button" class="disciple__cmd disciple__cmd--main" data-disciple-action="train" @click="openTraining">稽古<small>能力を伸ばす</small></button>
+        <button type="button" class="disciple__cmd" data-disciple-action="study" @click="act('study')">研究会<small>読みと安定</small></button>
+        <button type="button" class="disciple__cmd" data-disciple-action="master" @click="act('master')">師匠の予定<small>連れていく</small></button>
         <button type="button" class="disciple__cmd" data-disciple-action="rest" @click="act('rest')">休む<small>体力が戻る</small></button>
         <button type="button" class="disciple__cmd" data-disciple-action="outing" @click="act('outing')">出かける<small>やる気が上がる</small></button>
       </nav>
@@ -250,6 +291,7 @@ import {
   FRIENDS, PLANS, WORDS, applyFindings, chooseAction, chooseWords, createDiscipleRun, discipleView, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
+import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 
@@ -318,17 +360,50 @@ const friendName = (id: string) => FRIENDS.find((friend) => friend.id === id)?.n
 function openTraining() {
   training.value = true;
 }
-function train() {
-  const { state: next, result } = chooseAction(state.value, { kind: "train", id: selectedId.value, choice: choice.value });
-  training.value = false;
-  commit(next);
-  say(result.failed ? "……ごめんなさい、今日は集中できませんでした" : result.text);
+// 指導の引き出し(25-1)。手札は弟子の状態から決まる(選び直しても同じ手札)。
+const lesson = ref<{ hands: string[][]; picks: string[] } | null>(null);
+const lessonHand = computed(() => (lesson.value ? lesson.value.hands[lesson.value.picks.length] ?? [] : []));
+const lessonScore = computed(() => scoreLesson(state.value ?? {}, lesson.value?.picks ?? []));
+function cardCost(id: string) {
+  const card = cardById(id);
+  if (!card) return "";
+  return card.stamina > 0 ? `体力＋${card.stamina}` : card.stamina < 0 ? `体力${card.stamina}` : "体力そのまま";
 }
-function act(kind: "rest" | "outing") {
+function openLesson() {
+  lesson.value = { hands: lessonHands(state.value, selectedId.value), picks: [] };
+}
+function pickCard(id: string) {
+  if (!lesson.value) return;
+  const picks = [...lesson.value.picks, id];
+  lesson.value = { ...lesson.value, picks };
+  if (picks.length >= LESSON_ROUNDS) train(picks);
+}
+function finishLesson() {
+  if (!lesson.value) return;
+  const picks = [...lesson.value.picks];
+  while (picks.length < LESSON_ROUNDS) picks.push(autoPick(state.value, lesson.value.hands[picks.length] ?? [], picks));
+  train(picks);
+}
+function train(cards: string[] = []) {
+  const { state: next, result } = chooseAction(state.value, { kind: "train", id: selectedId.value, choice: choice.value, cards });
+  training.value = false;
+  lesson.value = null;
+  commit(next);
+  say(growthLine(result) || (result.failed ? "……ごめんなさい、今日は集中できませんでした" : result.text));
+}
+function act(kind: "rest" | "outing" | "study" | "master") {
   const { state: next, result } = chooseAction(state.value, { kind });
   commit(next);
-  say(result.text);
+  say(growthLine(result) || result.text);
 }
+/** 覚えたスキルと、引き出しに増えたカードの知らせ(G:3 出来事の重さ。ふだんの一言より先に言う)。 */
+function growthLine(result: { newSkills?: string[]; newCards?: string[] }) {
+  const skills = (result.newSkills ?? []).map((id) => `「${skillById(id)?.name}」`).join("");
+  if (skills) return `先生、わたし、スキル${skills}を覚えました！`;
+  const cards = (result.newCards ?? []).map((id) => `「${cardById(id)?.label}」`).join("");
+  return cards ? `指導の引き出しに${cards}が増えた` : "";
+}
+const skillsOpen = ref(false);
 
 // ---- 入会試験・例会
 const plan = reactive({ opening: "own", ending: "wait" });
@@ -336,6 +411,8 @@ function play() {
   const big = Boolean(view.value?.big);
   const { state: next, result } = playEvent(state.value, { plan: big ? { ...plan } : null });
   commit(next);
+  const grown = growthLine(result);
+  if (grown) return say(grown);
   say(result.losses === 0 ? `${result.wins}勝！ 先生、勝ちました` : result.wins === 0 ? "……全部負けてしまいました" : `${result.wins}勝${result.losses}敗でした`);
 }
 function words(id: string) {
@@ -390,14 +467,17 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   current.end = end;
   current.win = end?.winner === current.side;
   // その日の局を記録する(観戦した局はエンジンの勝ち負け)。
-  const { state: next } = playEvent(state.value, { plan: current.plan, forced: [current.win] });
+  // 弟子から見たいちばん低い評価値(劣勢から勝つと、逆境の粘りの条件に数える。25-3)。
+  const sign = current.side === "black" ? 1 : -1;
+  const watchedMin = Math.min(0, ...current.entries.map((entry) => sign * (Number(entry?.eval) || 0)));
+  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin });
   commit(next);
   current.marks = watchMarks(discipleWatchMoves(current.entries, current.side), { dan: eyeDan(state.value?.eye) });
   current.guesses = current.marks.map(() => null);
   current.selected = current.marks.length ? 0 : -1;
   current.done = true;
   watch.value = { ...current };
-  say(current.win ? "勝ちました。先生、見ててくれましたか" : "負けてしまいました……");
+  say(growthLine(result) || (current.win ? "勝ちました。先生、見ててくれましたか" : "負けてしまいました……"));
 }
 const guessOf = (index: number) => watch.value?.guesses[index] ?? null;
 const answeredCount = computed(() => watch.value?.guesses.filter(Boolean).length ?? 0);
@@ -479,6 +559,14 @@ const markLeft = (ply: number) => Math.min(92, Math.max(4, (ply / Math.max(watch
 function goBack() {
   if (watch.value) {
     closeWatch();
+    return true;
+  }
+  if (lesson.value) {
+    lesson.value = null;
+    return true;
+  }
+  if (skillsOpen.value) {
+    skillsOpen.value = false;
     return true;
   }
   if (training.value) {
@@ -605,6 +693,31 @@ defineExpose({ goBack });
 .shogi-game .disciple__note { margin: 0.4rem 0 0; }
 .shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
 
+/* 指導の引き出し(25-1)・研究会と師匠の予定(25-2)・スキルの条件(25-3) */
+.shogi-game .disciple__dock--free { grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr)); }
+.shogi-game .disciple__lesson h3 small { margin-left: auto; font-size: 0.74rem; }
+.shogi-game .disciple__meter { position: relative; height: 0.9rem; margin: 0.9rem 0 0.2rem; border-radius: 999px; background: #e7e1d3; }
+.shogi-game .disciple__meter i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #f1a54c, #e2457a); transition: width 0.35s ease-out; }
+.shogi-game .disciple__meter-line { position: absolute; top: -0.85rem; bottom: 0; border-left: 2px dashed #8a7a5c; padding-left: 0.15rem; color: var(--muted); font-size: 0.58rem; font-weight: 800; line-height: 1; }
+.shogi-game .disciple__lesson > .disciple__muted { margin: 0.2rem 0; font-size: 0.78rem; }
+.shogi-game .disciple__steps { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0 0 0.4rem; padding: 0; list-style: none; font-size: 0.72rem; }
+.shogi-game .disciple__steps li { display: flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.45rem; border-radius: 999px; background: #f3eee2; }
+.shogi-game .disciple__steps b { color: #c0661b; }
+.shogi-game .disciple__fit { padding: 0 0.35rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.58rem; font-weight: 900; }
+.shogi-game .disciple .disciple__card { position: relative; display: grid; align-content: center; gap: 0.15rem; min-height: 5.2rem; padding-top: 0.9rem; }
+.shogi-game .disciple__card .disciple__fit { position: absolute; top: -0.5rem; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.shogi-game .disciple .disciple__card small.disciple__card-cost { color: #4f86c6; }
+.shogi-game .disciple .disciple__chip--btn, .shogi-game .disciple .disciple__chip--btn:not(:disabled):hover { min-width: 0; min-height: 0; height: auto; margin: 0; padding: 0.08rem 0.45rem; border: 0; border-radius: 999px; background: #fff; color: var(--accent-ink); box-shadow: inset 0 0 0 1.5px var(--accent); font-size: 0.66rem; font-weight: 900; line-height: 1.5; cursor: pointer; }
+.shogi-game .disciple__skills { left: 50%; top: 4.4rem; z-index: 7; transform: translateX(-50%); width: min(24rem, calc(100% - 1.2rem)); max-height: calc(100% - 12rem); overflow-y: auto; }
+.shogi-game .disciple__skills h4 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.3rem; font-size: 0.9rem; }
+.shogi-game .disciple .disciple__x { width: 2rem; height: 2rem; border: 0; border-radius: 50%; background: #e9e2d2; color: var(--ink); font-weight: 900; }
+.shogi-game .disciple__skills ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .disciple__skills li { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem; align-items: center; font-size: 0.8rem; }
+.shogi-game .disciple__skills small { color: var(--muted); font-size: 0.68rem; }
+.shogi-game .disciple__skill--have b { color: #c0661b; }
+.shogi-game .disciple__skill-bar { grid-column: 1 / -1; height: 0.35rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
+.shogi-game .disciple__skill-bar i { display: block; height: 100%; background: var(--accent); }
+
 .shogi-game .disciple__pick-info { left: 0.6rem; top: 4.2rem; width: 16rem; }
 .shogi-game .disciple__pick-info h2 { margin: 0; font-size: 1.2rem; }
 .shogi-game .disciple__pick-info h2 small { color: var(--muted); font-size: 0.7rem; }
@@ -658,6 +771,10 @@ defineExpose({ goBack });
   .shogi-game .disciple__say { top: 46%; left: 0.6rem; transform: none; max-width: 62%; font-size: 0.8rem; }
   .shogi-game .disciple__dock { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; }
   .shogi-game .disciple__dock--train { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shogi-game .disciple__dock--free { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.3rem; }
+  .shogi-game .disciple .disciple__dock--free .disciple__cmd { padding: 0.15rem; font-size: 0.76rem; letter-spacing: -0.03em; }
+  .shogi-game .disciple__dock--free .disciple__cmd small { display: none; }
+  .shogi-game .disciple .disciple__card { min-height: 4.6rem; font-size: 0.76rem; }
   .shogi-game .disciple .disciple__cmd { min-height: 3.4rem; font-size: 0.9rem; }
   .shogi-game .disciple__preview { bottom: 8.6rem; }
   .shogi-game .disciple__sheet { bottom: 0.4rem; width: calc(100% - 0.8rem); }
