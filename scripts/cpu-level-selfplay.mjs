@@ -1,7 +1,7 @@
 // CPU同士を自動対局させ、強さ設定ごとのレーティング差を推定する開発用スクリプト。
 // 使い方:
 //   node scripts/cpu-level-selfplay.mjs --players L1,L5,L10 [--games 40] [--gap 2] [--workers 8] [--out result.json]
-//   選手はL<レベル>、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   選手はL<レベル>、D<読み>-<作戦>-<安定>-<詰み>(師匠の1年の弟子。+fujii-curveのようにスキルを足せる)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
@@ -30,7 +30,9 @@ const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
-import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf, searchSettingsForSkill, sourceLevelSettings } from "../src/core/strength-settings.mjs";
+import { discipleSelfplaySettings } from "../src/core/disciple-strength.mjs";
+import { baseMateFinding } from "../src/core/player-character.mjs";
+import { CPU_STRENGTH_PRESETS, calibrationSkill, getStrengthSearchSettings, logicLevelOf, searchSettingsForSkill, sourceLevelOf, sourceLevelSettings } from "../src/core/strength-settings.mjs";
 import { STANDARD_SFEN, createNodeEngine, legalMoves, projectRoot, search, seededRandom } from "./lib/node-engine.mjs";
 
 const MAX_PLY = 256;
@@ -114,6 +116,15 @@ export function strengthForPlayer(spec) {
   if (noRisk) return { ...strengthForPlayer(noRisk[1]), riskAttitude: 0 };
   const nodesOverride = spec.match(/^(.+?)n(\d+)$/);
   if (nodesOverride) return { ...strengthForPlayer(nodesOverride[1]), nodes: Number(nodesOverride[2]) };
+  // D<読み>-<作戦>-<安定>-<詰み>(+スキル): 師匠の1年の弟子(docs/disciple-mode-design.mdの22章)。
+  // mf: 詰みを見つける確率(大会の棋士と同じ。player-character.mjsのbaseMateFinding)を付ける(例: L30mf)。弟子と比べる用。
+  const withMate = spec.match(/^(L\d+)mf$/);
+  if (withMate) {
+    const base = strengthForPlayer(withMate[1]);
+    return { ...base, mateFinding: baseMateFinding(calibrationSkill(sourceLevelOf(base.level))) };
+  }
+  const disciple = discipleSelfplaySettings(spec);
+  if (disciple) return disciple;
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
@@ -186,7 +197,7 @@ async function playGame(engines, players, seed, openingPlies = 0) {
       if (winner) return { winner, plies: ply, moves: history, reason: "adjudicated", ...(decisions.length ? { decisions } : {}) };
     }
     const engine = engines[color];
-    const strength = ply < openingPlies ? OPENING_VARIETY : players[color];
+    const strength = ply < openingPlies ? OPENING_VARIETY : (players[color].perMove?.({ ply, sfen: position.sfen }) ?? players[color]);
     const sfen = position.sfen;
     const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;

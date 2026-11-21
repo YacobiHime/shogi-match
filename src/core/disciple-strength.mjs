@@ -5,7 +5,8 @@
 // - 適性(G〜A)は、対局ごとに能力に倍率を掛ける(20-4)。戦い方は指し方の向きだけ(強さは変えない。20-5)。
 // - 観戦の見立て(崩れた手の理由の5択と狙い目。19-5)と、稽古の伸び(20-6)。
 
-import { sourceLevelOf, sourceLevelSettings } from './strength-settings.mjs';
+import { PHASE_LIMITS, applyCharacter } from './player-character.mjs';
+import { calibrationSkill, sourceLevelOf, sourceLevelSettings } from './strength-settings.mjs';
 
 /** 能力値の並び(画面の順)。 */
 export const STAT_KEYS = Object.freeze(['reading', 'plan', 'steady', 'mate']);
@@ -129,8 +130,10 @@ export const STYLE_SKILL_BOOST = 1.1;
 export function skillEffects(skills, { advantage = 0, phase = 'middle', clock = null, style = '' } = {}) {
   const has = (id) => skills?.includes(id);
   const fit = (id) => (PLAY_STYLES[style]?.skills.includes(id) ? STYLE_SKILL_BOOST : 1);
-  const effect = { nodes: 1, sigma: 1, missScale: 1, ruinLimitZero: false, mateSightPlus: 0, mateFindPlus: 0, clockScale: 1, noLoosening: false, active: [] };
+  const effect = { levelPlus: 0, nodes: 1, sigma: 1, missScale: 1, ruinLimitZero: false, mateSightPlus: 0, mateFindPlus: 0, clockScale: 1, noLoosening: false, active: [] };
   if (has('fujii-curve')) {
+    // どの局面も隙がない: 局面のLvを＋3し、ぶれを小さく、見落としと台無しをなくす(22-3で測って決めた)。
+    effect.levelPlus += 3;
     effect.sigma *= 0.4;
     effect.missScale = 0;
     effect.ruinLimitZero = true;
@@ -171,14 +174,27 @@ export function sourceOfLevel(level) {
 }
 
 /** 表示のLv(小数)の設定。 */
-const settingsAtLevel = (level) => sourceLevelSettings(sourceOfLevel(level));
+const settingsAtLevel = (level) => sourceLevelSettings(sourceOfLevel(clamp(level, STAT_LEVEL_MIN, STAT_LEVEL_MAX)));
 
 /**
- * 弟子の対局の強さ設定。全体の強さのLvの設定を土台に、能力ごとのLvの列で差し替える。
- * - 読み: 探索の量`nodes`・候補数`human.candidates`・取り合いの手数`human.belief.depth`
- * - 作戦: 大局観の重み`human.belief.w`・作戦の定跡手の優先`openingPlanScoreScale`
- * - 安定: 判断のぶれ`human.sigma`・`scoreTemperature`・見落とし`human.miss`・確認`human.prevent`・台無しの上限`human.limit`
- * - 詰み: 詰めろに気づく手数`human.belief.mateSight`と、詰みを見つける技量の目安`mateLevel`(player-character.mjsのbaseMateFindingに渡す)
+ * 局面ごとの能力の重み(22章。自己対局で測って決めた)。序盤は作戦、中盤は読み(と少し作戦)、終盤は詰みが主役。
+ * 安定はどの局面にも、全体の強さ(いちばん弱い能力に引っ張られる)も効く。各局面の重みの合計は1(4つが同じなら、どの局面も同じLv)。
+ */
+export const PHASE_WEIGHTS = Object.freeze({
+  opening: Object.freeze({ plan: 0.45, steady: 0.2, overall: 0.35 }),
+  middle: Object.freeze({ reading: 0.35, plan: 0.1, steady: 0.2, overall: 0.35 }),
+  ending: Object.freeze({ mate: 0.45, steady: 0.2, overall: 0.35 }),
+});
+/** 局面の主役の能力(画面の説明・観戦の手がかり)。 */
+export const PHASE_LEAD = Object.freeze({ opening: 'plan', middle: 'reading', ending: 'mate' });
+
+/** 手数から局面(player-character.mjsと同じ境目)。 */
+export const phaseOfPly = (ply) => (ply < PHASE_LIMITS.opening ? 'opening' : ply < PHASE_LIMITS.middle ? 'middle' : 'ending');
+
+/**
+ * 弟子の対局の強さ。能力値・適性・やる気から、能力ごとのLv・全体の強さ・局面ごとのLvを出す。
+ * 1手ごとの設定はdiscipleMoveSettingsで、局面のLvの設定(探索量・ぶれ・大局観など、そのLvのCPUのまま)を土台に、
+ * 安定のLvで見落とし・確認・台無しの上限を、詰みのLvで詰めろに気づく手数と詰みを見つける力を差し替える。
  * @param {{ stats: Record<string, number>, aptitudes?: Record<string, string>, style?: string, skills?: readonly string[],
  *   context?: { battle?: string | null, time?: 'fast' | 'long' | null }, mood?: number }} disciple moodは-2〜2(やる気。能力のLvを±)
  */
@@ -187,50 +203,137 @@ export function discipleStrength({ stats, aptitudes = {}, style = '', skills = [
   const shift = clamp(Number(mood) || 0, -2, 2) * 0.75;
   const levels = Object.fromEntries(STAT_KEYS.map((key) => [key, clamp(statLevel(scaled[key]) + shift, STAT_LEVEL_MIN, STAT_LEVEL_MAX)]));
   const overall = clamp(overallLevel(scaled) + shift, STAT_LEVEL_MIN, STAT_LEVEL_MAX);
-  const base = settingsAtLevel(overall);
-  const reading = settingsAtLevel(levels.reading);
-  const plan = settingsAtLevel(levels.plan);
-  const steady = settingsAtLevel(levels.steady);
-  const mate = settingsAtLevel(levels.mate);
-  const human = base.human ? {
-    ...base.human,
-    miss: steady.human?.miss ?? base.human.miss,
-    prevent: steady.human?.prevent ?? base.human.prevent,
-    sigma: steady.human?.sigma ?? base.human.sigma,
-    limit: steady.human?.limit ?? base.human.limit,
-    candidates: reading.human?.candidates ?? base.human.candidates,
-    belief: {
-      ...base.human.belief,
-      w: plan.human?.belief.w ?? base.human.belief.w,
-      depth: reading.human?.belief.depth ?? base.human.belief.depth,
-      mateSight: mate.human?.belief.mateSight ?? base.human.belief.mateSight,
-    },
-  } : undefined;
-  const settings = {
-    ...base,
-    nodes: reading.nodes,
-    scoreTemperature: steady.scoreTemperature ?? base.scoreTemperature,
-    openingPlanScoreScale: plan.openingPlanScoreScale ?? base.openingPlanScoreScale,
-    ...(human ? { human } : {}),
-  };
-  return {
+  const phases = Object.fromEntries(Object.entries(PHASE_WEIGHTS).map(([phase, weights]) => [
+    phase, round1(Object.entries(weights).reduce((sum, [key, weight]) => sum + weight * (key === 'overall' ? overall : levels[key]), 0)),
+  ]));
+  const strength = {
     level: round1(overall),
     levels: Object.fromEntries(STAT_KEYS.map((key) => [key, round1(levels[key])])),
-    settings,
+    phases,
     mateLevel: round1(levels.mate),
+    steadyLevel: round1(levels.steady),
     attack: PLAY_STYLES[style]?.attack ?? 0,
     skills: [...skills],
   };
+  return { ...strength, settings: phaseSettings(strength, 'middle') };
+}
+
+/**
+ * 局面のLvの設定に、安定と詰みのLvの列を差し替える。plusは局面のLvに足す(スキル)。
+ * @param {{ phases: Record<string, number>, steadyLevel: number, mateLevel: number }} strength
+ * @param {'opening' | 'middle' | 'ending'} phase
+ * @param {number} [plus]
+ */
+export function phaseSettings(strength, phase, plus = 0) {
+  const base = settingsAtLevel((strength.phases[phase] ?? strength.phases.middle) + plus);
+  const steady = settingsAtLevel(strength.steadyLevel + plus);
+  const mate = settingsAtLevel(strength.mateLevel + plus);
+  if (!base.human) return base;
+  return {
+    ...base,
+    human: {
+      ...base.human,
+      miss: steady.human?.miss ?? base.human.miss,
+      prevent: steady.human?.prevent ?? base.human.prevent,
+      limit: steady.human?.limit ?? base.human.limit,
+      belief: { ...base.human.belief, mateSight: mate.human?.belief.mateSight ?? base.human.belief.mateSight },
+    },
+  };
+}
+
+// ---- 対局の1手ごとの設定(スキル・戦い方・弱点・時計。19-4・20-4・20-5)
+
+/** 持ち時間の適性ごとの、時計の重圧の効き方(Cで今のまま。Aは軽く、Gは重く)。 */
+export const TIME_APTITUDE_PRESSURE = Object.freeze({ A: 0.6, B: 0.8, C: 1, D: 1.15, E: 1.3, F: 1.4, G: 1.5 });
+
+/**
+ * 弟子の1手の強さ設定。discipleStrengthの設定に、戦い方(攻めの向き)と隠れた弱点を、今の棋士の特徴の仕組み(applyCharacter)で掛け、
+ * 段階1のスキルの効き目と、持ち時間の適性で強めた・弱めた時計の重圧を足す。元の設定は変えない。
+ * @param {ReturnType<typeof discipleStrength>} strength
+ * @param {{ weakness?: string | null, aptitudes?: Record<string, string>, style?: string }} disciple
+ * @param {{ advantage?: number, phase?: 'opening' | 'middle' | 'ending', clock?: { pressure: string, short?: boolean } | null,
+ *   time?: 'fast' | 'long' | null, sfen?: string, ply?: number, [key: string]: unknown }} situation
+ */
+export function discipleMoveSettings(strength, disciple, situation = {}) {
+  const effect = skillEffects(strength.skills, {
+    advantage: situation.advantage ?? 0, phase: situation.phase ?? (Number.isFinite(situation.ply) ? phaseOfPly(situation.ply) : 'middle'), clock: situation.clock?.pressure ?? null, style: disciple?.style ?? '',
+  });
+  const weakness = disciple?.weakness && !(effect.noLoosening && disciple.weakness === 'loose-when-ahead') ? [{ id: disciple.weakness, degree: 1 }] : [];
+  const character = { attack: strength.attack, traits: weakness };
+  // 時計の重圧は、持ち時間の適性とスキルで強さを変えてから掛ける。applyCharacterには渡さない。
+  const phase = situation.phase ?? (Number.isFinite(situation.ply) ? phaseOfPly(situation.ply) : 'middle');
+  const mateSkill = calibrationSkill(sourceOfLevel(clamp(strength.mateLevel + effect.levelPlus, STAT_LEVEL_MIN, STAT_LEVEL_MAX)));
+  const next = applyCharacter(phaseSettings(strength, phase, effect.levelPlus), character, { ...situation, phase, clock: null }, { skill: mateSkill });
+  const pressure = situation.clock?.pressure;
+  const timeRank = situation.time ? disciple?.aptitudes?.[situation.time] : null;
+  const clockK = (pressure === 'byoyomi' || pressure === 'low') ? (TIME_APTITUDE_PRESSURE[timeRank] ?? 1) * effect.clockScale : 0;
+  let nodes = effect.nodes;
+  let sigma = effect.sigma;
+  if (clockK > 0) {
+    const base = pressure === 'byoyomi' ? (situation.clock?.short ? { nodes: 0.6, noise: 0.45 } : { nodes: 0.75, noise: 0.3 }) : { nodes: 0.88, noise: 0.15 };
+    nodes *= Math.max(0.3, 1 - (1 - base.nodes) * clockK);
+    sigma *= 1 + base.noise * clockK;
+  }
+  if (Number.isFinite(next.nodes) && next.nodes > 0 && nodes !== 1) next.nodes = Math.max(1, Math.round(next.nodes * nodes));
+  if (Number.isFinite(next.scoreTemperature) && sigma !== 1) next.scoreTemperature = Math.max(1, Math.round(next.scoreTemperature * sigma));
+  if (next.human) {
+    const human = { ...next.human, sigma: Math.round(next.human.sigma * sigma * 1000) / 1000 };
+    if (effect.missScale !== 1) human.miss = Object.fromEntries(Object.entries(human.miss).map(([key, value]) => [key, Math.round(value * effect.missScale * 10000) / 10000]));
+    if (effect.ruinLimitZero) {
+      human.limit = { A: 0, B: 0 };
+      human.prevent = { A: 1, B: 1, small: 1 };
+    }
+    if (effect.mateSightPlus) human.belief = { ...human.belief, mateSight: human.belief.mateSight + effect.mateSightPlus };
+    next.human = human;
+  }
+  if (effect.mateFindPlus && next.mateFinding && next.mateFinding.center !== Infinity) {
+    next.mateFinding = { ...next.mateFinding, center: Math.round((next.mateFinding.center + effect.mateFindPlus) * 100) / 100 };
+  }
+  next.discipleSkills = effect.active;
+  return next;
+}
+
+/**
+ * 自己対局の選手の指定から、弟子の設定を作る(scripts/cpu-level-selfplay.mjsのD選手)。
+ * 形は`D<読み>-<作戦>-<安定>-<詰み>`、後ろに`+<スキルのid>`を何個でも(例: D900-900-900-900+fujii-curve)。
+ * 自己対局は評価値の場面を渡さないので、局面で効くスキルと、いつも効くスキル(藤井曲線)だけが効く。
+ * @param {string} spec
+ */
+export function discipleSelfplaySettings(spec) {
+  const match = String(spec).match(/^D(\d+)-(\d+)-(\d+)-(\d+)((?:\+[a-z-]+)*)$/);
+  if (!match) return null;
+  const stats = { reading: Number(match[1]), plan: Number(match[2]), steady: Number(match[3]), mate: Number(match[4]) };
+  const skills = match[5] ? match[5].split('+').filter(Boolean) : [];
+  const strength = discipleStrength({ stats, skills });
+  const byPhase = Object.fromEntries(Object.keys(PHASE_LEAD).map((phase) => [phase, { ...discipleMoveSettings(strength, {}, { phase }), level: Math.round(strength.level) }]));
+  // 自己対局は手ごとにperMoveで局面の設定を引く(関数は結果のJSONに残らない)。
+  return { ...byPhase.middle, perMove: ({ ply }) => byPhase[phaseOfPly(ply)] };
 }
 
 // ---- 観戦しない局の勝ち負け(19-6)
 
-/** 1Lvの差を、勝つ割合のレーティングの差に換える目安(docs/difficulty-calibration.mdの1Lvあたり約100前後)。 */
+/** 1Lvの差を、勝つ割合のレーティングの差に換える目安(docs/difficulty-calibration.mdの1Lvあたり約100前後。22-3でも合った)。 */
 export const ELO_PER_LEVEL = 100;
 
+/** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせた)。 */
+export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.15, middle: 0.55, ending: 0.3 });
+/** いつも効くスキルが、観戦しない局の強さに足すLv(22-3で測った値。藤井曲線は約＋230のレーティング)。 */
+export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 2.3 });
+
 /**
- * 観戦しない局で、弟子が勝つ割合。観戦してエンジンで指したときと同じになるよう、全体の強さのLvで比べる。
- * @param {number} discipleLevel discipleStrengthのlevel
+ * 観戦しない局で使う弟子の強さ(Lv)。局面ごとのLvの重みつきの平均と、いつも効くスキル。
+ * エンジンで指したときの勝ちやすさに合わせる(4つが同じなら、全体の強さのLvと同じ)。
+ * @param {ReturnType<typeof discipleStrength>} strength
+ */
+export function effectiveLevel(strength) {
+  const phases = Object.entries(EFFECTIVE_PHASE_WEIGHTS).reduce((sum, [phase, weight]) => sum + weight * (strength.phases[phase] ?? strength.level), 0);
+  const plus = (strength.skills ?? []).reduce((sum, id) => sum + (SKILL_LEVEL_PLUS[id] ?? 0), 0);
+  return round1(phases + plus);
+}
+
+/**
+ * 観戦しない局で、弟子が勝つ割合。
+ * @param {number} discipleLevel effectiveLevelの値
  * @param {number} opponentLevel 相手のLv
  */
 export function winChance(discipleLevel, opponentLevel) {
@@ -253,7 +356,7 @@ export const CAUSE_ORDER = Object.freeze(['reading', 'plan', 'careless', 'mate',
 export const MARK_MIN_LOSS = 250;
 export const MARK_COUNT = Object.freeze({ base: 2, perDan: 3, max: 4 });
 /** 序盤とみなす手数(作戦負けの手がかり)。 */
-export const OPENING_PLY = 40;
+export const OPENING_PLY = PHASE_LIMITS.opening;
 
 /**
  * 弟子の1手の理由。AIが手を選んだときの記録から決める(何に気づかなかったか・詰みを逃したか・時計・手数)。
@@ -284,13 +387,31 @@ export function watchMarks(moves, { dan = 1 } = {}) {
 
 /** 印の場面の手がかり(画面に並べる札)。将棋の力がなくても理由を当てられるように。 */
 function clues(move) {
-  const list = [`${move.ply}手目${move.ply < OPENING_PLY ? '（序盤）' : move.ply < 90 ? '（中盤）' : '（終盤）'}`];
+  const list = [`${move.ply}手目${({ opening: '（序盤）', middle: '（中盤）', ending: '（終盤）' })[phaseOfPly(move.ply)]}`];
   if (move.clock === 'byoyomi') list.push('秒読み');
   else if (move.clock === 'low') list.push('残り時間が少ない');
   if (move.oversights?.length) list.push('赤い輪：取られる駒');
   if (move.missedMate) list.push('詰みがあった');
   if (move.allowedMate) list.push('詰めろを見落とした');
   return list;
+}
+
+/**
+ * 本局の棋譜(engine-game.mjsのentries)から、弟子の手を観戦の見立ての形にする。弟子の手には`d`(気づかなかったこと・詰み逃し・時計)がある。
+ * @param {readonly { loss?: number, d?: { o?: number, m?: number, c?: string } }[]} entries
+ * @param {'black' | 'white'} side 弟子の側
+ */
+export function discipleWatchMoves(entries, side) {
+  const first = side === 'black' ? 0 : 1;
+  const moves = [];
+  for (let index = first; index < entries.length; index += 2) {
+    const entry = entries[index];
+    moves.push({
+      ply: index + 1, loss: Number(entry?.loss) || 0, oversights: entry?.d?.o ? [{ kind: 'seen' }] : [],
+      missedMate: Boolean(entry?.d?.m), clock: entry?.d?.c || null,
+    });
+  }
+  return moves;
 }
 
 /** 狙い目の伸びの倍率と長さ(当てた・外した)。 */
@@ -377,7 +498,7 @@ export const DISCIPLES = Object.freeze([
     intro: '将棋教室の大会で負けて泣いた日、あなたに「弟子にしてください」と頼みに来た。',
     stats: Object.freeze({ reading: 330, plan: 260, steady: 480, mate: 380 }),
     aptitudes: Object.freeze({ static: 'C', ranging: 'B', aifuri: 'E', kakugawari: 'D', fast: 'C', long: 'E' }),
-    skills: Object.freeze(['quick-sight']), weakness: 'weak-attack',
+    skills: Object.freeze(['quick-sight']), weakness: 'big-stage-weak',
   }),
   Object.freeze({
     id: 'tsumugi', name: '朝比奈 紬', age: 15, grade: '高校1年', style: 'study', difficulty: 3,

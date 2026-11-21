@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AIM, CAUSES, DISCIPLES, PLAY_STYLES, SKILLS, STAT_KEYS, addGains, applyAptitudes, causeOf, diminish, discipleStrength, failChance,
+  AIM, CAUSES, DISCIPLES, PLAY_STYLES, SKILLS, STAT_KEYS, addGains, applyAptitudes, causeOf, diminish, discipleMoveSettings, discipleSelfplaySettings, discipleStrength, discipleWatchMoves, effectiveLevel, failChance, phaseSettings,
   judgeGuess, overallLevel, raiseAptitude, skillEffects, statLevel, statRank, trainingGains, watchMarks, winChance,
 } from './disciple-strength.mjs';
 import { sourceLevelOf, sourceLevelSettings } from './strength-settings.mjs';
@@ -36,17 +36,25 @@ describe('師匠の1年の能力値(20章)', () => {
     expect(strength.settings.human.belief.mateSight).toBe(base.human.belief.mateSight);
   });
 
-  it('能力ごとに別のつまみが動く', () => {
+  it('局面ごとに主役の能力が違う(序盤は作戦、中盤は読み、終盤は詰み)', () => {
     const base = discipleStrength({ stats: even(400) });
     const reader = discipleStrength({ stats: { ...even(400), reading: 1100 } });
-    const steady = discipleStrength({ stats: { ...even(400), steady: 1100 } });
+    const planner = discipleStrength({ stats: { ...even(400), plan: 1100 } });
     const mate = discipleStrength({ stats: { ...even(400), mate: 1100 } });
-    expect(reader.settings.nodes).toBeGreaterThan(base.settings.nodes);
-    expect(reader.settings.human.miss).toEqual(base.settings.human.miss);
-    expect(steady.settings.nodes).toBe(base.settings.nodes);
-    expect(steady.settings.human.miss.other).toBeLessThan(base.settings.human.miss.other);
-    expect(mate.settings.human.belief.mateSight).toBeGreaterThan(base.settings.human.belief.mateSight);
+    expect(reader.phases.middle - base.phases.middle).toBeGreaterThan(reader.phases.opening - base.phases.opening);
+    expect(planner.phases.opening - base.phases.opening).toBeGreaterThan(planner.phases.middle - base.phases.middle);
+    expect(mate.phases.ending - base.phases.ending).toBeGreaterThan(mate.phases.middle - base.phases.middle);
+    expect(phaseSettings(reader, 'middle').nodes).toBeGreaterThan(phaseSettings(base, 'middle').nodes);
+    expect(phaseSettings(planner, 'opening').nodes).toBeGreaterThan(phaseSettings(base, 'opening').nodes);
+    expect(phaseSettings(mate, 'ending').human.belief.mateSight).toBeGreaterThan(phaseSettings(base, 'ending').human.belief.mateSight);
     expect(mate.mateLevel).toBeGreaterThan(base.mateLevel);
+  });
+
+  it('安定は見落としと、どの局面のLvにも効く', () => {
+    const base = discipleStrength({ stats: even(400) });
+    const steady = discipleStrength({ stats: { ...even(400), steady: 1100 } });
+    expect(phaseSettings(steady, 'middle').human.miss.other).toBeLessThan(phaseSettings(base, 'middle').human.miss.other);
+    for (const phase of ['opening', 'middle', 'ending']) expect(steady.phases[phase]).toBeGreaterThan(base.phases[phase]);
   });
 
   it('適性で能力に倍率が掛かり、やる気でLvが動く', () => {
@@ -124,6 +132,17 @@ describe('観戦の見立て(19-5)', () => {
     expect(watchMarks(moves, { dan: 4 })).toHaveLength(3);
   });
 
+  it('本局の棋譜から弟子の手を取り出し、印を付けられる', () => {
+    const entries = [
+      { loss: 0 }, { loss: 10 }, { loss: 30, d: { o: 0, m: 0, c: '' } }, { loss: 0 },
+      { loss: 650, d: { o: 1, m: 0, c: '' } }, { loss: 0 }, { loss: 900, d: { o: 0, m: 1, c: 'byoyomi' } },
+    ];
+    const moves = discipleWatchMoves(entries, 'black');
+    expect(moves.map((move) => move.ply)).toEqual([1, 3, 5, 7]);
+    const marks = watchMarks(moves);
+    expect(marks.map((mark) => mark.cause)).toEqual(['careless', 'mate']);
+  });
+
   it('当てると伸び×1.5、外しても×1.25で正しい理由が分かる', () => {
     const mark = { cause: 'careless' };
     expect(judgeGuess(mark, 'careless')).toMatchObject({ right: true, boost: AIM.right, target: 'steady' });
@@ -158,6 +177,20 @@ describe('稽古と勝ち負け', () => {
     expect(winChance(28, 30)).toBeLessThan(0.4);
   });
 
+  it('観戦しない局の強さは、4つが同じなら全体の強さのLvで、尖った能力と藤井曲線は自己対局の差に近い', () => {
+    const flat = discipleStrength({ stats: even(600) });
+    expect(effectiveLevel(flat)).toBeCloseTo(flat.level, 0);
+    // 22-3の自己対局: 読み・作戦・安定・詰みを＋600すると、レーティングで約＋670・＋340・＋550・＋370(勝率9割を超え、上はぶれが大きい)。
+    const gain = (stats) => (effectiveLevel(discipleStrength({ stats })) - effectiveLevel(flat)) * 100;
+    expect(gain({ ...even(600), plan: 1200 })).toBeGreaterThan(250);
+    expect(gain({ ...even(600), plan: 1200 })).toBeLessThan(450);
+    expect(gain({ ...even(600), mate: 1200 })).toBeGreaterThan(250);
+    expect(gain({ ...even(600), steady: 1200 })).toBeGreaterThan(380);
+    expect(gain({ ...even(600), reading: 1200 })).toBeGreaterThan(380);
+    const fujii = discipleStrength({ stats: even(900), skills: ['fujii-curve'] });
+    expect(effectiveLevel(fujii) - effectiveLevel(discipleStrength({ stats: even(900) }))).toBeCloseTo(2.3, 1);
+  });
+
   it('弟子の候補3人は、能力・適性・戦い方・スキルを持つ', () => {
     expect(DISCIPLES).toHaveLength(3);
     for (const disciple of DISCIPLES) {
@@ -165,5 +198,52 @@ describe('稽古と勝ち負け', () => {
       expect(PLAY_STYLES[disciple.style]).toBeTruthy();
       for (const id of disciple.skills) expect(SKILLS.some((skill) => skill.id === id)).toBe(true);
     }
+  });
+});
+
+describe('対局の1手ごとの設定(22章)', () => {
+  const strength = (skills = [], style = '') => discipleStrength({ stats: even(600), skills, style });
+  it('詰みの能力で、詰みを見つける確率の中心の手数が変わる', () => {
+    const low = discipleMoveSettings(discipleStrength({ stats: { ...even(600), mate: 200 } }), {}, {});
+    const high = discipleMoveSettings(discipleStrength({ stats: { ...even(600), mate: 1100 } }), {}, {});
+    expect(high.mateFinding.center).toBeGreaterThan(low.mateFinding.center);
+  });
+
+  it('藤井曲線は見落としをなくし、ぶれを小さくする', () => {
+    const plain = discipleMoveSettings(strength(), {}, {});
+    const fujii = discipleMoveSettings(strength(['fujii-curve']), {}, {});
+    expect(fujii.human.sigma).toBeLessThan(plain.human.sigma);
+    expect(Object.values(fujii.human.miss).every((value) => value === 0)).toBe(true);
+    expect(fujii.human.limit).toEqual({ A: 0, B: 0 });
+    expect(fujii.discipleSkills).toContain('fujii-curve');
+  });
+
+  it('秒読みの重圧は、持ち時間の適性が低いほど重く、秒読みに強いで軽くなる', () => {
+    const clock = { pressure: 'byoyomi', short: true };
+    const good = discipleMoveSettings(strength(), { aptitudes: { fast: 'A' } }, { clock, time: 'fast' });
+    const bad = discipleMoveSettings(strength(), { aptitudes: { fast: 'G' } }, { clock, time: 'fast' });
+    const skilled = discipleMoveSettings(strength(['byoyomi']), { aptitudes: { fast: 'G' } }, { clock, time: 'fast' });
+    expect(good.nodes).toBeGreaterThan(bad.nodes);
+    expect(skilled.nodes).toBeGreaterThan(bad.nodes);
+    expect(bad.human.sigma).toBeGreaterThan(good.human.sigma);
+  });
+
+  it('戦い方は攻めの好みとして手の選び方に渡る', () => {
+    expect(discipleMoveSettings(strength([], 'lead'), { style: 'lead' }, {}).style.attack).toBeGreaterThan(0);
+    expect(discipleMoveSettings(strength([], 'counter'), { style: 'counter' }, {}).style.attack).toBeLessThan(0);
+  });
+
+  it('隠れた弱点は今の棋士の特徴として効き、勝ちきる力は優勢で緩むを打ち消す', () => {
+    const loose = discipleMoveSettings(strength(), { weakness: 'loose-when-ahead' }, { advantage: 800 });
+    const closer = discipleMoveSettings(strength(['closer']), { weakness: 'loose-when-ahead' }, { advantage: 800 });
+    expect(loose.activeTraits).toContain('loose-when-ahead');
+    expect(closer.activeTraits ?? []).not.toContain('loose-when-ahead');
+  });
+
+  it('自己対局の選手の指定を読む', () => {
+    const settings = discipleSelfplaySettings('D900-900-900-900+fujii-curve');
+    expect(settings.level).toBe(Math.round(statLevel(900)));
+    expect(settings.discipleSkills).toEqual(['fujii-curve']);
+    expect(discipleSelfplaySettings('L30')).toBeNull();
   });
 });

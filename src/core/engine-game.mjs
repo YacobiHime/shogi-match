@@ -3,6 +3,7 @@
 // 1手ごとに中継の棋譜と同じ形(relay-game.mjsのRelayMoveEntry)で渡すので、中継の画面と回戦のボードはそのまま使える。
 // エンジンの呼び出しは、引数のsearchに任せる(画面に依存しない)。途中までの棋譜(resume)から続きを指せる。
 
+import { discipleMoveSettings } from './disciple-strength.mjs';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { createRng } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from './strength-settings.mjs';
@@ -26,6 +27,8 @@ import { resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
 /** ロジックAIで指すLvの手の、形勢を見るための読み(画面のバーと解説に使う)。 */
 export const EVAL_NODES = 3000;
+/** 弟子の時計の「残りが少ない」(持ち時間の1割より少ない)。 */
+const DISCIPLE_LOW_TIME = 0.1;
 /** 手の印の、最善手との差(点)。 */
 export const MARK_LOSS = Object.freeze({ decisive: 600, error: 250, slip: 100 });
 /** 投了は、この手数までは投げない(序盤の大差は、まだ指す)。いつ投げるかは、棋士の投了の早さ(resign-style.mjs。29章)。 */
@@ -240,10 +243,18 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     const strength = strengths[side];
     const rng = createRng(((spec.seed ?? 0) ^ Math.imul(ply + 1, 0x9e3779b1)) >>> 0);
     const random = () => rng.next();
-    const situation = player?.character ? characterSituation({ sfen, ply }) : null;
-    const withCharacter = (advantage) => (situation
-      ? applyCharacter(strength.settings, player.character, { ...situation, advantage }, { skill: strength.skill })
-      : strength.settings);
+    const disciple = player?.disciple ?? null;
+    const situation = player?.character || disciple ? characterSituation({ sfen, ply }) : null;
+    // 師匠の1年の弟子(docs/disciple-mode-design.mdの22章)は、能力値・スキル・戦い方・持ち時間の適性で1手ごとの設定を作る。
+    const pressure = clock.remaining[side] <= 0 ? 'byoyomi' : clock.remaining[side] < clock.control.main * DISCIPLE_LOW_TIME ? 'low' : null;
+    const withCharacter = (advantage) => (disciple
+      ? discipleMoveSettings(disciple.strength, disciple.profile ?? {}, {
+        ...situation, ply, advantage: advantage ?? 0, time: disciple.time ?? null,
+        clock: pressure ? { pressure, short: clock.control.byoyomi <= 30 } : null,
+      })
+      : situation
+        ? applyCharacter(strength.settings, player.character, { ...situation, advantage }, { skill: strength.skill })
+        : strength.settings);
     const planMove = openingPlanMove({ plans, side, ply, record, moves, legal: allowed, formations, lastCapture });
 
     const before = withCharacter();
@@ -321,6 +332,8 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
       time: seconds,
       mark,
     };
+    // 弟子の手は、観戦の見立て(崩れた理由。disciple-strength.mjsのcauseOf)のために、気づかなかったこと・詰みを逃したか・時計を残す。
+    if (disciple) entry.d = { o: choice?.oversights?.length ? 1 : 0, m: choice?.ownMateMissed && !(chosen?.score?.type === 'mate' && chosen.score.value > 0) ? 1 : 0, c: pressure ?? '' };
     entries.push(entry);
     lastEval = evalCp;
     onMove(entry, entries.length - 1);
