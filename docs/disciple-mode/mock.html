@@ -7,7 +7,7 @@
 <!--
   師匠の1年(docs/disciple-mode-design.md)の画面の見本。動く部分は見本のための最小限。
   立ち絵を真ん中に大きく置き、UIはその上に重ねる(育成シミュレーションの型。17章のユーザーの指定)。
-  弟子の絵はまだないので、仮の影絵(SVG)で置いている。
+  弟子の絵はまだないので、百花の立ち絵を仮に使っている(19-9)。
   上の「画面」の帯は見本の切り替えで、本物の画面には出ない。?s=home などで直接開ける。
 -->
 <style>
@@ -41,9 +41,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .screen.on { display: block; }
 
 /* ---- 立ち絵(真ん中に大きく) */
-.figure { position: absolute; z-index: 1; left: 50%; bottom: 0; height: min(92%, 62rem); aspect-ratio: 0.46; transform: translateX(-50%); pointer-events: none; }
-.figure svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
-.figure .tag { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(255,255,255,0.85); color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.figure { position: absolute; z-index: 1; left: 50%; top: 5%; height: 150%; aspect-ratio: 0.344; transform: translateX(-50%); pointer-events: none; }
+.figure img { width: 100%; height: 100%; display: block; object-fit: contain; object-position: 50% 0; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
+.figure .tag { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(255,255,255,0.85); color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
 .figure.bounce { animation: bounce 0.5s ease; }
 @keyframes bounce { 30% { transform: translateX(-50%) translateY(-10px); } 60% { transform: translateX(-50%) translateY(0); } }
 
@@ -71,6 +71,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stats h3 { margin: 0 0 0.1rem; font-size: 0.72rem; color: var(--muted); }
 .stats .who { display: flex; justify-content: space-between; align-items: baseline; }
 .stats .who b { font-size: 0.95rem; } .stats .who small { color: var(--muted); font-size: 0.7rem; }
+
+/* ---- スキルの札 */
+.skills { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
+.skill { padding: 0.08rem 0.45rem; border-radius: 999px; background: linear-gradient(90deg, #ffe6a8, #ffd0a0); color: #6a3a10; font-size: 0.66rem; font-weight: 900; }
+.skill--hidden { background: #e6e1d6; color: var(--muted); }
+.tr .aim { position: absolute; top: 0.3rem; right: 0.4rem; padding: 0 0.35rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.58rem; }
 
 /* ---- 右のやる気・体力 */
 .mood { position: absolute; z-index: 5; right: 0.6rem; top: 4.6rem; width: 11rem; display: grid; gap: 0.5rem; padding: 0.55rem 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
@@ -204,9 +210,41 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pc b { display: block; font-size: 0.88rem; } .pc small { color: var(--muted); font-size: 0.7rem; }
 .pick-go { position: absolute; z-index: 6; right: 0.6rem; bottom: 0.6rem; min-width: 12rem; min-height: 3.6rem; border: 0; border-radius: 1rem; background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 900; box-shadow: 0 4px 0 #b86f22; }
 
+/* ---- 観戦の見立て */
+.watch { position: absolute; inset: 0; z-index: 4; display: grid; grid-template-columns: minmax(0, 1fr) 19rem; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0.5rem; padding: 0.6rem; background: rgba(28, 38, 48, 0.94); color: #fff; }
+.watch .head { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; }
+.watch .head b { font-size: 1rem; } .watch .head small { color: #b8c6d2; }
+.watch .speed { margin-left: auto; display: flex; gap: 0.3rem; }
+.watch .speed button { min-height: 2.4rem; padding: 0 0.7rem; border: 1px solid #50606e; border-radius: 0.6rem; background: transparent; color: #fff; font-weight: 800; }
+.boardbox { display: grid; place-items: center; min-height: 0; }
+.ban { position: relative; height: 100%; max-height: 30rem; aspect-ratio: 1; background: #e3bd74; border: 3px solid #7a5426; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); }
+.ban i { border: 1px solid rgba(80, 50, 20, 0.45); display: grid; place-items: center; color: #2a1a0a; font-style: normal; font-weight: 900; font-size: clamp(0.6rem, 2.2vh, 1.1rem); }
+.ban i.ring { box-shadow: inset 0 0 0 3px #e0453a; border-radius: 50%; }
+.ban i.last { background: rgba(90, 166, 106, 0.45); }
+.clock { position: absolute; padding: 0.15rem 0.5rem; border-radius: 0.4rem; background: #1d2a36; color: #fff; font-size: 0.8rem; font-weight: 900; }
+.clock.warn { background: #d8655b; }
+.side { display: grid; align-content: start; gap: 0.5rem; min-height: 0; }
+.ask { padding: 0.6rem; border-radius: 0.9rem; background: var(--paper); color: var(--ink); }
+.ask h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.ask p { margin: 0 0 0.4rem; font-size: 0.76rem; color: var(--muted); }
+.clues { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.4rem; }
+.clues span { padding: 0.1rem 0.45rem; border-radius: 999px; background: #f0e7d6; font-size: 0.68rem; font-weight: 800; }
+.reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+.reasons button { min-height: 2.8rem; border: 2px solid var(--line); border-radius: 0.7rem; background: #fff; font-weight: 900; font-size: 0.82rem; }
+.reasons button small { display: block; color: var(--muted); font-size: 0.62rem; font-weight: 700; }
+.reasons button.right { border-color: var(--green); background: #e9f6ea; }
+.reasons button:last-child { grid-column: 1 / -1; }
+.found { padding: 0.55rem 0.6rem; border-radius: 0.9rem; background: #fff3e2; color: var(--ink); font-size: 0.8rem; }
+.found b { color: #c0661b; }
+.eye { font-size: 0.72rem; color: #b8c6d2; }
+.graph { grid-column: 1 / -1; position: relative; height: 7.5rem; border-radius: 0.8rem; background: #fff; overflow: hidden; }
+.graph svg { width: 100%; height: 100%; display: block; }
+.mark { position: absolute; top: 0.3rem; transform: translateX(-50%); padding: 0.05rem 0.4rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.66rem; font-weight: 900; }
+.mark.done { background: var(--green); }
+
 /* ---- スマホ縦: 立ち絵は真ん中のまま、UIを上下に寄せる */
 @media (max-width: 640px) {
-  .figure { height: 74%; bottom: 7.2rem; }
+  .figure { top: 9%; height: 118%; }
   .top { top: 0.4rem; left: 0.4rem; right: 0.4rem; }
   .turn { min-width: 4.6rem; } .turn b { font-size: 0.9rem; }
   .goal { padding: 0.3rem 0.5rem; } .goal b { font-size: 0.8rem; } .goal small { font-size: 0.62rem; }
@@ -244,7 +282,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .pick-cards { top: 3.6rem; right: 0.4rem; width: 9rem; }
   .pc { grid-template-columns: 1.8rem 1fr; padding: 0.3rem; } .pc .dot { width: 1.8rem; height: 1.8rem; }
   .pick-go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
-  .figure.pickfig { bottom: 13rem; height: 62%; }
+  .figure.pickfig { top: 7%; height: 100%; }
+}
+@media (max-width: 640px) {
+  .watch { grid-template-columns: 1fr; grid-template-rows: auto auto auto minmax(0, 1fr); padding: 0.4rem; gap: 0.35rem; overflow-y: auto; }
+  .watch .head small { display: none; }
+  .ban { height: auto; width: 100%; max-height: none; }
+  .graph { grid-column: auto; height: 5.5rem; order: 0; }
+  .side { order: 1; }
+  .watch .speed button { padding: 0 0.5rem; min-height: 2.2rem; }
 }
 @media (max-width: 640px) and (max-height: 760px) { .stats .stat:nth-child(n+7) { display: none; } }
 </style>
@@ -257,6 +303,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   <button data-go="lesson">4 指導の引き出し</button>
   <button data-go="bigone">5 大一番の作戦</button>
   <button data-go="reikai">6 例会の結果と言葉</button>
+  <button data-go="watch">7 観戦の見立て</button>
 </nav>
 
 <main class="game">
@@ -410,10 +457,43 @@ button { font: inherit; color: inherit; cursor: pointer; }
       </div>
     </div>
   </section>
+
+  <!-- 7 観戦の見立て(19-5) -->
+  <section class="screen" id="watch">
+    <div class="watch">
+      <div class="head"><b>観戦　研修会 入会試験 3局目</b><small>湊（先手）対 天鷺門下の子　78手目</small>
+        <div class="speed"><button>×1</button><button>×4</button><button>次の印へ ▶</button></div></div>
+      <div class="boardbox"><div class="ban" id="ban"></div></div>
+      <div class="side">
+        <div class="ask">
+          <h3>形勢が落ちた。理由は？</h3>
+          <p>78手目の湊の手のあと、評価値が＋210から−640へ。手がかりを見て、足りないものを選ぼう。</p>
+          <div class="clues"><span>78手目（終盤の入口）</span><span>残り時間 4分</span><span>赤い輪：取られる銀</span></div>
+          <div class="reasons">
+            <button>読み負け<small>相手の狙いに遅れた</small></button>
+            <button>作戦負け<small>序盤から不利</small></button>
+            <button class="right">うっかり<small>取られる駒の見落とし</small></button>
+            <button>詰み逃し<small>詰みや詰めろ</small></button>
+            <button>時間切迫<small>秒読みで手が荒れた</small></button>
+          </div>
+        </div>
+        <div class="found">正解！ 銀の当たりを<b>見落とした</b>。<br>「安定」の稽古が<b>狙い目（伸び×1.5・3ターン）</b>になった。<br><small>うっかり 1/3回 …あと2回で弱点の名前が分かる</small></div>
+        <div class="eye">師匠の眼 二段（見抜いた数 7）</div>
+      </div>
+      <div class="graph">
+        <svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="50" x2="400" y2="50" stroke="#d9d2c4" stroke-width="1"/>
+          <polyline fill="none" stroke="#4f86c6" stroke-width="2.5" points="0,50 30,48 60,44 90,46 120,40 150,36 180,38 205,34 215,70 240,66 270,62 300,58 330,64 345,90 370,92 400,96"/>
+          <circle cx="215" cy="70" r="4" fill="#e2457a"/><circle cx="345" cy="90" r="4" fill="#e2457a"/>
+        </svg>
+        <span class="mark done" style="left:53.7%">78手目 ✓</span><span class="mark" style="left:86%">112手目</span>
+      </div>
+    </div>
+  </section>
 </main>
 
 <script>
-// ---- 仮の立ち絵(影絵)。弟子ごとに色だけ変える。
+// ---- 弟子の候補(名前は仮)。
 const DISCIPLES = [
   { name: '相沢 湊（仮）', age: '中学1年・12歳', color: 'var(--c1)', hair: '#33415a', text: '将棋教室の大会で負けて泣いた日、あなたに「弟子にしてください」と頼みに来た。', good: '受け・粘り', bad: '攻めが遅い・自信がない', diff: '★★☆', limit: 'ゆとりあり' },
   { name: '朝比奈 紬（仮）', age: '高校1年・15歳', color: 'var(--c2)', hair: '#4a3446', text: '将棋を始めたのは中学3年。遅く始めた分、研究ノートは誰よりも厚い。', good: '研究・序盤', bad: '終盤の読み・体力', diff: '★★★', limit: '時間との勝負' },
@@ -421,21 +501,8 @@ const DISCIPLES = [
 ];
 let current = 0;
 function figureSvg(d) {
-  return `<svg viewBox="0 0 230 500" aria-hidden="true">
-    <ellipse cx="115" cy="492" rx="80" ry="8" fill="rgba(0,0,0,.12)"/>
-    <path d="M60 210 Q115 180 170 210 L190 420 Q115 440 40 420 Z" fill="${d.color}"/>
-    <rect x="82" y="410" width="26" height="80" rx="10" fill="#e9d5c3"/><rect x="122" y="410" width="26" height="80" rx="10" fill="#e9d5c3"/>
-    <rect x="78" y="478" width="34" height="14" rx="6" fill="#3a3a44"/><rect x="118" y="478" width="34" height="14" rx="6" fill="#3a3a44"/>
-    <path d="M60 215 Q40 300 52 360" stroke="${d.color}" stroke-width="26" stroke-linecap="round" fill="none"/>
-    <path d="M170 215 Q190 300 178 360" stroke="${d.color}" stroke-width="26" stroke-linecap="round" fill="none"/>
-    <circle cx="52" cy="366" r="13" fill="#f2dfcf"/><circle cx="178" cy="366" r="13" fill="#f2dfcf"/>
-    <path d="M95 200 L115 240 L135 200 Z" fill="#fff"/>
-    <rect x="104" y="170" width="22" height="30" fill="#f2dfcf"/>
-    <circle cx="115" cy="120" r="62" fill="#f6e6d8"/>
-    <path d="M52 118 Q50 50 115 48 Q182 50 178 118 Q160 80 115 84 Q72 82 52 118 Z" fill="${d.hair}"/>
-    <ellipse cx="94" cy="128" rx="6" ry="9" fill="#2b2b33"/><ellipse cx="136" cy="128" rx="6" ry="9" fill="#2b2b33"/>
-    <path d="M104 156 Q115 163 126 156" stroke="#9b5a4a" stroke-width="3" fill="none" stroke-linecap="round"/>
-  </svg><span class="tag">仮の立ち絵（${d.name}）</span>`;
+  // 弟子の絵ができるまで、百花の立ち絵を仮に使う(19-9)。
+  return `<img src="../../public/characters/sakurano-momoka.webp" alt="仮の立ち絵（百花の絵で代用）">`;
 }
 function drawFigures() {
   for (const el of document.querySelectorAll('[data-fig]')) el.innerHTML = figureSvg(DISCIPLES[current]);
@@ -443,15 +510,16 @@ function drawFigures() {
 
 // ---- 能力(5つ)
 const STATS = [
-  { name: '序盤', rank: 'E', value: 182 }, { name: '中盤', rank: 'E', value: 168 }, { name: '終盤', rank: 'D', value: 226 },
-  { name: '受け', rank: 'D+', value: 251 }, { name: '心', rank: 'F', value: 120 },
+  { name: '読み', rank: 'E', value: 342 }, { name: '作戦', rank: 'F', value: 268 }, { name: '安定', rank: 'D', value: 488 },
+  { name: '詰み', rank: 'E', value: 395 }, { name: '時間', rank: 'F', value: 214 },
 ];
+const SKILLS = [{ name: '早見え', star: 1 }, { name: '？？？', star: 0, hidden: true }];
 const TRAINS = [
-  { id: 'tsume', name: '詰将棋', ic: '🧩', lv: 2, fail: 4, cost: 20, gains: [0, 0, 14, 0, 4], friends: ['momoka'] },
-  { id: 'kifu', name: '棋譜並べ', ic: '📜', lv: 1, fail: 4, cost: 15, gains: [11, 4, 0, 0, 0], friends: [] },
-  { id: 'jissen', name: '実戦', ic: '♟', lv: 1, fail: 6, cost: 22, gains: [0, 12, 0, 5, 0], friends: ['pro'] },
-  { id: 'uke', name: '受けの特訓', ic: '🛡', lv: 3, fail: 9, cost: 25, gains: [0, 0, 4, 16, 0], friends: [] },
-  { id: 'shisho', name: '師匠と指す', ic: '🏯', lv: 1, fail: 2, cost: 12, gains: [0, 0, 0, 0, 10], friends: [] },
+  { id: 'tsume', name: '詰将棋', ic: '🧩', lv: 2, fail: 4, cost: 20, gains: [6, 0, 0, 18, 0], friends: ['momoka'] },
+  { id: 'kifu', name: '棋譜並べ', ic: '📜', lv: 1, fail: 4, cost: 15, gains: [0, 16, 5, 0, 0], friends: [], aim: true },
+  { id: 'jissen', name: '実戦', ic: '♟', lv: 1, fail: 6, cost: 22, gains: [15, 0, 6, 0, 0], friends: ['pro'] },
+  { id: 'fast', name: '早指し', ic: '⏱', lv: 3, fail: 9, cost: 25, gains: [5, 0, 0, 0, 17], friends: [] },
+  { id: 'shisho', name: '師匠と指す', ic: '🏯', lv: 1, fail: 2, cost: 12, gains: [0, 0, 14, 0, 0], friends: [] },
 ];
 const FRIENDS = {
   momoka: { img: '../../public/characters/sakurano-momoka-320.webp', heart: 60, px: false },
@@ -461,16 +529,17 @@ const FRIENDS = {
 const friendHtml = (id) => { const f = FRIENDS[id]; return `<span class="friend${f.px ? ' px' : ''}"><img src="${f.img}" alt=""><span class="heart"><i style="width:${f.heart}%"></i></span></span>`; };
 function statsHtml(gains = null) {
   const d = DISCIPLES[current];
+  const skills = `<div class="skills">${SKILLS.map((skill) => `<span class="skill${skill.hidden ? ' skill--hidden' : ''}">${skill.hidden ? '弱点 ？' : `${skill.name}${'★'.repeat(skill.star)}`}</span>`).join('')}</div>`;
   return `<div class="who"><b>${d.name.replace('（仮）', '')}</b><small>研修会前</small></div>` + STATS.map((stat, index) => {
     const rank = stat.rank.replace('+', '');
     const up = gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : `<span></span>`;
-    return `<div class="stat"><span class="name">${stat.name}</span><span class="rank r-${rank}">${stat.rank}</span><span class="bar"><i class="r-${rank}" style="width:${Math.min(100, stat.value / 4)}%"></i></span><span class="num">${gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : stat.value}</span></div>`;
-  }).join('');
+    return `<div class="stat"><span class="name">${stat.name}</span><span class="rank r-${rank}">${stat.rank}</span><span class="bar"><i class="r-${rank}" style="width:${Math.min(100, stat.value / 12)}%"></i></span><span class="num">${gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : stat.value}</span></div>`;
+  }).join('') + skills;
 }
 let pickedTrain = 0;
 function drawTrain() {
   const row = document.getElementById('train-row');
-  row.innerHTML = TRAINS.map((t, index) => `<button class="tr" data-tr="${index}" aria-pressed="${index === pickedTrain}"><span class="lv">Lv${t.lv}</span>${t.friends.length ? `<span class="badge">${t.friends.map(friendHtml).join('')}</span>` : ''}<span style="font-size:1.4rem">${t.ic}</span>${t.name}<span class="fail${t.fail >= 8 ? ' warn' : ''}">失敗 ${t.fail}%</span></button>`).join('') + `<button class="cmd sub" data-go="home">戻る</button>`;
+  row.innerHTML = TRAINS.map((t, index) => `<button class="tr" data-tr="${index}" aria-pressed="${index === pickedTrain}"><span class="lv">Lv${t.lv}</span>${t.aim ? '<span class="aim">狙い目</span>' : ''}${t.friends.length ? `<span class="badge">${t.friends.map(friendHtml).join('')}</span>` : ''}<span style="font-size:1.4rem">${t.ic}</span>${t.name}<span class="fail${t.fail >= 8 ? ' warn' : ''}">失敗 ${t.fail}%</span></button>`).join('') + `<button class="cmd sub" data-go="home">戻る</button>`;
   const t = TRAINS[pickedTrain];
   document.getElementById('tr-name').textContent = t.name + (t.friends.length ? '　仲間と一緒' : '');
   document.getElementById('tr-note').textContent = `体力 −${t.cost}・失敗 ${t.fail}%`;
@@ -501,6 +570,10 @@ document.querySelectorAll('[data-go]').forEach((el) => el.addEventListener('clic
 document.querySelectorAll('[data-choice]').forEach((group) => group.querySelectorAll('.opt').forEach((opt) => opt.addEventListener('click', () => {
   group.querySelectorAll('.opt').forEach((other) => other.setAttribute('aria-pressed', String(other === opt)));
 })));
+(function drawBan() {
+  const pieces = { 0: '香', 1: '桂', 7: '桂', 8: '香', 12: '玉', 13: '金', 21: '歩', 22: '歩', 24: '歩', 40: '角', 47: '銀', 56: '歩', 58: '歩', 60: '歩', 66: '金', 67: '銀', 70: '金', 75: '玉', 79: '香' };
+  document.getElementById('ban').innerHTML = Array.from({ length: 81 }, (_, i) => `<i class="${i === 47 ? 'ring' : i === 40 ? 'last' : ''}">${pieces[i] ?? ''}</i>`).join('') + '<span class="clock warn" style="right:0.3rem;bottom:0.3rem">湊 残り4分</span>';
+})();
 drawFigures(); drawPick(); drawHome(); drawTrain();
 show(new URLSearchParams(location.search).get('s') || 'home');
 </script>
