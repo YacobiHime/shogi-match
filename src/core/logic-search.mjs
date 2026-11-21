@@ -226,9 +226,20 @@ function search(ctx, depth, alpha, beta, ply, allowNull) {
   let bestPv = [];
   let legal = 0;
   for (const move of moves) {
+    const quiet = !victimValue(board, move) && !((move >> 14) & 1);
     if (!tryMake(board, move)) continue;
     legal += 1;
-    const child = search(ctx, depth - 1, -beta, -alpha, ply + 1, true);
+    let child;
+    if (legal === 1) {
+      child = search(ctx, depth - 1, -beta, -alpha, ply + 1, true);
+    } else {
+      // 2手目からは、まず「最善を超えるか」だけを狭い窓で読む。後ろの静かな手は1手浅く読む(超えたら読み直す)。
+      const reduce = quiet && !inCheck && depth >= 3 && legal > 3 && !board.inCheck() ? 1 : 0;
+      child = search(ctx, depth - 1 - reduce, -alpha - 1, -alpha, ply + 1, true);
+      if (!ctx.stopped && -child.score > alpha && (reduce || -child.score < beta)) {
+        child = search(ctx, depth - 1, -beta, -alpha, ply + 1, true);
+      }
+    }
     board.unmake(move);
     if (ctx.stopped) return { score: 0, pv: [] };
     const score = -child.score;
