@@ -39,6 +39,10 @@ const SIZES = [
   ['landscape', 844, 340],
   ['tablet', 820, 1180],
   ['desktop', 1366, 768],
+  // 広い画面の境目と、ユーザーの写真の大きさ(タイルの名前がはみ出した。5-7)。
+  ['wide-edge', 1100, 700],
+  ['laptop', 1280, 720],
+  ['fullhd', 1918, 906],
 ];
 
 /** いちばん長くなる形に書き換える(高さは文の長さで変わるところだけ)。 */
@@ -81,7 +85,16 @@ function measure() {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height < 43.5;
   }).map((el) => `${el.className.split(' ')[0]}:${Math.round(el.getBoundingClientRect().height)}`);
+  // タイルの名前がタイルの枠からはみ出していないか(5-7)。
+  const spill = [...home.querySelectorAll('.shogi-title__tile')].filter((tile) => {
+    const label = tile.querySelector('.shogi-title__label');
+    if (!label || label.getBoundingClientRect().width === 0) return false;
+    const t = tile.getBoundingClientRect();
+    const l = label.getBoundingClientRect();
+    return l.right > t.right - 2 || l.left < t.left + 2 || label.scrollWidth > label.clientWidth + 1;
+  }).map((tile) => tile.querySelector('.shogi-title__label').textContent.trim());
   return {
+    spill,
     scroll: home.scrollHeight - home.clientHeight,
     contentTop: Math.round(top - rect.top),
     contentBottom: Math.round(bottom - rect.top),
@@ -115,9 +128,9 @@ for (const mode of ['real', 'stress']) {
     await page.waitForTimeout(100);
     const m = await page.evaluate(measure);
     const portrait = height > width && height >= 540 && width >= 320;
-    const ok = (!portrait || m.scroll <= 0) && m.pageOverflowX <= 0 && !m.subOverGo && m.small.length === 0;
+    const ok = (!portrait || m.scroll <= 0) && m.pageOverflowX <= 0 && !m.subOverGo && m.small.length === 0 && m.spill.length === 0;
     if (!ok) failed += 1;
-    console.log(`${ok ? 'OK ' : 'NG '} ${mode.padEnd(6)} ${name.padEnd(17)} ${width}x${height} 中身 ${m.contentTop}〜${m.contentBottom}/${m.viewHeight}px スクロール ${Math.max(0, m.scroll)}px${m.pageOverflowX > 0 ? ` 横はみ出し${m.pageOverflowX}px` : ''}${m.subOverGo ? ' 2つ目の入口が「はじめる」に重なる' : ''}${m.small.length ? ` 44px未満: ${m.small.join(' ')}` : ''}`);
+    console.log(`${ok ? 'OK ' : 'NG '} ${mode.padEnd(6)} ${name.padEnd(17)} ${width}x${height} 中身 ${m.contentTop}〜${m.contentBottom}/${m.viewHeight}px スクロール ${Math.max(0, m.scroll)}px${m.pageOverflowX > 0 ? ` 横はみ出し${m.pageOverflowX}px` : ''}${m.subOverGo ? ' 2つ目の入口が「はじめる」に重なる' : ''}${m.small.length ? ` 44px未満: ${m.small.join(' ')}` : ''}${m.spill.length ? ` 名前がはみ出す: ${m.spill.join('・')}` : ''}`);
     if (out) await page.screenshot({ path: `${out}/${mode}-${name}.png` });
     await page.close();
   }

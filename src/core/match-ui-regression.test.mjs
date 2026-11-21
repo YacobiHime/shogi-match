@@ -1167,6 +1167,11 @@ describe("match screen regressions", () => {
     // 盤の大きさを変えないよう、中継の1行は高さを決めておく。
     expect(source).toMatch(/\.shogi-game__presence-line \{\s*display: block;\s*min-height: 1\.4em;/);
   });
+  it("ホームのあそぶの5つのタイルは、どの大きさでもアイコンの下に名前を置き、名前の大きさをタイルの幅から決める(docs/home-roadmap-design.mdの5-7)", () => {
+    expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__tile \{\s*container-type: inline-size;\s*grid-template-columns: minmax\(0, 1fr\);\s*grid-template-areas: "icon" "label" "desc";/);
+    expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__label \{\s*max-width: 100%;\s*font-size: min\(1\.1em, \d+cqi\);/);
+    expect(source).toMatch(/\.shogi-game \.shogi-title__tiles--play \.shogi-title__tile-badge \{[^}]*white-space: nowrap;/);
+  });
   it("羽音との1局では、開幕の札だけ立ち絵を出し、ほかはドット絵のまま(docs/hanane-rival-design.mdの12章)", () => {
     expect(source).toMatch(/sprite: opponent\.story === HANANE \? `\$\{props\.assetBaseUrl\}\/characters\/\$\{HANANE_SPRITE\.file\}/);
     expect(source).toMatch(/<img v-if="opponentFace\.sprite" :src="opponentFace\.sprite"/);
