@@ -25,6 +25,17 @@ describe('崩れ方の見立て(33-5)', () => {
     expect(classifyMove(entries, 'black', 5)).toMatchObject({ cause: 'policy', alt: 'plan' });
   });
 
+  it('思考の記録で言い切る: 研究の続き・定跡の手は作戦負け、手順表の手は方針の誤り。弟子の考えを手がかりに出す(34-17)', () => {
+    const moves = ['7g7f', '3c3d', '2g2f', '4c4d', '6i7h', '8b4b'];
+    const evals = [30, 20, 30, 20, -300, -320];
+    const follow = classifyMove(game(moves, evals, { 4: { d: { s: 'follow', r: 'follow' } } }), 'black', 5);
+    expect(follow).toMatchObject({ cause: 'plan', sub: 'research' });
+    expect(follow.facts[0]).toBe('弟子の考え「研究してきた手です」');
+    expect(classifyMove(game(moves, evals, { 4: { d: { s: 'book', r: 'book' } } }), 'black', 5)).toMatchObject({ cause: 'plan', sub: 'book' });
+    expect(classifyMove(game(moves, evals, { 4: { d: { s: 'quiet', r: 'edge-pawn' } } }), 'black', 5)).toMatchObject({ cause: 'policy', sub: 'quiet' });
+    expect(causeExplain({ cause: 'plan', sub: 'research' })).toContain('戦法熟練度');
+  });
+
   it('指したあと相手に詰みが生じた → 受け損ない。詰みを逃した → 寄せの誤り(詰み)', () => {
     const entries = game(['7g7f', '3c3d', '2g2f', '4c4d', '6i7h', '8b4b'], [30, 20, 30, 20, -29990, -29991]);
     expect(classifyMove(entries, 'black', 5)?.cause).toBe('defense');

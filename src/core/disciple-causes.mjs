@@ -8,7 +8,7 @@ import { captureOf, materialSwing } from './piece-points.mjs';
 import { detectTesujiShape, TESUJI_SHAPES } from './tesuji-shape.mjs';
 import { isSideToMoveInCheck } from './coach-advice.mjs';
 import { discipleWatchMoves, MARK_COUNT, MARK_MIN_LOSS } from './disciple-strength.mjs';
-import { evalWord } from './disciple-review.mjs';
+import { THOUGHT_LINES, evalWord } from './disciple-review.mjs';
 import { detectWazaTesuji } from './move-waza.mjs';
 
 /** 6つの崩れ方と、狙い目になる能力(33-5の表)。 */
@@ -128,12 +128,23 @@ export function classifyMove(entries, side, ply, { sfen = STANDARD_SFEN, sfens =
   if (checks >= 1) facts.push(`相手の王手が${checks}回続いた`);
   if (before >= CAUSE_RULES.winning) facts.push('指す前は勝っていた');
   const result = (cause, alt = null, sub = '', rings = [], threat = '') => ({ cause, alt, sub, swing, facts, rings, threat, tags, tesuji: tesujiName });
+  // 理由で指す棋士の思考の記録(34-17)。弟子がその手をどう考えて指したかを手がかりにし、崩れ方を言い切る。
+  const thought = entry.d ?? {};
+  if (thought.r && THOUGHT_LINES[thought.r]) facts.unshift(`弟子の考え「${THOUGHT_LINES[thought.r]}」`);
 
   if (missedMate) return result('yose', null, 'mate', [], '');
   if (allowedMate || (checks >= CAUSE_RULES.checkChain && (swing <= -CAUSE_RULES.lostPoints || after <= -1500))) {
     return result('defense', tesuji ? 'tactic' : null, '', firstTake.square ? [firstTake.square] : [], reply);
   }
+  // 駒を損していないのに形勢を損ねた手が、研究の続き・定跡の手なら作戦負け(研究が足りない・定跡のまま進めた)、
+  // 何もない局面の手順表の手なら方針の誤り(局面に合わない手を選んだ)。
+  if (swing > -CAUSE_RULES.lostPoints && before < CAUSE_RULES.winning) {
+    if (thought.s === 'follow') return result('plan', 'policy', 'research', [], '');
+    if (thought.s === 'book') return result('plan', 'policy', 'book', [], '');
+    if (thought.s === 'quiet') return result('policy', ply <= openingPly ? 'plan' : null, 'quiet', [], '');
+  }
   if (swing <= -CAUSE_RULES.lostPoints) {
+    if (Number(thought.p) > 0 && !oversight.includes('hanging')) facts.push(`読みは${thought.p}手まで`);
     // 相手の次の手が手筋の形か、駒を取らない手のあとに損をした → 手筋をくらった。次の手でそのまま取られた → うっかり。
     if ((tesuji || !replyCapture) && !oversight.includes('hanging')) {
       return result('tactic', 'careless', tesuji?.id ?? '', tesuji?.targets?.length ? tesuji.targets : [firstTake.square].filter(Boolean), reply);
@@ -234,10 +245,14 @@ export function causeExplain(mark) {
   switch (mark.cause) {
     case 'careless': return `うっかり${time}。次の手で駒をただで取られる形だった`;
     case 'tactic': return `手筋をくらった${time}。${mark.tesuji ? `相手の「${mark.tesuji}」` : '相手の次の手からの取り合い'}を読めていなかった`;
-    case 'policy': return `方針の誤り${time}。${mark.sub === 'slow' ? '攻めるべきところで守った（緩手）' : mark.sub === 'rush' ? '守るべきところで攻めた（攻め急ぎ）' : '駒の損得は動かないのに、形勢を損ねた'}`;
+    case 'policy': if (mark.sub === 'quiet') return `方針の誤り${time}。何もない局面の手を指したが、局面に合っていなかった（攻めや受けを急ぐ場面だった）`;
+      return `方針の誤り${time}。${mark.sub === 'slow' ? '攻めるべきところで守った（緩手）' : mark.sub === 'rush' ? '守るべきところで攻めた（攻め急ぎ）' : '駒の損得は動かないのに、形勢を損ねた'}`;
     case 'defense': return `受け損ない${time}。自分の玉の危険を見落とした`;
     case 'yose': return `寄せの誤り${time}。${mark.sub === 'mate' ? 'この局面には詰みがあった' : '勝っている終盤で、寄せが遅れた'}`;
-    case 'plan': return `作戦負け。序盤の駒組みのあいだに、少しずつ形勢を損ねた（${mark.startWord ?? '互角'} → ${mark.endWord ?? ''}）`;
+    case 'plan':
+      if (mark.sub === 'research') return '作戦負け。定跡のあとの研究の続きで、研究が足りなかった（戦法熟練度が上がると、研究の手が増える）';
+      if (mark.sub === 'book') return '作戦負け。定跡の手順のまま進めて、相手の手に合っていなかった';
+      return `作戦負け。序盤の駒組みのあいだに、少しずつ形勢を損ねた（${mark.startWord ?? '互角'} → ${mark.endWord ?? ''}）`;
     default: return causeLabel(mark.cause);
   }
 }

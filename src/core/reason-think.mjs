@@ -83,7 +83,7 @@ function bestReason(sfen, usi, score) {
  */
 export function chooseThinkingMove({ sfen, profile, planMove = null, random = Math.random }) {
   const skipped = [];
-  const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, ...extra });
+  const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, depth: skipped.includes('hanging') ? 1 : profile.depth, ...extra });
   // 1. 自分の詰み。
   const mateLine = findMateLine(sfen, profile.mateDepth, { nodeLimit: 4000 * profile.mateDepth, maxTimeMs: 250 });
   if (mateLine?.length) return done(mateLine[0], 'mate', 'mate', { mate: mateLine.length, line: mateLine });

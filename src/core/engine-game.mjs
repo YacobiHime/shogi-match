@@ -364,7 +364,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
       const chosenMate = chosen?.score?.type === 'mate' && chosen.score.value > 0;
       entry.d = {
         o: thought.skipped?.length ? 1 : 0, m: bestMate && !chosenMate ? 1 : 0, c: pressure ?? '', k: [...(thought.skipped ?? [])],
-        s: thought.stage ?? '', r: thought.reason ?? '', l: (thought.line ?? []).slice(0, 4).join(' '),
+        s: thought.stage ?? '', r: thought.reason ?? '', l: (thought.line ?? []).slice(0, 4).join(' '), p: thought.depth ?? 0,
       };
     }
     entries.push(entry);
