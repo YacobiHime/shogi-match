@@ -88,6 +88,8 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   const mateLine = findMateLine(sfen, profile.mateDepth, { nodeLimit: 4000 * profile.mateDepth, maxTimeMs: 250 });
   if (mateLine?.length) return done(mateLine[0], 'mate', 'mate', { mate: mateLine.length, line: mateLine });
   // うっかり: この手は読みを1手だけにする(相手の返し・駒取りを読まない)。
+  // 1手の時間の上限(読みの時間の1.6倍)。定跡・手順表の手の確かめは、残りの時間で行う。
+  const deadline = Date.now() + profile.timeMs * 1.6;
   const careless = random() < profile.skip;
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
@@ -97,9 +99,9 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   if (!best) return null;
   // 3. 定跡: 最善より大きく劣らなければ定跡の手。
   const checkDepth = Math.max(1, depth - 1);
-  const scoreOpts = { depth: checkDepth, qdepth, maxTimeMs: Math.round(profile.timeMs / 2), shapeScale: profile.shapeScale };
+  const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale });
   if (planMove && planMove !== best.move) {
-    const planScore = scoreMoves(sfen, [planMove], scoreOpts).get(planMove);
+    const planScore = scoreMoves(sfen, [planMove], scoreOpts()).get(planMove);
     if (planScore && planScore.score >= best.score - BOOK_MARGIN) return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv });
   } else if (planMove === best.move) {
     return done(planMove, 'book', 'book', { score: best.score, line: best.pv });
@@ -122,7 +124,8 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
       if (!list.length) continue;
       if (list.includes(best.move)) return done(best.move, 'quiet', kind, { score: best.score, line: best.pv });
       if (tactical) continue;
-      const scores = scoreMoves(sfen, list, scoreOpts);
+      if (Date.now() > deadline - 30) break;
+      const scores = scoreMoves(sfen, list, scoreOpts());
       const good = list.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= best.score - profile.quietMargin);
       if (good.length) {
         const usi = good[Math.floor(random() * good.length)];
