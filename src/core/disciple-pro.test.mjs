@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEBUT_RATING, debutDisciples, debutRating, noteMasterGame, ongaeshiLine, pendingDebuts } from './disciple-pro.mjs';
+import { DEBUT_RATING, RIVAL_DEBUT_RATING, debutDisciples, debutRating, noteMasterGame, ongaeshiLine, pendingDebuts, pendingRivalDebut } from './disciple-pro.mjs';
+import { rivalFate } from './disciple-rival.mjs';
 import { createRoster, seasonEntry } from './ryuo-roster.mjs';
 import { createDiscipleRun } from './disciple-run.mjs';
 import { joinIchimon } from './disciple-ichimon.mjs';
@@ -55,5 +56,31 @@ describe('恩返し(31-2)', () => {
     expect(ichimon.members[0]).toMatchObject({ vsMaster: { wins: 0, losses: 1 }, ongaeshi: false });
     ichimon = noteMasterGame(ichimon, '1', false);
     expect(ichimon.members[0]).toMatchObject({ vsMaster: { wins: 1, losses: 1 }, ongaeshi: true });
+  });
+});
+
+describe('羽音の弟子の名簿入り(32章)', () => {
+  const withRival = (seed, kind, rival) => ({ ...ended(seed, kind), rival: { id: 'r1', name: '氷室 凛', gone: '', ...rival }, shoreikai: { world: { members: { r1: { rank: 7 } } } } });
+
+  it('先に四段になったか、三段まで来ていれば四段', () => {
+    expect(rivalFate(withRival(1, 'pro', { gone: 'pro' }))).toBe('pro');
+    expect(rivalFate({ ...withRival(1, 'pro', {}), shoreikai: { world: { members: { r1: { rank: 9 } } } } })).toBe('pro');
+    expect(rivalFate(withRival(1, 'retired', {}))).toBe('');
+    expect(rivalFate(ended(1, 'pro'))).toBe('');
+  });
+
+  it('羽音の弟子は一門で1人だけ、弟子の印なしで名簿に入る', () => {
+    const roster = createRoster({ seed: 4 });
+    const ichimon = ichimonOf(withRival(1, 'pro', { gone: 'pro' }), withRival(2, 'pro', { gone: 'pro' }));
+    expect(pendingRivalDebut(ichimon)?.rivalName).toBe('氷室 凛');
+    const result = debutDisciples(roster, ichimon);
+    expect(result.debuts).toContain('氷室 凛');
+    const rivalId = result.ichimon.rival.rosterId;
+    expect(result.roster.players[rivalId]).toMatchObject({ name: '氷室 凛', group: 6, dan: '四段', rating: RIVAL_DEBUT_RATING, rivalDisciple: { master: '羽音' } });
+    expect(result.roster.players[rivalId].disciple).toBeUndefined();
+    expect(seasonEntry(result.roster, rivalId).rivalDisciple).toMatchObject({ master: '羽音' });
+    expect(Object.values(result.roster.players).filter((player) => player.name === '氷室 凛')).toHaveLength(1);
+    expect(pendingRivalDebut(result.ichimon)).toBeNull();
+    expect(debutDisciples(result.roster, result.ichimon).debuts).toEqual([]);
   });
 });

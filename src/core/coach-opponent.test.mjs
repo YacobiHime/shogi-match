@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TRAITS } from './player-character.mjs';
-import { opponentStyleAdvice } from './coach-opponent.mjs';
+import { discipleMatchAdvice, opponentStyleAdvice } from './coach-opponent.mjs';
 
 describe('opponentStyleAdvice', () => {
   it('has a line for every special ability', () => {
@@ -19,5 +19,14 @@ describe('opponentStyleAdvice', () => {
     expect(opponentStyleAdvice({ attack: 0, traits: [] }, '中村')).toBeNull();
     expect(opponentStyleAdvice(null, '中村')).toBeNull();
     expect(opponentStyleAdvice({ attack: 0.7 }, '')).toBeNull();
+  });
+});
+
+describe('discipleMatchAdvice(32章)', () => {
+  it('育てた弟子と羽音の弟子には、棋風より先の一言', () => {
+    expect(discipleMatchAdvice({ name: '朝比奈 紬', disciple: { ichimonId: '1' } })?.text).toMatch(/^朝比奈 紬さんは、あなたが育てた弟子だよ！/);
+    expect(discipleMatchAdvice({ name: '氷室 凛', rivalDisciple: { master: '羽音' } })?.text).toMatch(/羽音さんの弟子/);
+    expect(discipleMatchAdvice({ name: '中村' })).toBeNull();
+    expect(discipleMatchAdvice(null)).toBeNull();
   });
 });

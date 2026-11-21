@@ -4,6 +4,7 @@
 // 画面に依存しない。
 
 import { STAT_KEYS } from './disciple-strength.mjs';
+import { rivalFate } from './disciple-rival.mjs';
 
 export const DISCIPLE_ICHIMON_KEY = 'yacobihime:shogi-match:disciple-ichimon:v1';
 const ICHIMON_VERSION = 1;
@@ -47,6 +48,9 @@ export function ichimonEntry(state) {
     top,
     skills: [...(state.skills ?? [])],
     turn: Number(state.end?.turn ?? state.turn) || 0,
+    // 羽音の弟子が四段になったか(32章。名簿に入るのは一門で1人だけ。同じ名前なので)。
+    rivalPro: rivalFate(state) === 'pro',
+    rivalName: String(state.rival?.name ?? ''),
     // 終わったときの年齢(四段になった弟子が名簿に入るときの歳。31章)。
     age: Math.floor(((Number(state.startAge) || 12) * 12 + Math.floor((Number(state.end?.turn ?? state.turn) || 0) / 2)) / 12),
   };
@@ -56,17 +60,21 @@ export function ichimonEntry(state) {
 export function loadIchimon(storage) {
   try {
     const parsed = JSON.parse(storage?.getItem(DISCIPLE_ICHIMON_KEY) ?? 'null');
-    if (parsed?.version === ICHIMON_VERSION && Array.isArray(parsed.members)) return { version: ICHIMON_VERSION, members: parsed.members.filter((m) => m && m.id) };
+    if (parsed?.version === ICHIMON_VERSION && Array.isArray(parsed.members)) {
+      const ichimon = { version: ICHIMON_VERSION, members: parsed.members.filter((m) => m && m.id) };
+      // 名簿に入った羽音の弟子(32章)。
+      return parsed.rival?.rosterId ? { ...ichimon, rival: { ...parsed.rival } } : ichimon;
+    }
   } catch {
     // 読めなければ空の一門。
   }
   return { version: ICHIMON_VERSION, members: [] };
 }
 
-/** @param {Storage | null | undefined} storage @param {{ members: any[] }} ichimon */
+/** @param {Storage | null | undefined} storage @param {{ members: any[], rival?: any }} ichimon */
 export function saveIchimon(storage, ichimon) {
   try {
-    storage?.setItem(DISCIPLE_ICHIMON_KEY, JSON.stringify({ version: ICHIMON_VERSION, members: ichimon.members }));
+    storage?.setItem(DISCIPLE_ICHIMON_KEY, JSON.stringify({ version: ICHIMON_VERSION, members: ichimon.members, ...(ichimon.rival ? { rival: ichimon.rival } : {}) }));
   } catch {
     // 保存できなくても遊べる。
   }
@@ -83,7 +91,7 @@ export function joinIchimon(ichimon, state) {
   const entry = ichimonEntry(state);
   const others = ichimon.members.filter((member) => member.id !== entry.id);
   const members = [...others, entry].slice(-ICHIMON_MAX);
-  return { ichimon: { version: ICHIMON_VERSION, members }, state: { ...state, ichimonJoined: members.length }, count: members.length, joined: true };
+  return { ichimon: { ...ichimon, version: ICHIMON_VERSION, members }, state: { ...state, ichimonJoined: members.length }, count: members.length, joined: true };
 }
 
 /**

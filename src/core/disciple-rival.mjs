@@ -117,5 +117,19 @@ export function noteRivalGame(rival, win) {
   rival.last = win ? 'win' : 'loss';
 }
 
+/**
+ * 育成が終わったときの、羽音の弟子の行く先(32章)。先に四段になったか、奨励会の三段まで来ていれば四段(そのうちリーグを抜ける)。
+ * 四段なら、竜王戦・名人戦の名簿に新四段として入る(disciple-pro.mjsのdebutDisciples)。
+ * @param {any} state 終わった育成
+ * @returns {'pro' | ''}
+ */
+export function rivalFate(state) {
+  const rival = state?.rival;
+  if (!rival?.id) return '';
+  if (rival.gone === 'pro') return 'pro';
+  const member = state.shoreikai?.world?.members?.[rival.id];
+  return member && member.rank >= SANDAN ? 'pro' : '';
+}
+
 /** 会員が羽音の弟子か。 */
 export const isRivalMember = (member) => Boolean(member?.rival);

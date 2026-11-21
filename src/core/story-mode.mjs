@@ -106,7 +106,10 @@ const discipleSubs = () => [
     ['disciple-rival-win-2', '師匠の1年で、弟子が羽音の弟子にまた勝つと読めます。'],
     ['disciple-rival-lose-1', '師匠の1年で、弟子が羽音の弟子に負けると読めます。'],
     ['disciple-rival-lose-2', '師匠の1年で、弟子が羽音の弟子にまた負けると読めます。'],
-  ].map(([scene, unlock]) => fileSub(scene, '師匠の1年', unlock, { disciple: '弟子', rival: '羽音の弟子', result: '' }, 'disciple')),
+    ['disciple-jealous', '師匠の1年で、連れてきた一門の先輩と弟子が親しくなると読めます。'],
+    ['disciple-clash', '師匠の1年で、2年目からの弟子の大一番の前の晩に読めます。'],
+    ['disciple-agelimit', '師匠の1年で、奨励会の先輩が年齢制限で去ると読めます。'],
+  ].map(([scene, unlock]) => fileSub(scene, '師匠の1年', unlock, { disciple: '弟子', rival: '羽音の弟子', result: '', senpai: '先輩', ageSenpai: '先輩' }, 'disciple')),
 ];
 
 /**

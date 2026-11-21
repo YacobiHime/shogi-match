@@ -199,6 +199,34 @@ export const DISCIPLE_SCENES = Object.freeze({
     }),
     fits: Object.freeze({ rematch: ['tsumugi', 'ao'], rest: ['minato'] }),
   }),
+  // 段階3の残りの場面(32章)。どれも1回の育成で1回だけ。
+  jealous: Object.freeze({
+    label: '一門のやきもち', script: 'disciple-jealous', max: 1,
+    effects: Object.freeze({
+      own: { mood: 1, text: '比べていないと、まっすぐ伝えた' },
+      learn: { senpaiBond: 2, stats: { plan: 10 }, text: '先輩に教わってみるよう勧めた' },
+      beat: { stats: { reading: 12 }, text: '先輩を越えてみろと言った' },
+    }),
+    fits: Object.freeze({ own: ['minato'], learn: ['tsumugi'], beat: ['ao'] }),
+  }),
+  clash: Object.freeze({
+    label: '師匠の大一番と重なる', script: 'disciple-clash', max: 1,
+    effects: Object.freeze({
+      go: { stats: { steady: 15 }, text: 'ひとりで行ってこいと、電話で送り出した' },
+      visit: { mood: 1, stamina: -10, text: '朝いちばんに、弟子の会場へ寄ってから対局へ向かった' },
+      letter: { stats: { plan: 12 }, text: '作戦のメモを書いて渡した' },
+    }),
+    fits: Object.freeze({ go: ['ao'], visit: ['minato'], letter: ['tsumugi'] }),
+  }),
+  agelimit: Object.freeze({
+    label: '年齢制限の先輩', script: 'disciple-agelimit', max: 1,
+    effects: Object.freeze({
+      talk: { mood: 1, text: 'やめていく先輩のことを、一緒に話した' },
+      resolve: { stats: { steady: 15, reading: 8 }, mood: -1, text: '自分は届くまで指すと決めさせた' },
+      rest: { stamina: 30, text: '今日は将棋を休ませた' },
+    }),
+    fits: Object.freeze({ talk: ['minato'], resolve: ['ao'], rest: ['tsumugi'] }),
+  }),
   pro: Object.freeze({ label: '四段昇段', script: 'disciple-pro', effects: Object.freeze({}), fits: Object.freeze({}) }),
   retired: Object.freeze({ label: '退会の日', script: 'disciple-retired', effects: Object.freeze({}), fits: Object.freeze({}) }),
 });
@@ -209,6 +237,11 @@ export const SCHOOL_SCENE = Object.freeze({ month: 7, half: '前半' });
 export const FAMILY_SCENE = Object.freeze({ zeroDays: 2, max: 2, gap: 12 });
 /** スランプ: 大一番で続けて負けた回数と、場面の回数の上限と間。乗り越えると安定が伸び、不屈を覚える。 */
 export const SLUMP_SCENE = Object.freeze({ losses: 2, max: 2, gap: 12, overcome: Object.freeze({ steady: 30 }) });
+
+/** 一門のやきもち(32章): 連れてきた一門の先輩との絆がこれだけになったら、育成に入って半年より後に1回。 */
+export const JEALOUS_SCENE = Object.freeze({ bond: 3, minTurn: 12 });
+/** 師匠の大一番と重なる(32章): 育成に入って1年より後の、弟子の大一番の前に1回(ほかの場面が積まれていないとき)。 */
+export const CLASH_SCENE = Object.freeze({ minTurn: 24 });
 
 /** その場面をこれまでに見た回数と、最後に見たターン。 */
 const seenOf = (state, key) => state.scenesSeen?.[key] ?? { count: 0, turn: -Infinity };
@@ -243,7 +276,18 @@ export function checkScenes(state, { calendar, event = null } = {}) {
       queueScene(state, 'school');
     }
   }
-  if (!event) return;
+  if (!event) {
+    // 一門のやきもち: 連れてきた先輩のうち、絆のいちばん深い人(32章)。
+    if (state.turn >= JEALOUS_SCENE.minTurn && seenOf(state, 'jealous').count === 0 && !state.sceneQueue?.length) {
+      const senpai = (state.team ?? []).filter((friend) => friend?.senpai)
+        .sort((a, b) => (state.bonds?.[b.id] ?? 0) - (state.bonds?.[a.id] ?? 0))[0];
+      if (senpai && (state.bonds?.[senpai.id] ?? 0) >= JEALOUS_SCENE.bond) {
+        state.sceneVars = { ...state.sceneVars, senpai: senpai.name, senpaiId: senpai.id };
+        queueScene(state, 'jealous');
+      }
+    }
+    return;
+  }
   // 1回の例会・試験で積む場面は1つまで(はじめての昇級＞スランプ＞家族の心配。続けて場面ばかりにしない。12-2)。
   const due = [];
   state.zeroDays = event.wins === 0 ? (state.zeroDays ?? 0) + 1 : 0;
@@ -261,6 +305,29 @@ export function checkScenes(state, { calendar, event = null } = {}) {
   }
   if (key === 'family') state.zeroDays = 0;
   queueScene(state, key);
+}
+
+/**
+ * 師匠の大一番と重なる場面を積む(32章)。次のターンが弟子の大一番のときに呼ぶ。積んだらtrue。
+ * 師匠(プレイヤー)の大会の暦は動かさない。重なったという設定の場面で、答えは弟子の育ちだけに効く。
+ * @param {any} state 書き換えてよい写し
+ * @param {boolean} big 次のターンが大一番か
+ */
+export function checkClash(state, big) {
+  if (!big || state.end || state.turn < CLASH_SCENE.minTurn || state.sceneQueue?.length) return false;
+  if (seenOf(state, 'clash').count > 0) return false;
+  return queueScene(state, 'clash');
+}
+
+/**
+ * 年齢制限の先輩の場面を積む(32章)。奨励会の知らせに、年齢制限で去った人が新しく出たときに呼ぶ。積んだらtrue。
+ * @param {any} state 書き換えてよい写し
+ * @param {string} name 去った先輩の名前
+ */
+export function checkAgeLimit(state, name) {
+  if (!name || state.end || seenOf(state, 'agelimit').count > 0) return false;
+  state.sceneVars = { ...state.sceneVars, ageSenpai: name };
+  return queueScene(state, 'agelimit');
 }
 
 /**
@@ -290,7 +357,9 @@ export function pendingScene(state) {
   const script = variants ? variants[Math.min(seenOf(state, key).count, variants.length - 1)] : def.script;
   const rival = state.rival?.name ?? '';
   const result = state.rival?.last === 'win' ? `${state.name}の勝ち` : `${rival}の勝ち`;
-  return { key, label: def.label, script: script.replace('{disciple}', state.discipleId), vars: { disciple: state.name, rival, result } };
+  const senpai = state.sceneVars?.senpai ?? '';
+  const ageSenpai = state.sceneVars?.ageSenpai ?? '';
+  return { key, label: def.label, script: script.replace('{disciple}', state.discipleId), vars: { disciple: state.name, rival, result, senpai, ageSenpai } };
 }
 
 /**
@@ -319,6 +388,9 @@ export function resolveScene(state, value) {
   if (effect.stamina) next.stamina = clamp(next.stamina + effect.stamina, 0, 100);
   if (effect.stats) next.stats = addGains(next.stats, effect.stats);
   for (const [id, amount] of Object.entries(effect.bonds ?? {})) next.bonds[id] = (next.bonds[id] ?? 0) + amount;
+  // 一門の先輩との絆(32章。先輩のidは場面を積んだときに残す)。
+  const senpaiId = next.sceneVars?.senpaiId;
+  if (effect.senpaiBond && senpaiId) next.bonds[senpaiId] = (next.bonds[senpaiId] ?? 0) + effect.senpaiBond;
   if (effect.aim) {
     const weakest = STAT_KEYS.reduce((low, stat) => (next.stats[stat] < next.stats[low] ? stat : low), STAT_KEYS[0]);
     next.aims[weakest] = { boost: Math.max(next.aims[weakest]?.boost ?? 1, effect.aim), turns: 3 };

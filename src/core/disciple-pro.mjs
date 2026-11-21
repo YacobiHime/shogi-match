@@ -13,6 +13,12 @@ const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 /** 名簿にまだ入っていない、四段になった一門の弟子。 */
 export const pendingDebuts = (ichimon) => (ichimon?.members ?? []).filter((member) => member.kind === 'pro' && !member.rosterId);
 
+/** 羽音の弟子の新四段のレーティング(32章。羽音の弟子は、名簿の新四段の真ん中から)。 */
+export const RIVAL_DEBUT_RATING = 1450;
+
+/** 名簿にまだ入っていない、四段になった羽音の弟子の行(一門で1人だけ。すでに入っていればnull)。 */
+export const pendingRivalDebut = (ichimon) => (ichimon?.rival?.rosterId ? null : (ichimon?.members ?? []).find((member) => member.rivalPro && member.rivalName) ?? null);
+
 /** 弟子の新四段のレーティング。 */
 export function debutRating(entry) {
   const mean = STAT_KEYS.reduce((sum, key) => sum + (Number(entry.stats?.[key]) || 0), 0) / STAT_KEYS.length;
@@ -22,11 +28,12 @@ export function debutRating(entry) {
 /**
  * 四段になった弟子を名簿に入れる(まだ入っていない人だけ。名簿と一門の新しい写しと、入った人の名前を返す)。
  * @param {any} roster 竜王戦・名人戦の棋士の名簿(なければ何もしない)
- * @param {{ version: number, members: any[] }} ichimon
+ * @param {{ version: number, members: any[], rival?: any }} ichimon
  */
 export function debutDisciples(roster, ichimon) {
   const debuts = pendingDebuts(ichimon);
-  if (!roster || !debuts.length) return { roster, ichimon, debuts: [] };
+  const rivalEntry = pendingRivalDebut(ichimon);
+  if (!roster || (!debuts.length && !rivalEntry)) return { roster, ichimon, debuts: [] };
   let next = roster;
   const members = ichimon.members.map((member) => ({ ...member }));
   const names = [];
@@ -41,7 +48,18 @@ export function debutDisciples(roster, ichimon) {
     if (target) Object.assign(target, { rosterId: added.id, debutSeason: Number(roster.season) || 0 });
     names.push(entry.name);
   }
-  return { roster: next, ichimon: { ...ichimon, members }, debuts: names };
+  // 羽音の弟子(32章)。弟子の印は付けず、羽音の弟子の印を付ける。
+  let rival = ichimon.rival ?? null;
+  if (rivalEntry) {
+    const added = addNamedPro(next, {
+      seed: 0x6e696d75 ^ (Number(rivalEntry.id) || 0), name: rivalEntry.rivalName, rating: RIVAL_DEBUT_RATING, age: clamp(Number(rivalEntry.age) || 20, 15, 29),
+      tag: { rivalDisciple: { master: '羽音' } },
+    });
+    next = added.roster;
+    rival = { name: rivalEntry.rivalName, rosterId: added.id, from: rivalEntry.id, debutSeason: Number(roster.season) || 0 };
+    names.push(rivalEntry.rivalName);
+  }
+  return { roster: next, ichimon: { ...ichimon, members, ...(rival ? { rival } : {}) }, debuts: names };
 }
 
 /**

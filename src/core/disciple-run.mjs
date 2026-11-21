@@ -10,8 +10,8 @@ import {
 } from './disciple-strength.mjs';
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
-import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, syncRival } from './disciple-rival.mjs';
-import { charmList, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
+import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
+import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
 
@@ -232,6 +232,8 @@ function advanceTurn(state, rng) {
   state.friends = assignFriends(rng, teamOf(state));
   if (!state.end && ((!state.shoreikai && state.turn >= MAX_TURNS) || state.turn >= HARD_TURNS)) finish(state, 'timeup');
   checkScenes(state, { calendar: turnCalendar(state.turn, state.startGrade) });
+  // 次のターンが弟子の大一番なら、師匠の大一番と重なる場面(32章)。
+  checkClash(state, isBigEvent(state));
 }
 
 /**
@@ -565,6 +567,9 @@ function rivalScene(state, games, metBefore, queuedBefore) {
   queueScene(state, game.win ? 'rival-win' : 'rival-lose');
 }
 
+/** 奨励会の知らせのうち、年齢制限で去った人の行(shoreikai.mjsのcloseLeagueの言葉)。 */
+const AGE_LIMIT_FEED = /^(.+?)さんが、年齢制限で奨励会を去った$/;
+
 /** 奨励会の節目の場面(28章)。 */
 const SHOREIKAI_MILESTONES = Object.freeze({ shodan: SHODAN, sandan: SANDAN });
 
@@ -586,6 +591,8 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
   const rivalNews = rivalBeforeDay(next, 'shoreikai', rng);
   if (rivalNews) events.push(rivalNews);
   const rivalMet = next.rival?.met ?? 0;
+  // 年齢制限の先輩の場面(32章)のため、この日の前の知らせを覚えておく。
+  const feedBefore = new Set((next.shoreikai.world?.feed ?? []).map((entry) => `${entry.month}|${entry.text}`));
   for (let guard = 0; guard < 12 && next.shoreikai.pending; guard += 1) {
     const run = next.shoreikai;
     if (run.dayNo !== startDay) break;
@@ -628,6 +635,12 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
   const queued = next.sceneQueue?.length ?? 0;
   checkScenes(next, { event: { big, wins, losses, promoted: false } });
   rivalScene(next, games, rivalMet, queued);
+  // 年齢制限で去った先輩が知らせに出たら、ほかの場面が積まれていないときに1回(32章)。
+  if ((next.sceneQueue?.length ?? 0) === queued) {
+    const left = (next.shoreikai.world?.feed ?? []).filter((entry) => !feedBefore.has(`${entry.month}|${entry.text}`))
+      .map((entry) => AGE_LIMIT_FEED.exec(entry.text)?.[1]).find(Boolean);
+    if (left) checkAgeLimit(next, left);
+  }
   // 節目(初段・三段リーグ入り)の場面。
   for (const [key, rank] of Object.entries(SHOREIKAI_MILESTONES)) {
     if (startRank < rank && run.rank >= rank && !(next.scenesSeen?.[key])) queueScene(next, key);
@@ -798,7 +811,8 @@ export function rivalView(state) {
   const run = state.shoreikai ?? state.kenshukai;
   const member = run?.world?.members?.[rival.id];
   const where = rival.gone === 'pro' ? '四段' : member ? member.dan ?? '' : rival.ahead ? '奨励会' : '';
-  return { name: rival.name, where, wins: rival.wins, losses: rival.losses, met: rival.met };
+  // 育成が終わったら、羽音の弟子も四段になるか(32章)。
+  return { name: rival.name, where, wins: rival.wins, losses: rival.losses, met: rival.met, pro: Boolean(state.end) && rivalFate(state) === 'pro' };
 }
 
 /** いまいる場所の短い言葉(能力の欄・記録の札)。 */

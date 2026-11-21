@@ -152,6 +152,7 @@
         <p class="disciple__muted">{{ view.calendar.label }}・{{ view.end.turn }}ターン</p>
         <p v-if="state?.ichimonJoined" class="disciple__extra" data-disciple-ichimon-joined>{{ view.name }}は一門に入った（{{ state.ichimonJoined }}人目）。次の弟子の仲間として連れていける</p>
         <p v-if="view.end.kind === 'pro'" class="disciple__extra" data-disciple-debut>四段になったので、竜王戦・名人戦の棋士の名簿に新四段として入る（竜王戦6組・C級2組から）。大会であなたと当たる日が来るかもしれない</p>
+        <p v-if="view.rival?.pro" class="disciple__extra" data-disciple-rival-pro>羽音の弟子の{{ view.rival.name }}も四段になる。竜王戦・名人戦の名簿に入り、大会で当たるかもしれない</p>
         <div class="disciple__row">
           <button type="button" class="disciple__btn" @click="emit('close')">ホームへ</button>
           <button type="button" class="disciple__btn disciple__btn--main" data-disciple-again @click="again">もう一度弟子をとる</button>

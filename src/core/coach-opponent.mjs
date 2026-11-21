@@ -62,3 +62,15 @@ export function opponentStyleAdvice(character, name) {
   if (!line) return null;
   return { key: `opponent-style-${picked?.id ?? 'style'}`, text: `${name}さんは、${line}` };
 }
+
+/**
+ * 相手が師匠の1年で育てた弟子なら、やこび姫の始めの一言(docs/disciple-mode-design.mdの32章)。棋風の一言より先に言う。
+ * 羽音の弟子(師匠の1年で弟子と競った同期)にも一言。
+ * @param {{ name?: string, disciple?: object | null, rivalDisciple?: object | null } | null | undefined} opponent
+ */
+export function discipleMatchAdvice(opponent) {
+  if (!opponent?.name) return null;
+  if (opponent.rivalDisciple) return { key: 'opponent-rival-disciple', text: `${opponent.name}さんは、羽音さんの弟子だよ！ あなたの弟子とずっと競ってきた子だね。師匠として、壁になってあげよう！` };
+  if (!opponent.disciple) return null;
+  return { key: 'opponent-disciple', text: `${opponent.name}さんは、あなたが育てた弟子だよ！ 教えたことが、今度は向こう側から来るよ。手加減なしで受けて立とう！` };
+}

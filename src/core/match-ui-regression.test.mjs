@@ -1146,7 +1146,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/threatAdvice\(\{\s*threatSfen,\s*threatMove: mateThreatResult\.best\.move,/);
   });
   it("大会の1局の始めに、相手の棋風と特殊能力から戦い方を一言いう(大一番は開幕の一言を優先)", () => {
-    expect(source).toMatch(/const opponentLine = opponentStyleAdvice\(opponent\.character, opponent\.name\);[\s\S]{0,300}?if \(stage\?\.coachLine && coachLevel\.value !== "off"\) guideText\.value = stage\.coachLine;[\s\S]{0,200}?else if \(opponentLine && coachLevel\.value !== "off"\) showCoachAdvice\(opponentLine\);/);
+    expect(source).toMatch(/const opponentLine = (?:discipleMatchAdvice\(opponent\) \?\? )?opponentStyleAdvice\(opponent\.character, opponent\.name\);[\s\S]{0,300}?if \(stage\?\.coachLine && coachLevel\.value !== "off"\) guideText\.value = stage\.coachLine;[\s\S]{0,200}?else if \(opponentLine && coachLevel\.value !== "off"\) showCoachAdvice\(opponentLine\);/);
   });
   it("形勢の一言には駒の損得を、好手のほめ言葉には指した手の手筋を渡す", () => {
     expect(source).toMatch(/advisedTopics: advisedCoachTopics,\s*materialBalance: playerMaterialBalance\(\),/);
@@ -1171,7 +1171,8 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/sprite: opponent\.story === HANANE \? `\$\{props\.assetBaseUrl\}\/characters\/\$\{HANANE_SPRITE\.file\}/);
     expect(source).toMatch(/<img v-if="opponentFace\.sprite" :src="opponentFace\.sprite"/);
     expect(source).toMatch(/v-if="rivalName" class="shogi-game__stage-card-rival" data-stage-card-rival>\s*<HananePortrait crop="bust"/);
-    expect(source).toMatch(/if \(stage && \(stage\.weight !== "plain" \|\| opponent\.story === HANANE\)\) showStageCard\("opening"\);/);
+    // 育てた弟子・羽音の弟子との1局も、開幕の札を出す(docs/disciple-mode-design.mdの32章)。
+    expect(source).toMatch(/if \(stage && \(stage\.weight !== "plain" \|\| opponent\.story === HANANE(?: \|\| opponent\.\w+)*\)\) showStageCard\("opening"\);/);
     expect(source.match(/<HananePortrait/g)).toHaveLength(1);
   });
   it("大会の1局で、中継の勝率バーと控室の一言を出す(助言なし・中継を切ったときは出さない)", () => {

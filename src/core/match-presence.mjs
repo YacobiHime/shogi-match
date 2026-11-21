@@ -30,9 +30,11 @@ export function opponentMood(playerScore) {
 }
 
 /** 口調。物語の人物はその人の口調、ほかは棋風(攻め将棋・受け将棋・バランス型)。 */
-export function opponentVoice({ character = null, story = null } = {}) {
+export function opponentVoice({ character = null, story = null, disciple = null } = {}) {
   if (story === HANANE) return 'hanane';
   if (story === YOSHIHIKO) return 'yoshihiko';
+  // 師匠の1年で育てた弟子(docs/disciple-mode-design.mdの32章)。師匠を「先生」と呼ぶ。
+  if (disciple) return 'disciple';
   const style = attackStyleLabel(character?.attack);
   if (style.includes('攻め')) return 'attack';
   if (style.includes('受け')) return 'defense';
@@ -79,12 +81,20 @@ const LINES = Object.freeze({
     win: 'ありがとうございました。……途中、ちょっと難しいところもあったかなと思います',
     loss: '負けました。……そうですね、どこかで、ちょっと判断を誤ったかなという気がします',
   },
+  // 弟子(32章)。win/loss は弟子から見た勝ち負け。勝てば恩返し、負ければ師匠の壁。
+  disciple: {
+    start: '先生、よろしくお願いします。今日は、教わったとおりには指しません',
+    ahead: '先生、この形は……一門の研究会で何度も考えました',
+    behind: 'さすが先生です。でも、まだ投げません',
+    win: 'ありがとうございました。……やっと、恩返しができました',
+    loss: '負けました。先生の壁は、まだ高いです',
+  },
 });
 
 /**
  * 相手の一言。
  * @param {"start" | "ahead" | "behind" | "win" | "loss"} moment
- * @param {{ character?: { attack?: number } | null, story?: string | null }} [who]
+ * @param {{ character?: { attack?: number } | null, story?: string | null, disciple?: object | null }} [who]
  */
 export function opponentLine(moment, who = {}) {
   return LINES[opponentVoice(who)]?.[moment] ?? '';

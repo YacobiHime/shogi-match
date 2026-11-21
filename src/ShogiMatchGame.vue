@@ -1375,6 +1375,9 @@
             </span>
             <small>{{ matchStage.eventText }}</small>
             <em v-if="matchStage.longestDay" class="shogi-game__stage-card-longest" data-longest-day>将棋界の一番長い日</em>
+            <!-- 師匠の1年で育てた弟子との一局(docs/disciple-mode-design.mdの32章)。 -->
+            <em v-if="tournamentOpponent?.disciple" class="shogi-game__stage-card-longest" data-stage-card-disciple>弟子との一局</em>
+            <em v-else-if="tournamentOpponent?.rivalDisciple" class="shogi-game__stage-card-longest" data-stage-card-disciple>羽音の弟子との一局</em>
             <strong>{{ matchStage.shortLabel ?? matchStage.label }}</strong>
             <span v-if="matchStage.venue" class="shogi-game__stage-card-venue">{{ matchStage.venue }}</span>
             <span v-if="matchStage.weight === 'title'" class="shogi-game__stage-card-sides">
@@ -2977,7 +2980,7 @@ import { openingFormationGhosts, openingFormationProgress } from "./core/opening
 import { loadFortunePlans } from "./core/opening-fortune.mjs";
 import { mistakeReason, mistakeTarget, threatAdvice, withMistakeReason } from "./core/coach-reason.mjs";
 import { dangerSensor, dangerSensorAuto } from "./core/danger-sensor.mjs";
-import { opponentStyleAdvice } from "./core/coach-opponent.mjs";
+import { discipleMatchAdvice, opponentStyleAdvice } from "./core/coach-opponent.mjs";
 import { HANANE, HANANE_SPRITE, storyMemberId } from "./core/ryuo-story.mjs";
 import { lastGameMilestone } from "./core/ryuo-milestone.mjs";
 import { writeGameKansenki } from "./core/game-kansenki.mjs";
@@ -7988,13 +7991,14 @@ function startRyuoMatch() {
   matchClock.start(tournamentTimeControl({ event, season }), { usedPlies: cutStart ? PRO_YEAR_CUT_USED_PLIES : 0 });
   startPresence();
   // 大一番とタイトル戦は、開幕の札とやこび姫の一言で始める。ふだんの1局は、相手の棋風と特殊能力から戦い方を一言。
-  const opponentLine = opponentStyleAdvice(opponent.character, opponent.name);
+  // 相手が育てた弟子なら、棋風より先に弟子だと言う(docs/disciple-mode-design.mdの32章)。
+  const opponentLine = discipleMatchAdvice(opponent) ?? opponentStyleAdvice(opponent.character, opponent.name);
   if (cutStart && coachLevel.value !== "off") guideText.value = PRO_YEAR_CUT_LINE;
   else if (stage?.coachLine && coachLevel.value !== "off") guideText.value = stage.coachLine;
   // 最初の形勢の一言に上書きされないよう、助言の順番待ちを通して6秒は見せる。
   else if (opponentLine && coachLevel.value !== "off") showCoachAdvice(opponentLine);
-  // 羽音との一局は、ふだんの重さでも開幕の札を出す(ライバル戦だと分かるように)。
-  if (stage && (stage.weight !== "plain" || opponent.story === HANANE)) showStageCard("opening");
+  // 羽音と育てた弟子との一局は、ふだんの重さでも開幕の札を出す(特別な一局だと分かるように)。
+  if (stage && (stage.weight !== "plain" || opponent.story === HANANE || opponent.disciple || opponent.rivalDisciple)) showStageCard("opening");
   // 対局準備で選んだ作戦は、始めた瞬間にやこび姫が目指す形を伝える。
   if (openingGuideAvailable.value && (selectedStrategy.value || selectedCastle.value)) announceOpeningGuide();
 }

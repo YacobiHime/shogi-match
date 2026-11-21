@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHARMS, CHARM_GIFTS, CHARM_MAX, DISCIPLE_SCENES, FAMILY_SCENE, SLUMP_SCENE, addCharm, charmList, checkScenes, overcomeSlump, pendingScene, queueScene,
+  CHARMS, CHARM_GIFTS, CHARM_MAX, CLASH_SCENE, DISCIPLE_SCENES, FAMILY_SCENE, JEALOUS_SCENE, SLUMP_SCENE, addCharm, charmList, checkAgeLimit, checkClash,
+  checkScenes, overcomeSlump, pendingScene, queueScene,
   receiveCharms, resolveScene, useCharm, withCharm,
 } from './disciple-events.mjs';
-import { chooseAction, createDiscipleRun, currentStrength, playEvent, turnKind, watchSpec } from './disciple-run.mjs';
+import { chooseAction, chooseWords, createDiscipleRun, currentStrength, playEvent, turnKind, watchSpec } from './disciple-run.mjs';
 import { effectiveLevel } from './disciple-strength.mjs';
 import { hasLibraryScene, libraryScene } from './novel-library.mjs';
 import { DISCIPLES } from './disciple-strength.mjs';
@@ -130,5 +131,80 @@ describe('問題の場面(26-2)', () => {
     checkScenes(after, { event: { big: false, wins: 2, losses: 0, promoted: true } });
     expect(after.sceneQueue).toEqual([]);
     expect(queueScene(after, 'nope')).toBe(false);
+  });
+});
+
+describe('段階3の残りの場面(32章)', () => {
+  const senpai = { id: 'ichimon-5', name: '朝比奈 紬', likes: ['kifu', 'shisho'], power: 0.3, senpai: true };
+
+  it('一門のやきもち: 連れてきた先輩との絆が深まると1回だけ。先輩に教わると、その先輩との絆が深まる', () => {
+    const s = structuredClone(fresh());
+    s.sceneQueue = [];
+    s.team = [{ id: 'momoka', name: '百花', likes: ['tsume'], power: 0 }, senpai];
+    s.turn = JEALOUS_SCENE.minTurn;
+    s.bonds[senpai.id] = JEALOUS_SCENE.bond - 1;
+    checkScenes(s, {});
+    expect(s.sceneQueue).toEqual([]);
+    s.bonds[senpai.id] = JEALOUS_SCENE.bond;
+    checkScenes(s, {});
+    expect(s.sceneQueue).toEqual(['jealous']);
+    expect(pendingScene(s)?.vars.senpai).toBe('朝比奈 紬');
+    const { state: after } = resolveScene(s, 'learn');
+    expect(after.bonds[senpai.id]).toBe(JEALOUS_SCENE.bond + 2);
+    checkScenes(after, {});
+    expect(after.sceneQueue).toEqual([]);
+  });
+
+  it('先輩を連れていなければ、やきもちの場面は起きない', () => {
+    const s = structuredClone(fresh());
+    s.sceneQueue = [];
+    s.turn = 60;
+    s.bonds.momoka = 9;
+    checkScenes(s, {});
+    expect(s.sceneQueue).not.toContain('jealous');
+  });
+
+  it('師匠の大一番と重なる: 1年より後の大一番の前に1回。ほかの場面が積まれていれば待つ', () => {
+    const s = structuredClone(fresh());
+    s.sceneQueue = [];
+    s.turn = CLASH_SCENE.minTurn - 1;
+    expect(checkClash(s, true)).toBe(false);
+    s.turn = CLASH_SCENE.minTurn;
+    expect(checkClash(s, false)).toBe(false);
+    s.sceneQueue = ['school'];
+    expect(checkClash(s, true)).toBe(false);
+    s.sceneQueue = [];
+    expect(checkClash(s, true)).toBe(true);
+    const { state: after } = resolveScene(s, 'go');
+    expect(checkClash(after, true)).toBe(false);
+  });
+
+  it('年齢制限の先輩: 名前を差し込み、1回だけ', () => {
+    const s = structuredClone(fresh());
+    s.sceneQueue = [];
+    expect(checkAgeLimit(s, '')).toBe(false);
+    expect(checkAgeLimit(s, '丸山 晴')).toBe(true);
+    expect(pendingScene(s)?.vars.ageSenpai).toBe('丸山 晴');
+    const { state: after } = resolveScene(s, 'resolve');
+    expect(checkAgeLimit(after, '田中 颯')).toBe(false);
+  });
+
+  it('育成を進めると、師匠の大一番と重なる場面が1回出る', () => {
+    let s = fresh('ao', 3);
+    let seen = 0;
+    for (let i = 0; i < 120 && !s.end; i += 1) {
+      const scene = pendingScene(s);
+      if (scene) {
+        if (scene.key === 'clash') seen += 1;
+        s = resolveScene(s, null).state;
+        continue;
+      }
+      const kind = turnKind(s);
+      if (kind === 'free') s = chooseAction(s, { kind: s.stamina < 45 ? 'rest' : 'train', id: 'jissen' }).state;
+      else if (kind === 'exam' || kind === 'reikai') s = playEvent(s, {}).state;
+      else if (kind === 'words') s = chooseWords(s, 'review').state;
+      else break;
+    }
+    expect(seen).toBe(1);
   });
 });

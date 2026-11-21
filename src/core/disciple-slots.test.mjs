@@ -59,7 +59,7 @@ describe('弟子の記録の枠(27-1)', () => {
 describe('物語の目録の師匠の1年(27-2)', () => {
   it('師匠の1年の場面がサブに載り、台本のidから引ける', () => {
     const subs = STORY_EPISODES.filter((episode) => episode.label === '師匠の1年');
-    expect(subs.length).toBe(DISCIPLES.length + 16);
+    expect(subs.length).toBe(DISCIPLES.length + 19);
     expect(episodeOfScene('disciple-slump')?.id).toBe('disciple:disciple-slump');
     expect(episodeOfScene('disciple-intro-ao')?.vars.disciple).toBe(DISCIPLES.find((d) => d.id === 'ao').name);
   });

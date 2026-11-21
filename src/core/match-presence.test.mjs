@@ -28,6 +28,9 @@ describe('相手の表情と一言', () => {
     expect(opponentVoice({ character: { attack: 0.7 } })).toBe('attack');
     expect(opponentVoice({ character: { attack: -0.4 } })).toBe('defense');
     expect(opponentVoice({ character: { attack: 0 } })).toBe('balance');
+    // 師匠の1年で育てた弟子は、師匠を「先生」と呼ぶ(docs/disciple-mode-design.mdの32章)。
+    expect(opponentVoice({ character: { attack: 0.7 }, disciple: { ichimonId: '1' } })).toBe('disciple');
+    expect(opponentLine('start', { disciple: { ichimonId: '1' } })).toMatch(/^先生/);
     expect(opponentVoice({ story: HANANE, character: { attack: 0.7 } })).toBe('hanane');
     expect(opponentLine('start', { character: { attack: 0.7 } })).toBe('よろしくお願いします。今日も攻めますよ');
     expect(opponentLine('loss', { story: HANANE })).toBe('私の負け。……悔しいけど');

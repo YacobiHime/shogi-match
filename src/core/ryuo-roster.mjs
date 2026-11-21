@@ -222,7 +222,7 @@ export function addNamedPro(roster, { seed, name, rating, age, tag = {} }) {
     const world = next.junni;
     if (world.free?.includes(member.id)) {
       // 先に入った弟子(師匠の1年の新四段)は押し出さない。
-      const from = world.classes.C2.findLastIndex((id) => id !== USER_HOLDER && id !== member.id && !next.players[id]?.disciple);
+      const from = world.classes.C2.findLastIndex((id) => id !== USER_HOLDER && id !== member.id && !next.players[id]?.disciple && !next.players[id]?.rivalDisciple);
       if (from >= 0) {
         world.free = [world.classes.C2[from], ...world.free.filter((id) => id !== member.id)];
         world.classes.C2.splice(from, 1);
@@ -278,6 +278,8 @@ export function seasonEntry(roster, id) {
     story: member.story ?? null,
     // 師匠の1年で育てた弟子(31章。トーナメント表の印と恩返し)。
     disciple: member.disciple ? { ...member.disciple } : null,
+    // 師匠の1年の、羽音の弟子(32章)。
+    rivalDisciple: member.rivalDisciple ? { ...member.rivalDisciple } : null,
     dan: isHolder(roster, id) ? '竜王' : member.dan,
     kind: member.kind,
     group: member.group,
