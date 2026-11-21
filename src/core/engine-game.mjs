@@ -333,7 +333,8 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
       mark,
     };
     // 弟子の手は、観戦の見立て(崩れた理由。disciple-strength.mjsのcauseOf)のために、気づかなかったこと・詰みを逃したか・時計を残す。
-    if (disciple) entry.d = { o: choice?.oversights?.length ? 1 : 0, m: choice?.ownMateMissed && !(chosen?.score?.type === 'mate' && chosen.score.value > 0) ? 1 : 0, c: pressure ?? '' };
+    // 気づかなかったことの種類(hanging・free・mate)も残す(崩れ方の見立て。disciple-causes.mjs、33-5)。
+    if (disciple) entry.d = { o: choice?.oversights?.length ? 1 : 0, m: choice?.ownMateMissed && !(chosen?.score?.type === 'mate' && chosen.score.value > 0) ? 1 : 0, c: pressure ?? '', k: [...new Set((choice?.oversights ?? []).map((item) => item?.kind).filter(Boolean))] };
     entries.push(entry);
     lastEval = evalCp;
     onMove(entry, entries.length - 1);

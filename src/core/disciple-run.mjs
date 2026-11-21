@@ -11,6 +11,7 @@ import {
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
+import { REVIEW_CAUSES, judgeReviewGuess } from './disciple-causes.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -734,7 +735,8 @@ export function dayResultView(event) {
 
 export const eyeDan = (found) => clamp(1 + Math.floor((Number(found) || 0) / 5), 1, 9);
 /** 隠れた弱点と、それを見抜く理由(同じ理由を3回見抜くと名前が出る)。 */
-export const WEAKNESS_CAUSE = Object.freeze({ careless: 'careless', 'time-trouble': 'time', 'big-stage-weak': 'reading', 'loose-when-ahead': 'reading', 'endgame-collapse': 'mate' });
+/** 隠れた弱点と、それを見抜くために数える崩れ方(33-5。時間に追われるは、秒読みの背景の札を数える)。 */
+export const WEAKNESS_CAUSE = Object.freeze({ careless: 'careless', 'time-trouble': 'time', 'big-stage-weak': 'policy', 'loose-when-ahead': 'yose', 'endgame-collapse': 'defense' });
 export const WEAKNESS_LABELS = Object.freeze({
   careless: 'うっかりが多い', 'time-trouble': '時間に追われる', 'big-stage-weak': '大舞台で硬くなる', 'loose-when-ahead': '優勢で緩む', 'endgame-collapse': '終盤で頓死する',
 });
@@ -742,7 +744,7 @@ export const WEAKNESS_LABELS = Object.freeze({
 /**
  * 観戦の見立ての答えを入れる(19-5)。印ごとの理由の5択から、狙い目・見抜いた数・隠れた弱点の名前を決める。
  * @param {any} state
- * @param {readonly { cause: string }[]} marks
+ * @param {readonly { cause: string, alt?: string | null, tags?: string[] }[]} marks
  * @param {readonly (string | null)[]} guesses 印ごとに選んだ理由(選ばなかった印はnull)
  */
 export function applyFindings(state, marks, guesses) {
@@ -753,10 +755,16 @@ export function applyFindings(state, marks, guesses) {
   marks.forEach((mark, index) => {
     const guess = guesses[index];
     if (!guess) return;
-    const judged = judgeGuess(mark, guess);
+    // 6つの崩れ方(33-5)は主・副・外れで判定する。前の版の理由(棋譜帳に残ったもの)は前の判定。
+    const judged = REVIEW_CAUSES[mark.cause] ? judgeReviewGuess(mark, guess) : judgeGuess(mark, guess);
     // 時間切迫は持ち時間の適性(早指しの稽古)の狙い目。
     const target = judged.target === 'time' ? 'steady' : judged.target;
     if (target) next.aims[target] = { boost: Math.max(next.aims[target]?.boost ?? 1, judged.boost), turns: judged.turns };
+    // 秒読みの手は、早指しの稽古(安定)も狙い目にし、背景の札として数える。
+    if (/** @type {any} */ (judged).time) {
+      next.aims.steady = { boost: Math.max(next.aims.steady?.boost ?? 1, judged.boost), turns: judged.turns };
+      next.causes.time = (next.causes.time ?? 0) + 1;
+    }
     next.causes[mark.cause] = (next.causes[mark.cause] ?? 0) + 1;
     if (judged.right) next.eye += 1;
     results.push({ ...judged, target });

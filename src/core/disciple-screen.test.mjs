@@ -49,3 +49,13 @@ describe('検討の盤(docs/disciple-mode-design.mdの33-4)', () => {
     expect(source).toMatch(/list\.scrollTop = Math\.max\(0,/);
   });
 });
+
+describe('崩れ方の見立て(docs/disciple-mode-design.mdの33-5)', () => {
+  it('印は盤面から決めた6つの崩れ方で、主・副・外れで答え、盤に取られた駒の赤い輪と相手の次の手の点線を出す', () => {
+    expect(source).toMatch(/current\.marks = reviewMarks\(current\.entries, current\.side, \{ dan: eyeDan\(state\.value\?\.eye\), big: Boolean\(current\.plan\) \}\);/);
+    expect(source).toMatch(/v-for="id in REVIEW_CAUSE_ORDER"/);
+    expect(source).toMatch(/selectedJudge\.right \? '見抜いた！' : selectedJudge\.near \? `おしい！/);
+    expect(source).toMatch(/:risk-squares="clueRings"\s*:threat-arrows="clueArrows"/);
+    expect(source).toMatch(/data-disciple-section-start/);
+  });
+});

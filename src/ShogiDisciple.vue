@@ -295,6 +295,8 @@
             :sfen="watchSfen"
             :last-move="watchLastMove"
             :candidates="watchArrows"
+            :risk-squares="clueRings"
+            :threat-arrows="clueArrows"
             :allow-move="false"
             :enable-drag-and-drop="false"
             :flip="watch.side === 'white'"
@@ -328,19 +330,24 @@
             <small v-if="!watch.marks.length">大きく崩れた手はなかった。いい将棋だったね</small>
             <small v-else-if="watch.mode === 'book'">印の手で、そのとき選んだ答えと、AIの検討が見られます</small>
             <small v-else>グラフの印か、手の一覧の赤い点の手で、崩れた理由を選ぼう（{{ answeredCount }}/{{ watch.marks.length }}）</small></p>
-          <div v-if="selectedMark" class="disciple__ask">
-            <b>{{ selectedMark.ply }}手目　形勢が{{ selectedMark.loss }}点落ちた。理由は？</b>
-            <div class="disciple__clues"><span v-for="clue in selectedMark.clues" :key="clue">{{ clue }}</span></div>
+          <div v-if="selectedMark" class="disciple__ask" data-disciple-mark-card>
+            <b v-if="selectedMark.sub === 'section'">序盤（{{ selectedMark.from }}〜{{ selectedMark.to }}手）　形勢 {{ selectedMark.startWord }} → {{ selectedMark.endWord }}。理由は？</b>
+            <b v-else>{{ selectedMark.ply }}手目　形勢が{{ selectedMark.loss }}点落ちた。理由は？</b>
+            <div class="disciple__clues"><span v-for="clue in selectedMark.clues" :key="clue" :class="{ 'disciple__clue--red': clue.startsWith('赤い輪') || clue.startsWith('点線') }">{{ clue }}</span></div>
+            <div v-if="selectedMark.sub === 'section'" class="disciple__row disciple__row--left">
+              <button type="button" class="disciple__btn" data-disciple-section-start @click="goPly(selectedMark.from ?? 1)">区間の始め</button>
+              <button type="button" class="disciple__btn" data-disciple-section-end @click="goPly(selectedMark.to ?? selectedMark.ply)">区間の終わり</button>
+            </div>
             <div class="disciple__reasons">
-              <button v-for="id in CAUSE_ORDER" :key="id" type="button" class="disciple__opt"
-                :class="{ 'disciple__opt--right': guessOf(watch.selected) && selectedMark.cause === id, 'disciple__opt--wrong': guessOf(watch.selected) === id && selectedMark.cause !== id }"
+              <button v-for="id in REVIEW_CAUSE_ORDER" :key="id" type="button" class="disciple__opt"
+                :class="{ 'disciple__opt--right': guessOf(watch.selected) && selectedMark.cause === id, 'disciple__opt--near': guessOf(watch.selected) && selectedMark.alt === id && guessOf(watch.selected) === id, 'disciple__opt--wrong': guessOf(watch.selected) === id && selectedMark.cause !== id && selectedMark.alt !== id }"
                 :disabled="Boolean(guessOf(watch.selected))" :data-disciple-cause="id" @click="guess(id)">
-                {{ CAUSES[id].label }}<small>{{ CAUSES[id].note }}</small>
+                {{ REVIEW_CAUSES[id].label }}<small>{{ REVIEW_CAUSES[id].note }}</small>
               </button>
             </div>
-            <p v-if="guessOf(watch.selected)" class="disciple__found">
-              {{ guessOf(watch.selected) === selectedMark.cause ? '正解！' : `答えは「${CAUSES[selectedMark.cause].label}」` }}
-              「{{ STAT_LABELS[targetOf(selectedMark.cause)] }}」の稽古が狙い目になる（伸び×{{ guessOf(watch.selected) === selectedMark.cause ? '1.5' : '1.25' }}）
+            <p v-if="guessOf(watch.selected) && selectedJudge" class="disciple__found" data-disciple-found>
+              {{ selectedJudge.right ? '見抜いた！' : selectedJudge.near ? `おしい！ 答えは「${causeLabel(selectedMark.cause)}」` : `答えは「${causeLabel(selectedMark.cause)}」` }}
+              {{ causeExplain(selectedMark) }}。「{{ STAT_LABELS[targetOf(selectedMark.cause)] }}」の稽古が狙い目（伸び×{{ selectedJudge.boost }}）<template v-if="selectedJudge.time">。秒読みだったので、早指しの稽古も合う</template>
             </p>
           </div>
           </div>
@@ -441,12 +448,13 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
 import { aiHint, addBookGame, bookEntry, bookList, reviewRows } from "./core/disciple-review.mjs";
+import { REVIEW_CAUSES, REVIEW_CAUSE_ORDER, causeExplain, causeLabel, judgeReviewGuess, reviewMarks } from "./core/disciple-causes.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import {
-  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, CAUSE_ORDER, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, discipleWatchMoves, skillById, statRank, watchMarks,
+  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import {
   FRIENDS, PLANS, WORDS, applyFindings, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
@@ -668,7 +676,12 @@ function words(id: string) {
 }
 
 // ---- 観戦と見立て(24章)。その日のはじめの局をエンジンが本当に指し、終局したら崩れた場面に印を付ける。
-type WatchMark = { ply: number; loss: number; cause: string; clues: string[] };
+type WatchMark = {
+  ply: number; loss: number; cause: string; clues: string[];
+  /** 6つの崩れ方の副(おしい)・中身・背景の札・盤の手がかり(33-5)。前の版の棋譜帳の印には無い。 */
+  alt?: string | null; sub?: string; tesuji?: string; tags?: string[]; rings?: string[]; threat?: string;
+  from?: number; to?: number; startWord?: string; endWord?: string;
+};
 type Watch = {
   label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string } | null; charm: string | null;
   entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
@@ -729,7 +742,8 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm });
   charmPick.value = "";
   commit(next);
-  current.marks = watchMarks(discipleWatchMoves(current.entries, current.side), { dan: eyeDan(state.value?.eye) });
+  // 崩れ方は盤面で起きたことから決める(33-5)。言えない手は印にしない。大一番は背景の札に。
+  current.marks = reviewMarks(current.entries, current.side, { dan: eyeDan(state.value?.eye), big: Boolean(current.plan) });
   current.guesses = current.marks.map(() => null);
   current.selected = current.marks.length ? 0 : -1;
   current.done = true;
@@ -862,7 +876,24 @@ function openBookGame(game: ReturnType<typeof bookList>[number]) {
 const guessOf = (index: number) => watch.value?.guesses[index] ?? null;
 const answeredCount = computed(() => watch.value?.guesses.filter(Boolean).length ?? 0);
 const selectedMark = computed(() => (watch.value && watch.value.selected >= 0 ? watch.value.marks[watch.value.selected] : null));
-const targetOf = (cause: string) => (CAUSES[cause as keyof typeof CAUSES]?.target === "time" ? "steady" : CAUSES[cause as keyof typeof CAUSES]?.target ?? "steady") as keyof typeof STAT_LABELS;
+const targetOf = (cause: string) => {
+  const target = REVIEW_CAUSES[cause as keyof typeof REVIEW_CAUSES]?.target ?? CAUSES[cause as keyof typeof CAUSES]?.target ?? "steady";
+  return (target === "time" ? "steady" : target) as keyof typeof STAT_LABELS;
+};
+/** 選んだ印の答えの判定(主・副・外れ。33-5)。 */
+const selectedJudge = computed(() => {
+  const mark = selectedMark.value;
+  const guessId = watch.value ? guessOf(watch.value.selected) : null;
+  return mark && guessId ? judgeReviewGuess(mark, guessId) : null;
+});
+/** 選んだ印の盤の手がかり(取られた駒の赤い輪・相手の次の手の点線の矢印)。その印の手の局面のときだけ。 */
+const clueRings = computed(() => (selectedMark.value && selectedMark.value.ply === watch.value?.upto ? selectedMark.value.rings ?? [] : []));
+const clueArrows = computed(() => {
+  const mark = selectedMark.value;
+  if (!mark?.threat || mark.ply !== watch.value?.upto) return [];
+  // 相手の手の色(先手の狙いは青、後手の狙いは赤。対局の相手の狙いと同じ見せ方)。
+  return [{ usi: mark.threat, color: (watch.value?.side === "black" ? "white" : "black") as "black" | "white" }];
+});
 function guess(id: string) {
   if (!watch.value || watch.value.selected < 0) return;
   const guesses = [...watch.value.guesses];
@@ -1212,6 +1243,9 @@ defineExpose({ goBack });
 .shogi-game .disciple__reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
 .shogi-game .disciple__reasons button:last-child { grid-column: 1 / -1; }
 .shogi-game .disciple .disciple__opt--right, .shogi-game .disciple .disciple__opt--right:disabled { border-color: #3c9a4c; background: #e9f6ea; color: var(--ink); opacity: 1; }
+.shogi-game .disciple .disciple__opt--near, .shogi-game .disciple .disciple__opt--near:disabled { border-color: #d89a2b; background: #fdf3e0; color: var(--ink); opacity: 1; }
+.shogi-game .disciple__clue--red { background: #fbe0dc !important; color: #b8352b; }
+.shogi-game .disciple__row--left { justify-content: flex-start; }
 .shogi-game .disciple .disciple__opt--wrong, .shogi-game .disciple .disciple__opt--wrong:disabled { border-color: #d8655b; background: #fbe9e7; color: var(--ink); opacity: 1; }
 .shogi-game .disciple__found { margin: 0.4rem 0 0; color: #c0661b; font-size: 0.8rem; font-weight: 800; }
 .shogi-game .disciple__graph { grid-area: graph; cursor: pointer; position: relative; height: 7rem; border-radius: 0.8rem; background: #fff; overflow: hidden; }
