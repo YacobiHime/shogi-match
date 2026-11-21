@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>師匠の1年 モックアップ</title>
+<!--
+  師匠の1年(docs/disciple-mode-design.md)の画面の見本。動く部分は見本のための最小限。
+  立ち絵を真ん中に大きく置き、UIはその上に重ねる(育成シミュレーションの型。17章のユーザーの指定)。
+  弟子の絵はまだないので、仮の影絵(SVG)で置いている。
+  上の「画面」の帯は見本の切り替えで、本物の画面には出ない。?s=home などで直接開ける。
+-->
+<style>
+:root {
+  --ink: #1d2a36; --paper: #fffaf0; --sky1: #f6e7c9; --sky2: #dcebf2; --accent: #f1a54c; --accent-ink: #5a3410;
+  --blue: #5b8fd8; --red: #d8655b; --green: #5aa66a; --gold: #e2b33f; --muted: #6b7a88; --panel: rgba(255, 252, 244, 0.92);
+  --line: rgba(29, 42, 54, 0.14);
+  --c1: #4f86c6; --c2: #9a6fc4; --c3: #3fa38f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif; color: var(--ink); background: #2a3440; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.mockbar { position: fixed; z-index: 50; top: 0; left: 0; right: 0; display: flex; gap: 0.3rem; overflow-x: auto; padding: 0.3rem 0.4rem; background: #111a22; }
+.mockbar button { flex: none; padding: 0.25rem 0.6rem; border: 1px solid #44525f; border-radius: 999px; background: transparent; color: #cfd8de; font-size: 0.75rem; }
+.mockbar button[aria-pressed="true"] { background: #cfd8de; color: #111a22; }
+
+/* ---- 画面の枠(全画面) */
+.game { position: fixed; inset: 2rem 0 0 0; overflow: hidden; background: linear-gradient(180deg, var(--sky1), var(--sky2) 70%, #c9dccf); }
+.game::before { /* 部屋の奥(師匠の家の和室) */
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28%;
+  background: repeating-linear-gradient(90deg, #cdb88a 0 2px, #d9c79c 2px 46px), #d9c79c; border-top: 6px solid #9c7f4e;
+}
+.game::after { /* 障子 */
+  content: ""; position: absolute; left: 8%; right: 8%; top: 8%; height: 58%;
+  background: linear-gradient(90deg, transparent 49.6%, #b99d6b 49.6% 50.4%, transparent 50.4%),
+    repeating-linear-gradient(0deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px),
+    repeating-linear-gradient(90deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px), rgba(255, 252, 240, 0.55);
+  border: 6px solid #b99d6b; border-bottom: 0; opacity: 0.7;
+}
+.screen { position: absolute; inset: 0; display: none; }
+.screen.on { display: block; }
+
+/* ---- 立ち絵(真ん中に大きく) */
+.figure { position: absolute; z-index: 1; left: 50%; bottom: 0; height: min(92%, 62rem); aspect-ratio: 0.46; transform: translateX(-50%); pointer-events: none; }
+.figure svg { width: 100%; height: 100%; display: block; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
+.figure .tag { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(255,255,255,0.85); color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.figure.bounce { animation: bounce 0.5s ease; }
+@keyframes bounce { 30% { transform: translateX(-50%) translateY(-10px); } 60% { transform: translateX(-50%) translateY(0); } }
+
+/* ---- 上の帯(ターンと次の目標) */
+.top { position: absolute; z-index: 5; top: 0.6rem; left: 0.6rem; right: 0.6rem; display: flex; gap: 0.5rem; align-items: stretch; }
+.turn { display: grid; place-items: center; min-width: 6.2rem; padding: 0.3rem 0.6rem; border-radius: 0.8rem; background: var(--ink); color: #fff; text-align: center; line-height: 1.15; }
+.turn b { font-size: 1.05rem; } .turn small { font-size: 0.68rem; color: #c6d2dc; }
+.goal { flex: 1; display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.8rem; border-radius: 0.8rem; background: var(--panel); border: 2px solid var(--accent); }
+.goal small { color: var(--accent-ink); font-weight: 900; font-size: 0.7rem; }
+.goal b { font-size: 0.95rem; }
+.goal .left { margin-left: auto; text-align: right; font-size: 0.72rem; color: var(--muted); }
+.goal .left b { display: block; font-size: 1.3rem; color: var(--red); line-height: 1; }
+.menu-btn { width: 2.8rem; border: 0; border-radius: 0.8rem; background: var(--panel); font-size: 1.1rem; }
+
+/* ---- 左の能力 */
+.stats { position: absolute; z-index: 5; left: 0.6rem; top: 4.6rem; width: 13.5rem; display: grid; gap: 0.35rem; padding: 0.55rem 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+.stat { display: grid; grid-template-columns: 2.6rem 1.6rem 1fr 2.2rem; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
+.stat .name { font-weight: 900; }
+.stat .rank { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 0.4rem; color: #fff; font-weight: 900; font-size: 0.8rem; }
+.stat .bar { height: 0.55rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
+.stat .bar i { display: block; height: 100%; border-radius: inherit; }
+.stat .num { text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; }
+.stat .up { color: var(--green); font-size: 0.7rem; font-weight: 900; }
+.r-G { background: #9aa4ad; } .r-F { background: #7fa0b8; } .r-E { background: #5aa66a; } .r-D { background: #4f86c6; } .r-C { background: #9a6fc4; } .r-B { background: #d8655b; } .r-A { background: #e08a2e; } .r-S { background: #e2b33f; }
+.stats h3 { margin: 0 0 0.1rem; font-size: 0.72rem; color: var(--muted); }
+.stats .who { display: flex; justify-content: space-between; align-items: baseline; }
+.stats .who b { font-size: 0.95rem; } .stats .who small { color: var(--muted); font-size: 0.7rem; }
+
+/* ---- 右のやる気・体力 */
+.mood { position: absolute; z-index: 5; right: 0.6rem; top: 4.6rem; width: 11rem; display: grid; gap: 0.5rem; padding: 0.55rem 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+.mood small { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 700; }
+.mood .face { font-size: 1rem; font-weight: 900; color: var(--red); }
+.hp { height: 0.8rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
+.hp i { display: block; height: 100%; background: linear-gradient(90deg, #6cc07a, #a6d86a); }
+.mood .note { font-size: 0.72rem; color: var(--muted); }
+.friends { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.friend { position: relative; width: 2.2rem; height: 2.2rem; border-radius: 50%; overflow: hidden; border: 2px solid #fff; background: #ddd; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.friend img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 8%; image-rendering: auto; }
+.friend.px img { image-rendering: pixelated; object-position: 50% 0; }
+.friend .heart { position: absolute; left: 0; right: 0; bottom: 0; height: 0.3rem; background: #f3b4c8; }
+.friend .heart i { display: block; height: 100%; background: #e2457a; }
+
+/* ---- 吹き出し(弟子の一言) */
+.say { position: absolute; z-index: 6; left: 50%; top: 30%; transform: translateX(-125%); max-width: 13rem; padding: 0.55rem 0.8rem; border-radius: 1rem 1rem 0.2rem 1rem; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 0.88rem; font-weight: 700; }
+
+/* ---- 下の予定のボタン */
+.dock { position: absolute; z-index: 5; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) 4.2rem; gap: 0.45rem; }
+.cmd { position: relative; display: grid; place-items: center; align-content: center; gap: 0.15rem; min-height: 4.6rem; border: 0; border-radius: 1rem; background: #fff; box-shadow: 0 4px 0 #c9bfa8, 0 6px 14px rgba(0,0,0,0.12); font-weight: 900; }
+.cmd .ic { font-size: 1.35rem; line-height: 1; }
+.cmd small { color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.cmd.main { background: var(--accent); color: #fff; box-shadow: 0 4px 0 #b86f22, 0 6px 14px rgba(0,0,0,0.15); }
+.cmd.main small { color: #fff4e0; }
+.cmd .badge { position: absolute; top: -0.4rem; right: -0.2rem; display: flex; }
+.cmd .badge .friend { width: 1.7rem; height: 1.7rem; margin-left: -0.5rem; }
+.cmd.sub { background: var(--ink); color: #fff; box-shadow: 0 4px 0 #0c141b; }
+.cmd:active { transform: translateY(3px); }
+
+/* ---- 稽古の札(下から開く) */
+.train-row { position: absolute; z-index: 6; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) 4.2rem; gap: 0.45rem; }
+.tr { position: relative; display: grid; align-content: end; justify-items: center; gap: 0.2rem; min-height: 6rem; padding: 1.2rem 0.3rem 0.5rem; border: 3px solid transparent; border-radius: 1rem; background: #fff; box-shadow: 0 4px 0 #c9bfa8; font-weight: 900; }
+.tr[aria-pressed="true"] { border-color: var(--accent); transform: translateY(-0.6rem); box-shadow: 0 10px 0 #c9bfa8, 0 10px 20px rgba(0,0,0,0.18); }
+.tr .lv { position: absolute; top: 0.3rem; left: 0.4rem; font-size: 0.62rem; color: var(--muted); }
+.tr .fail { font-size: 0.66rem; color: var(--muted); font-weight: 700; }
+.tr .fail.warn { color: var(--red); }
+.tr .badge { position: absolute; top: -0.9rem; right: 0.1rem; display: flex; }
+.tr .badge .friend { width: 1.9rem; height: 1.9rem; margin-left: -0.55rem; }
+.preview { position: absolute; z-index: 6; left: 50%; bottom: 8.3rem; transform: translateX(-50%); width: min(26rem, calc(100% - 1.2rem)); padding: 0.6rem 0.8rem; border-radius: 1rem; background: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,0.16); }
+.preview h4 { margin: 0 0 0.35rem; font-size: 0.95rem; display: flex; justify-content: space-between; }
+.preview h4 small { color: var(--muted); font-size: 0.72rem; }
+.gains { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.3rem; text-align: center; font-size: 0.72rem; }
+.gains div { padding: 0.25rem 0; border-radius: 0.5rem; background: #f3eee2; }
+.gains b { display: block; font-size: 1rem; color: var(--ink); }
+.gains .hot { background: #ffe7c6; } .gains .hot b { color: #c0661b; }
+.preview .go { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.preview .go button { flex: 1; min-height: 2.8rem; border: 0; border-radius: 0.8rem; font-weight: 900; }
+.btn-main { background: var(--accent); color: #fff; box-shadow: 0 3px 0 #b86f22; }
+.btn-sub { background: #e9e2d2; }
+
+/* ---- カードの稽古 */
+.cards { position: absolute; z-index: 6; left: 50%; bottom: 0.8rem; transform: translateX(-50%); display: flex; gap: 0.6rem; }
+.card { width: 8.6rem; min-height: 11.5rem; display: grid; grid-template-rows: auto auto 1fr auto; gap: 0.25rem; padding: 0.55rem; border: 0; border-radius: 0.9rem; background: #fff; box-shadow: 0 6px 16px rgba(0,0,0,0.2); text-align: left; transition: transform 0.15s; }
+.card:hover { transform: translateY(-0.6rem); }
+.card .kind { justify-self: start; padding: 0.05rem 0.45rem; border-radius: 999px; color: #fff; font-size: 0.62rem; font-weight: 900; }
+.k-teach { background: var(--blue); } .k-word { background: var(--red); } .k-rest { background: var(--green); }
+.card b { font-size: 0.92rem; line-height: 1.25; }
+.card p { margin: 0; font-size: 0.7rem; color: var(--muted); line-height: 1.4; }
+.card .cost { display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 900; }
+.card .cost .plus { color: #c0661b; } .card .cost .minus { color: var(--muted); }
+.card.fit { outline: 3px solid #e2457a; }
+.card { position: relative; }
+.card.fit::after { content: "この子に合う"; position: absolute; top: -0.7rem; right: 0.4rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: #e2457a; color: #fff; font-size: 0.62rem; font-weight: 900; }
+.say--high { top: 24%; }
+.lesson { position: absolute; z-index: 6; top: 4.6rem; left: 0.6rem; width: min(20rem, calc(100% - 1.2rem)); padding: 0.55rem 0.8rem; border-radius: 1rem; background: var(--panel); text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+.lesson .meter { height: 1rem; margin: 0.35rem 0 0.2rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; position: relative; }
+.lesson .meter i { display: block; height: 100%; width: 46%; background: linear-gradient(90deg, #f1a54c, #e2457a); }
+.lesson .meter span { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); }
+.lesson small { color: var(--muted); font-size: 0.72rem; }
+.lesson .steps { display: flex; justify-content: center; gap: 0.3rem; margin-top: 0.2rem; }
+.lesson .steps i { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #d8cfbd; }
+.lesson .steps i.done { background: var(--accent); }
+.auto { position: absolute; z-index: 6; right: 0.6rem; bottom: 0.8rem; min-height: 3rem; padding: 0 1rem; border: 0; border-radius: 0.8rem; background: var(--ink); color: #fff; font-weight: 900; }
+
+/* ---- 大一番 */
+.vs { position: absolute; z-index: 6; right: 0.6rem; top: 4.6rem; width: 15.5rem; padding: 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.14); border: 2px solid var(--red); }
+.vs h3 { margin: 0; font-size: 0.72rem; color: var(--red); }
+.vs .opp { display: flex; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
+.vs .opp .friend { width: 3rem; height: 3rem; }
+.vs .opp b { font-size: 1rem; } .vs .opp small { display: block; color: var(--muted); font-size: 0.72rem; }
+.vs ul { margin: 0.2rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.2rem; font-size: 0.76rem; }
+.vs li span { color: var(--muted); }
+.power { display: flex; justify-content: space-between; margin-top: 0.4rem; padding: 0.3rem 0.5rem; border-radius: 0.6rem; background: #2a3440; color: #fff; font-size: 0.75rem; }
+.power b { color: #ffd36b; }
+.plan { position: absolute; z-index: 6; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; gap: 0.45rem; padding: 0.6rem; border-radius: 1rem; background: var(--panel); box-shadow: 0 -4px 18px rgba(0,0,0,0.12); }
+.plan h4 { margin: 0; font-size: 0.8rem; display: flex; justify-content: space-between; }
+.plan h4 small { color: var(--muted); font-weight: 700; }
+.choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.choice.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.opt { min-height: 3.2rem; padding: 0.3rem 0.4rem; border: 2px solid var(--line); border-radius: 0.8rem; background: #fff; font-weight: 900; font-size: 0.85rem; }
+.opt small { display: block; color: var(--muted); font-size: 0.66rem; font-weight: 700; }
+.opt[aria-pressed="true"] { border-color: var(--accent); background: #fff3e2; }
+.opt .good { color: var(--green); }
+.plan .row { display: flex; gap: 0.5rem; }
+.plan .row button { flex: 1; min-height: 3rem; border: 0; border-radius: 0.8rem; font-weight: 900; }
+.charm { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; }
+.charm span { padding: 0.2rem 0.5rem; border-radius: 999px; background: #fff; border: 1px dashed var(--accent); }
+
+/* ---- 例会の星 */
+.board { position: absolute; z-index: 6; right: 0.6rem; top: 4.6rem; width: 16rem; padding: 0.6rem; border-radius: 0.9rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.14); }
+.board h3 { margin: 0 0 0.3rem; font-size: 0.8rem; }
+.game-row { display: grid; grid-template-columns: 1.6rem 1fr 2rem; gap: 0.4rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--line); font-size: 0.82rem; }
+.star { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; font-weight: 900; color: #fff; }
+.star.w { background: var(--red); } .star.l { background: #7a8794; }
+.promo { margin-top: 0.4rem; font-size: 0.78rem; }
+.promo .dots { display: flex; gap: 0.2rem; margin-top: 0.2rem; }
+.promo .dots i { width: 0.9rem; height: 0.9rem; border-radius: 50%; background: #e1d8c6; }
+.promo .dots i.on { background: var(--red); }
+.words { position: absolute; z-index: 6; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; gap: 0.4rem; padding: 0.6rem; border-radius: 1rem; background: var(--panel); }
+.words h4 { margin: 0; font-size: 0.8rem; }
+.words .choice .opt { min-height: 3.6rem; }
+.stamp { position: absolute; z-index: 7; left: 50%; top: 18%; transform: translateX(-50%) rotate(-8deg); padding: 0.4rem 1rem; border: 4px solid var(--red); border-radius: 0.6rem; color: var(--red); font-size: 2rem; font-weight: 900; background: rgba(255,255,255,0.8); letter-spacing: 0.1em; }
+
+/* ---- 弟子を選ぶ */
+.pick-title { position: absolute; z-index: 6; top: 0.6rem; left: 0.6rem; display: flex; gap: 0.5rem; align-items: center; }
+.pick-title .back { min-height: 2.6rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font-weight: 900; }
+.pick-title b { padding: 0.35rem 0.9rem; border-radius: 0.6rem; background: var(--panel); }
+.pick-info { position: absolute; z-index: 6; left: 0.6rem; top: 4.2rem; width: 15rem; padding: 0.7rem; border-radius: 1rem; background: var(--panel); box-shadow: 0 4px 14px rgba(0,0,0,0.14); }
+.pick-info h2 { margin: 0; font-size: 1.2rem; }
+.pick-info .age { color: var(--muted); font-size: 0.78rem; }
+.pick-info p { margin: 0.4rem 0; font-size: 0.82rem; line-height: 1.5; }
+.pick-info dl { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.5rem; margin: 0.3rem 0 0; font-size: 0.78rem; }
+.pick-info dt { color: var(--muted); }
+.pick-info dd { margin: 0; font-weight: 700; }
+.diff { color: var(--red); letter-spacing: 0.05em; }
+.pick-cards { position: absolute; z-index: 6; right: 0.6rem; top: 4.2rem; display: grid; gap: 0.45rem; width: 12rem; }
+.pc { display: grid; grid-template-columns: 2.6rem 1fr; gap: 0.5rem; align-items: center; padding: 0.4rem; border: 3px solid transparent; border-radius: 0.9rem; background: var(--panel); text-align: left; }
+.pc[aria-pressed="true"] { border-color: var(--accent); }
+.pc .dot { width: 2.6rem; height: 2.6rem; border-radius: 50%; }
+.pc b { display: block; font-size: 0.88rem; } .pc small { color: var(--muted); font-size: 0.7rem; }
+.pick-go { position: absolute; z-index: 6; right: 0.6rem; bottom: 0.6rem; min-width: 12rem; min-height: 3.6rem; border: 0; border-radius: 1rem; background: var(--accent); color: #fff; font-size: 1.05rem; font-weight: 900; box-shadow: 0 4px 0 #b86f22; }
+
+/* ---- スマホ縦: 立ち絵は真ん中のまま、UIを上下に寄せる */
+@media (max-width: 640px) {
+  .figure { height: 74%; bottom: 7.2rem; }
+  .top { top: 0.4rem; left: 0.4rem; right: 0.4rem; }
+  .turn { min-width: 4.6rem; } .turn b { font-size: 0.9rem; }
+  .goal { padding: 0.3rem 0.5rem; } .goal b { font-size: 0.8rem; } .goal small { font-size: 0.62rem; }
+  .goal .left b { font-size: 1.05rem; }
+  .menu-btn { width: 2.4rem; }
+  /* 能力は上の2列の小さな札にする */
+  .stats { top: 3.7rem; left: 0.4rem; width: 9.6rem; padding: 0.4rem 0.45rem; gap: 0.2rem; }
+  .stat { grid-template-columns: 2rem 1.3rem 1fr 1.8rem; font-size: 0.68rem; gap: 0.2rem; }
+  .stat .rank { width: 1.3rem; height: 1.3rem; font-size: 0.68rem; }
+  .stats .who b { font-size: 0.8rem; }
+  .mood { top: 3.7rem; right: 0.4rem; width: 7.4rem; padding: 0.4rem 0.45rem; gap: 0.3rem; }
+  .mood .note { display: none; }
+  .friend { width: 1.9rem; height: 1.9rem; }
+  .say, .say--high { top: 44%; bottom: auto; left: 0.6rem; transform: none; max-width: 60%; font-size: 0.8rem; }
+  .dock, .train-row { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cmd { min-height: 3.1rem; } .cmd .ic { font-size: 1.05rem; } .cmd small { display: none; }
+  .tr { min-height: 4.4rem; padding-top: 1rem; font-size: 0.85rem; }
+  .preview { bottom: 12.9rem; }
+  .tr[aria-pressed="true"] { transform: translateY(-0.25rem); }
+  .cards { left: 0.4rem; right: 0.4rem; transform: none; justify-content: center; gap: 0.35rem; bottom: 4.2rem; }
+  .card { width: calc((100% - 0.7rem) / 3); min-height: 9.5rem; padding: 0.45rem; }
+  .card b { font-size: 0.8rem; } .card p { font-size: 0.62rem; }
+  .auto { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; }
+  .lesson { top: auto; bottom: 14.4rem; left: 50%; transform: translateX(-50%); width: calc(100% - 0.8rem); }
+  .vs { top: 3.7rem; right: 0.4rem; width: 11.5rem; padding: 0.45rem; }
+  .vs ul { display: none; }
+  .vs .opp .friend { width: 2.2rem; height: 2.2rem; }
+  .power { font-size: 0.66rem; }
+  .plan { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; padding: 0.5rem; gap: 0.35rem; }
+  .opt { min-height: 2.8rem; font-size: 0.78rem; }
+  .board { top: auto; bottom: 10.6rem; right: 0.4rem; width: 13rem; }
+  .words { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; }
+  .pick-info { top: auto; bottom: 4.6rem; left: 0.4rem; right: 0.4rem; width: auto; padding: 0.5rem 0.6rem; }
+  .pick-info p { display: none; }
+  .pick-cards { top: 3.6rem; right: 0.4rem; width: 9rem; }
+  .pc { grid-template-columns: 1.8rem 1fr; padding: 0.3rem; } .pc .dot { width: 1.8rem; height: 1.8rem; }
+  .pick-go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
+  .figure.pickfig { bottom: 13rem; height: 62%; }
+}
+@media (max-width: 640px) and (max-height: 760px) { .stats .stat:nth-child(n+7) { display: none; } }
+</style>
+</head>
+<body>
+<nav class="mockbar" aria-label="見本の画面">
+  <button data-go="pick">1 弟子を選ぶ</button>
+  <button data-go="home">2 育成のホーム</button>
+  <button data-go="train">3 稽古を選ぶ</button>
+  <button data-go="lesson">4 指導の引き出し</button>
+  <button data-go="bigone">5 大一番の作戦</button>
+  <button data-go="reikai">6 例会の結果と言葉</button>
+</nav>
+
+<main class="game">
+  <!-- 1 弟子を選ぶ -->
+  <section class="screen" id="pick">
+    <div class="figure pickfig" data-fig></div>
+    <div class="pick-title"><button class="back">← 戻る</button><b>弟子を選ぶ</b></div>
+    <div class="pick-info">
+      <h2 id="pick-name">相沢 湊（仮）</h2>
+      <div class="age" id="pick-age">中学1年・12歳</div>
+      <p id="pick-text">将棋教室の大会で負けて泣いた日、あなたに「弟子にしてください」と頼みに来た。</p>
+      <dl>
+        <dt>得意</dt><dd id="pick-good">受け・粘り</dd>
+        <dt>課題</dt><dd id="pick-bad">攻めが遅い・自信がない</dd>
+        <dt>難しさ</dt><dd class="diff" id="pick-diff">★★☆</dd>
+        <dt>年齢制限まで</dt><dd id="pick-limit">ゆとりあり</dd>
+      </dl>
+    </div>
+    <div class="pick-cards">
+      <button class="pc" aria-pressed="true" data-pick="0"><span class="dot" style="background:var(--c1)"></span><span><b>相沢 湊</b><small>中1・受け</small></span></button>
+      <button class="pc" aria-pressed="false" data-pick="1"><span class="dot" style="background:var(--c2)"></span><span><b>朝比奈 紬</b><small>高1・研究</small></span></button>
+      <button class="pc" aria-pressed="false" data-pick="2"><span class="dot" style="background:var(--c3)"></span><span><b>結城 蒼</b><small>小6・終盤</small></span></button>
+    </div>
+    <button class="pick-go">この子を弟子にする</button>
+  </section>
+
+  <!-- 2 育成のホーム -->
+  <section class="screen" id="home">
+    <div class="figure" data-fig></div>
+    <header class="top">
+      <div class="turn"><b>中1 4月</b><small>前半・1年目</small></div>
+      <div class="goal"><div><small>次の目標</small><br><b>研修会 入会試験</b></div><div class="left">あと<b>3</b>ターン</div></div>
+      <button class="menu-btn" aria-label="メニュー">≡</button>
+    </header>
+    <aside class="stats" data-stats></aside>
+    <aside class="mood">
+      <div><small>やる気</small><span class="face">好調 ↗</span></div>
+      <div><small>体力 72/100</small><div class="hp"><i style="width:72%"></i></div></div>
+      <div><small>仲間</small><div class="friends" data-friends></div></div>
+      <div class="note">稽古に顔を出した仲間と一緒だと、よく伸びる</div>
+    </aside>
+    <div class="say">先生、今日はなにをしますか</div>
+    <nav class="dock">
+      <button class="cmd main" data-go="train"><span class="ic">♟</span>稽古<small>能力を伸ばす</small><span class="badge" data-badge="2"></span></button>
+      <button class="cmd"><span class="ic">☕</span>休む<small>体力が戻る</small></button>
+      <button class="cmd"><span class="ic">🚶</span>出かける<small>やる気が上がる</small></button>
+      <button class="cmd"><span class="ic">👥</span>研究会<small>仲間と実戦</small><span class="badge" data-badge="1"></span></button>
+      <button class="cmd"><span class="ic">🏯</span>師匠の予定<small>対局の見学</small></button>
+      <button class="cmd sub"><span class="ic">🎒</span>持ち物</button>
+    </nav>
+  </section>
+
+  <!-- 3 稽古を選ぶ -->
+  <section class="screen" id="train">
+    <div class="figure" data-fig></div>
+    <header class="top">
+      <div class="turn"><b>中1 4月</b><small>前半・1年目</small></div>
+      <div class="goal"><div><small>次の目標</small><br><b>研修会 入会試験</b></div><div class="left">あと<b>3</b>ターン</div></div>
+      <button class="menu-btn" aria-label="メニュー">≡</button>
+    </header>
+    <aside class="stats" data-stats data-preview></aside>
+    <div class="preview">
+      <h4><span id="tr-name">詰将棋</span><small id="tr-note">体力 −20・失敗 4%</small></h4>
+      <div class="gains" id="tr-gains"></div>
+      <div class="go"><button class="btn-sub" data-go="home">やめる</button><button class="btn-main" data-go="lesson">この稽古にする</button></div>
+    </div>
+    <nav class="train-row" id="train-row"></nav>
+  </section>
+
+  <!-- 4 指導の引き出し(カードの稽古) -->
+  <section class="screen" id="lesson">
+    <div class="figure" data-fig></div>
+    <header class="top">
+      <div class="turn"><b>中1 4月</b><small>前半・1年目</small></div>
+      <div class="goal"><div><small>稽古</small><br><b>詰将棋（Lv2）</b></div><div class="left">体力<b style="color:var(--green)">72</b></div></div>
+      <button class="menu-btn" aria-label="メニュー">≡</button>
+    </header>
+    <div class="lesson">
+      <b>稽古の出来</b> <small>2枚目 / 3枚</small>
+      <div class="meter"><i></i><span style="left:60%"></span><span style="left:85%"></span></div>
+      <small>線を越えると「よくできた」「完璧」。この子は<b>ほめる</b>とよく伸びる</small>
+      <div class="steps"><i class="done"></i><i></i><i></i></div>
+    </div>
+    <div class="say say--high">わ、この詰将棋、先生が作ったんですか</div>
+    <div class="cards">
+      <button class="card"><span class="kind k-teach">教える</span><b>詰将棋を作ってあげる</b><p>この子に合わせた1問。終盤がぐっと伸びる</p><span class="cost"><span class="plus">出来 +30</span><span class="minus">体力 −8</span></span></button>
+      <button class="card fit"><span class="kind k-word">声をかける</span><b>ほめる</b><p>解けたら、すぐにほめる。やる気が1段上がることがある</p><span class="cost"><span class="plus">出来 +18</span><span class="minus">体力 ±0</span></span></button>
+      <button class="card"><span class="kind k-rest">休ませる</span><b>お茶にする</b><p>ひと息つく。体力が戻り、次のカードが強くなる</p><span class="cost"><span class="plus">出来 +6</span><span class="minus" style="color:var(--green)">体力 +10</span></span></button>
+    </div>
+    <button class="auto">おまかせ</button>
+  </section>
+
+  <!-- 5 大一番の作戦 -->
+  <section class="screen" id="bigone">
+    <div class="figure" data-fig></div>
+    <header class="top">
+      <div class="turn" style="background:var(--red)"><b>大一番</b><small>研修会 入会試験</small></div>
+      <div class="goal" style="border-color:var(--red)"><div><small style="color:var(--red)">勝てば合格</small><br><b>試験の3局目（ここまで1勝1敗）</b></div></div>
+      <button class="menu-btn" aria-label="メニュー">≡</button>
+    </header>
+    <aside class="vs">
+      <h3>今日の相手</h3>
+      <div class="opp"><span class="friend px"><img src="../../public/characters/hanane-mini.webp" alt=""></span><div><b>天鷺門下の子（仮）</b><small>研修会 D1・13歳</small></div></div>
+      <ul>
+        <li><span>得意：</span>早い攻め（四間飛車の急戦）</li>
+        <li><span>棋風：</span>攻め・序盤が速い</li>
+        <li><span>師匠：</span>天鷺羽音</li>
+      </ul>
+      <div class="power"><span>戦闘力 湊 <b>412</b></span><span>相手 <b>438</b></span></div>
+    </aside>
+    <div class="say say--high">先生、作戦をください</div>
+    <div class="plan">
+      <h4>序盤の方針<small>相手の得意な形をどうする？</small></h4>
+      <div class="choice" data-choice>
+        <button class="opt">相手の得意を外す<small>力の差を消す</small></button>
+        <button class="opt" aria-pressed="true">湊の得意で行く<small class="good">受け が合う ◎</small></button>
+        <button class="opt">力戦にする<small>読み勝負</small></button>
+      </div>
+      <h4>終盤の構え<small>最後はどう戦う？</small></h4>
+      <div class="choice two" data-choice>
+        <button class="opt">攻め切る<small>寄せ D</small></button>
+        <button class="opt" aria-pressed="true">受けて待つ<small class="good">相手は攻めが速い ◎</small></button>
+      </div>
+      <div class="charm">お守り：<span>師匠の扇子（やる気＋1段）</span><span style="border-style:solid;opacity:.5">持たせない</span></div>
+      <div class="row"><button class="btn-sub">結果だけ見る</button><button class="btn-main">作戦を授けて観戦する</button></div>
+    </div>
+  </section>
+
+  <!-- 6 例会の結果と言葉 -->
+  <section class="screen" id="reikai">
+    <div class="figure" data-fig></div>
+    <header class="top">
+      <div class="turn"><b>中1 6月</b><small>後半・1年目</small></div>
+      <div class="goal"><div><small>研修会の例会</small><br><b>D2クラス</b></div><div class="left">昇級まで<b>2</b>勝</div></div>
+      <button class="menu-btn" aria-label="メニュー">≡</button>
+    </header>
+    <aside class="board">
+      <h3>今日の例会</h3>
+      <div class="game-row"><span class="star w">○</span><span>1局目 対 佐伯（D2）</span><small>58手</small></div>
+      <div class="game-row"><span class="star l">●</span><span>2局目 対 小野寺（D1）</span><small>112手</small></div>
+      <div class="promo">昇級の星（4連勝か、8勝4敗）<div class="dots"><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+    </aside>
+    <div class="stamp">1勝1敗</div>
+    <div class="say say--high">2局目、最後に間違えちゃった……</div>
+    <div class="words">
+      <h4>なんて声をかける？</h4>
+      <div class="choice">
+        <button class="opt">よく粘ったね<small>ほめる・やる気↑</small></button>
+        <button class="opt">一緒に振り返ろう<small>終盤＋・体力−</small></button>
+        <button class="opt">今日はもう休もう<small>そっとしておく</small></button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+// ---- 仮の立ち絵(影絵)。弟子ごとに色だけ変える。
+const DISCIPLES = [
+  { name: '相沢 湊（仮）', age: '中学1年・12歳', color: 'var(--c1)', hair: '#33415a', text: '将棋教室の大会で負けて泣いた日、あなたに「弟子にしてください」と頼みに来た。', good: '受け・粘り', bad: '攻めが遅い・自信がない', diff: '★★☆', limit: 'ゆとりあり' },
+  { name: '朝比奈 紬（仮）', age: '高校1年・15歳', color: 'var(--c2)', hair: '#4a3446', text: '将棋を始めたのは中学3年。遅く始めた分、研究ノートは誰よりも厚い。', good: '研究・序盤', bad: '終盤の読み・体力', diff: '★★★', limit: '時間との勝負' },
+  { name: '結城 蒼（仮）', age: '小学6年・11歳', color: 'var(--c3)', hair: '#2d3a36', text: '詰将棋の大会で名前を知られた、口数の少ない子。盤の外のことはまだ知らない。', good: '終盤の読み', bad: '序盤が雑・人付き合い', diff: '★☆☆', limit: 'ゆとりあり' },
+];
+let current = 0;
+function figureSvg(d) {
+  return `<svg viewBox="0 0 230 500" aria-hidden="true">
+    <ellipse cx="115" cy="492" rx="80" ry="8" fill="rgba(0,0,0,.12)"/>
+    <path d="M60 210 Q115 180 170 210 L190 420 Q115 440 40 420 Z" fill="${d.color}"/>
+    <rect x="82" y="410" width="26" height="80" rx="10" fill="#e9d5c3"/><rect x="122" y="410" width="26" height="80" rx="10" fill="#e9d5c3"/>
+    <rect x="78" y="478" width="34" height="14" rx="6" fill="#3a3a44"/><rect x="118" y="478" width="34" height="14" rx="6" fill="#3a3a44"/>
+    <path d="M60 215 Q40 300 52 360" stroke="${d.color}" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <path d="M170 215 Q190 300 178 360" stroke="${d.color}" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <circle cx="52" cy="366" r="13" fill="#f2dfcf"/><circle cx="178" cy="366" r="13" fill="#f2dfcf"/>
+    <path d="M95 200 L115 240 L135 200 Z" fill="#fff"/>
+    <rect x="104" y="170" width="22" height="30" fill="#f2dfcf"/>
+    <circle cx="115" cy="120" r="62" fill="#f6e6d8"/>
+    <path d="M52 118 Q50 50 115 48 Q182 50 178 118 Q160 80 115 84 Q72 82 52 118 Z" fill="${d.hair}"/>
+    <ellipse cx="94" cy="128" rx="6" ry="9" fill="#2b2b33"/><ellipse cx="136" cy="128" rx="6" ry="9" fill="#2b2b33"/>
+    <path d="M104 156 Q115 163 126 156" stroke="#9b5a4a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </svg><span class="tag">仮の立ち絵（${d.name}）</span>`;
+}
+function drawFigures() {
+  for (const el of document.querySelectorAll('[data-fig]')) el.innerHTML = figureSvg(DISCIPLES[current]);
+}
+
+// ---- 能力(5つ)
+const STATS = [
+  { name: '序盤', rank: 'E', value: 182 }, { name: '中盤', rank: 'E', value: 168 }, { name: '終盤', rank: 'D', value: 226 },
+  { name: '受け', rank: 'D+', value: 251 }, { name: '心', rank: 'F', value: 120 },
+];
+const TRAINS = [
+  { id: 'tsume', name: '詰将棋', ic: '🧩', lv: 2, fail: 4, cost: 20, gains: [0, 0, 14, 0, 4], friends: ['momoka'] },
+  { id: 'kifu', name: '棋譜並べ', ic: '📜', lv: 1, fail: 4, cost: 15, gains: [11, 4, 0, 0, 0], friends: [] },
+  { id: 'jissen', name: '実戦', ic: '♟', lv: 1, fail: 6, cost: 22, gains: [0, 12, 0, 5, 0], friends: ['pro'] },
+  { id: 'uke', name: '受けの特訓', ic: '🛡', lv: 3, fail: 9, cost: 25, gains: [0, 0, 4, 16, 0], friends: [] },
+  { id: 'shisho', name: '師匠と指す', ic: '🏯', lv: 1, fail: 2, cost: 12, gains: [0, 0, 0, 0, 10], friends: [] },
+];
+const FRIENDS = {
+  momoka: { img: '../../public/characters/sakurano-momoka-320.webp', heart: 60, px: false },
+  pro: { img: '../../public/characters/yakobihime-mini.webp', heart: 30, px: true },
+  hanane: { img: '../../public/characters/hanane-mini.webp', heart: 10, px: true },
+};
+const friendHtml = (id) => { const f = FRIENDS[id]; return `<span class="friend${f.px ? ' px' : ''}"><img src="${f.img}" alt=""><span class="heart"><i style="width:${f.heart}%"></i></span></span>`; };
+function statsHtml(gains = null) {
+  const d = DISCIPLES[current];
+  return `<div class="who"><b>${d.name.replace('（仮）', '')}</b><small>研修会前</small></div>` + STATS.map((stat, index) => {
+    const rank = stat.rank.replace('+', '');
+    const up = gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : `<span></span>`;
+    return `<div class="stat"><span class="name">${stat.name}</span><span class="rank r-${rank}">${stat.rank}</span><span class="bar"><i class="r-${rank}" style="width:${Math.min(100, stat.value / 4)}%"></i></span><span class="num">${gains && gains[index] ? `<span class="up">+${gains[index]}</span>` : stat.value}</span></div>`;
+  }).join('');
+}
+let pickedTrain = 0;
+function drawTrain() {
+  const row = document.getElementById('train-row');
+  row.innerHTML = TRAINS.map((t, index) => `<button class="tr" data-tr="${index}" aria-pressed="${index === pickedTrain}"><span class="lv">Lv${t.lv}</span>${t.friends.length ? `<span class="badge">${t.friends.map(friendHtml).join('')}</span>` : ''}<span style="font-size:1.4rem">${t.ic}</span>${t.name}<span class="fail${t.fail >= 8 ? ' warn' : ''}">失敗 ${t.fail}%</span></button>`).join('') + `<button class="cmd sub" data-go="home">戻る</button>`;
+  const t = TRAINS[pickedTrain];
+  document.getElementById('tr-name').textContent = t.name + (t.friends.length ? '　仲間と一緒' : '');
+  document.getElementById('tr-note').textContent = `体力 −${t.cost}・失敗 ${t.fail}%`;
+  document.getElementById('tr-gains').innerHTML = STATS.map((stat, index) => `<div class="${t.gains[index] >= 10 ? 'hot' : ''}">${stat.name}<b>${t.gains[index] ? `+${t.gains[index]}` : '—'}</b></div>`).join('');
+  document.querySelector('#train [data-stats]').innerHTML = statsHtml(t.gains);
+  for (const el of row.querySelectorAll('[data-tr]')) el.addEventListener('click', () => { pickedTrain = Number(el.dataset.tr); drawTrain(); });
+  for (const el of row.querySelectorAll('[data-go]')) el.addEventListener('click', () => show(el.dataset.go));
+}
+function drawHome() {
+  document.querySelector('#home [data-stats]').innerHTML = statsHtml();
+  document.querySelector('#home [data-friends]').innerHTML = ['momoka', 'pro', 'hanane'].map(friendHtml).join('');
+  for (const el of document.querySelectorAll('[data-badge]')) el.innerHTML = el.dataset.badge === '2' ? friendHtml('momoka') + friendHtml('pro') : friendHtml('pro');
+}
+function drawPick() {
+  const d = DISCIPLES[current];
+  for (const [key, value] of Object.entries({ name: d.name, age: d.age, text: d.text, good: d.good, bad: d.bad, diff: d.diff, limit: d.limit })) document.getElementById(`pick-${key}`).textContent = value;
+  for (const el of document.querySelectorAll('[data-pick]')) el.setAttribute('aria-pressed', String(Number(el.dataset.pick) === current));
+}
+function show(id) {
+  for (const el of document.querySelectorAll('.screen')) el.classList.toggle('on', el.id === id);
+  for (const el of document.querySelectorAll('.mockbar [data-go]')) el.setAttribute('aria-pressed', String(el.dataset.go === id));
+  const fig = document.querySelector(`#${id} .figure`);
+  if (fig) { fig.classList.remove('bounce'); void fig.offsetWidth; fig.classList.add('bounce'); }
+  history.replaceState(null, '', `?s=${id}`);
+}
+document.querySelectorAll('[data-pick]').forEach((el) => el.addEventListener('click', () => { current = Number(el.dataset.pick); drawFigures(); drawPick(); drawHome(); drawTrain(); }));
+document.querySelectorAll('[data-go]').forEach((el) => el.addEventListener('click', () => show(el.dataset.go)));
+document.querySelectorAll('[data-choice]').forEach((group) => group.querySelectorAll('.opt').forEach((opt) => opt.addEventListener('click', () => {
+  group.querySelectorAll('.opt').forEach((other) => other.setAttribute('aria-pressed', String(other === opt)));
+})));
+drawFigures(); drawPick(); drawHome(); drawTrain();
+show(new URLSearchParams(location.search).get('s') || 'home');
+</script>
+</body>
+</html>
