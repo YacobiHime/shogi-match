@@ -46,6 +46,14 @@ let skippedTotal = 0;
 let movesTotal = 0;
 const results = { black: 0, white: 0, draw: 0 };
 const losses = { black: [], white: [] };
+/** 理由ごとの損(1手の損は2000で頭打ち。300以上は大きな損として数える)。 */
+const lossBy = {};
+const noteLoss = (reason, loss) => {
+  const entry = lossBy[reason] ??= { n: 0, sum: 0, big: 0 };
+  entry.n += 1;
+  entry.sum += Math.min(2000, loss);
+  if (loss >= 300) entry.big += 1;
+};
 const positionKey = (sfen) => sfen.split(' ').slice(0, 3).join(' ');
 
 for (let game = 0; game < games; game += 1) {
@@ -107,8 +115,15 @@ for (let game = 0; game < games; game += 1) {
       if (best && best.move !== choice.move) {
         const single = await search({ moves: [...moves, choice.move], nodes: 20000, multiPv: 1 });
         const after = rankedCandidates(single)[0];
-        if (after) losses[side].push(Math.max(0, best.value + after.value));
-      } else losses[side].push(0);
+        if (after) {
+          const loss = Math.max(0, best.value + after.value);
+          losses[side].push(loss);
+          noteLoss(choice.reason, loss);
+        }
+      } else {
+        losses[side].push(0);
+        noteLoss(choice.reason, 0);
+      }
     }
     if (!appendUsiMove(record, choice.move)) break;
     moves.push(choice.move);
@@ -128,5 +143,9 @@ for (const [reason, count] of Object.entries(quiet).sort((a, b) => b[1] - a[1]))
 console.log('1手の時間(理由の手) 中央', median(times), 'ms 最大', Math.max(0, ...times), 'ms');
 console.log('研究の続き(エンジン)', follows, '確かめを飛ばした手', skippedTotal, '/', movesTotal);
 console.log('勝ち負け', results);
+if (judge) {
+  console.log('理由ごとの損(手の数・損の合計(2000で頭打ち)・300以上の損の手)');
+  for (const [reason, entry] of Object.entries(lossBy).sort((a, b) => b[1].sum - a[1].sum)) console.log(`  ${(REASON_TEXT[reason] ?? reason).padEnd(8)} ${entry.n}手 合計${entry.sum} 大きな損${entry.big}`);
+}
 if (judge) for (const side of ['black', 'white']) console.log(`損の平均(${side}) ${Math.round(losses[side].reduce((a, b) => a + b, 0) / Math.max(1, losses[side].length))}`);
 process.exit(0);
