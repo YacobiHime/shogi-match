@@ -407,9 +407,11 @@ export function discipleWatchMoves(entries, side) {
   const moves = [];
   for (let index = first; index < entries.length; index += 2) {
     const entry = entries[index];
+    // 落ち幅は、評価値のグラフで見える落ち方(相手の手のあとの形勢から、弟子の手のあとの形勢へ)。
     // 指したあとも大きく勝っている手(詰みの手数が延びただけなど)は、崩れた手に数えない。
+    const before = clampEval(sign * (Number(entries[index - 1]?.eval) || 0));
     const after = clampEval(sign * (Number(entry?.eval) || 0));
-    const loss = after >= STILL_WINNING ? 0 : Math.min(MAX_MARK_LOSS, Number(entry?.loss) || 0);
+    const loss = after >= STILL_WINNING ? 0 : Math.max(0, before - after);
     moves.push({
       ply: index + 1, loss, oversights: entry?.d?.o ? [{ kind: 'seen' }] : [],
       missedMate: Boolean(entry?.d?.m), clock: entry?.d?.c || null,
@@ -419,7 +421,7 @@ export function discipleWatchMoves(entries, side) {
 }
 /** 指したあとの形勢(弟子から見た評価値)がこれ以上なら、まだ大きく勝っている。 */
 export const STILL_WINNING = 1000;
-/** 1手の落ち幅の上限(詰みの点数の大きさで印の順が決まらないように)。 */
+/** 評価値の頭打ち(詰みの点数の大きさで印の順が決まらないように)。 */
 export const MAX_MARK_LOSS = 3000;
 const clampEval = (value) => Math.max(-MAX_MARK_LOSS, Math.min(MAX_MARK_LOSS, value));
 

@@ -133,18 +133,19 @@ describe('観戦の見立て(19-5)', () => {
   });
 
   it('本局の棋譜から弟子の手を取り出し、印を付けられる', () => {
+    // 評価値は先手から見た値。先手の弟子の5手目で−600、7手目で−1500に落ちる。
     const entries = [
-      { loss: 0 }, { loss: 10 }, { loss: 30, d: { o: 0, m: 0, c: '' } }, { loss: 0 },
-      { loss: 650, d: { o: 1, m: 0, c: '' } }, { loss: 0 }, { loss: 900, d: { o: 0, m: 1, c: 'byoyomi' } },
+      { eval: 30 }, { eval: 20 }, { eval: 40, d: { o: 0, m: 0, c: '' } }, { eval: 50 },
+      { eval: -600, d: { o: 1, m: 0, c: '' } }, { eval: -500 }, { eval: -1500, d: { o: 0, m: 1, c: 'byoyomi' } },
     ];
     const moves = discipleWatchMoves(entries, 'black');
     expect(moves.map((move) => move.ply)).toEqual([1, 3, 5, 7]);
+    expect(moves.map((move) => move.loss)).toEqual([0, 0, 650, 1000]);
     const marks = watchMarks(moves);
     expect(marks.map((mark) => mark.cause)).toEqual(['careless', 'mate']);
-    // 指したあとも大きく勝っている手(詰みの手数が延びただけ)は数えない。
-    const winning = discipleWatchMoves([{ loss: 5000, eval: 30000, d: { o: 0, m: 0, c: '' } }], 'black');
-    expect(winning[0].loss).toBe(0);
-    expect(discipleWatchMoves([{ loss: 5000, eval: -200 }], 'black')[0].loss).toBe(3000);
+    // 指したあとも大きく勝っている手(詰みの手数が延びただけ)は数えない。後手の弟子は符号を逆に読む。
+    expect(discipleWatchMoves([{ eval: 30000 }, { eval: 9000 }], 'black')[0].loss).toBe(0);
+    expect(discipleWatchMoves([{ eval: 0 }, { eval: 2500 }], 'white')[0].loss).toBe(2500);
   });
 
   it('当てると伸び×1.5、外しても×1.25で正しい理由が分かる', () => {

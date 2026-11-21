@@ -184,9 +184,22 @@
         <small>{{ view?.name }}（{{ watch.side === 'black' ? '先手' : '後手' }}）対 {{ watch.opponent.name }}　{{ watch.end ? `${watch.entries.length}手で終局` : `${watch.entries.length}手目` }}</small>
         <button type="button" class="disciple__watch-close" data-disciple-watch-close @click="closeWatch">{{ watch.done ? '見立てを終える' : 'やめる' }}</button>
       </header>
-      <div class="disciple__watch-board">
-        <div class="disciple__ban" :class="{ 'disciple__ban--flip': watch.side === 'white' }" aria-label="盤">
-          <i v-for="cell in boardCells" :key="cell.key" :class="{ 'disciple__cell--white': cell.white, 'disciple__cell--last': cell.last }">{{ cell.label }}</i>
+      <!-- 盤は対局と同じ部品と駒・盤の素材(ShogiMatchBoard)。枠を、描かれる盤と同じ大きさにする(TeamPeekSheet.vueと同じ方法)。 -->
+      <div ref="watchStageEl" class="disciple__watch-board">
+        <div class="disciple__board-box" :style="boardBoxStyle">
+          <ShogiMatchBoard
+            :sfen="watchSfen"
+            :last-move="watchLastMove"
+            :allow-move="false"
+            :enable-drag-and-drop="false"
+            :flip="watch.side === 'white'"
+            :mobile="true"
+            :layout="'portrait'"
+            :asset-base-url="assetBaseUrl"
+            :black-player-name="watch.side === 'black' ? view?.name ?? '' : watch.opponent.name"
+            :white-player-name="watch.side === 'white' ? view?.name ?? '' : watch.opponent.name"
+            @resize="onBoardResize"
+          />
         </div>
       </div>
       <div class="disciple__watch-side">
@@ -220,14 +233,16 @@
         </svg>
         <button v-for="(mark, index) in watch.marks" :key="mark.ply" type="button" class="disciple__mark"
           :class="{ 'disciple__mark--done': guessOf(index), 'disciple__mark--on': watch.selected === index }"
-          :style="{ left: `${markLeft(mark.ply)}%` }" :data-disciple-mark="index" @click="watch.selected = index">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
+          :style="{ left: `${markLeft(mark.ply)}%`, top: markRaised(index) ? '2.8rem' : '0.3rem' }" :data-disciple-mark="index" @click="watch.selected = index">{{ mark.ply }}手目{{ guessOf(index) ? ' ✓' : '' }}</button>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, type PropType } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch as vueWatch, type PropType } from "vue";
+import ShogiMatchBoard from "./ShogiMatchBoard.vue";
+import { STANDARD_SFEN } from "./game-state";
 import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, CAUSE_ORDER, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, discipleWatchMoves, skillById, statRank, watchMarks,
 } from "./core/disciple-strength.mjs";
@@ -235,7 +250,6 @@ import {
   FRIENDS, PLANS, WORDS, applyFindings, chooseAction, chooseWords, createDiscipleRun, discipleView, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
-import { parseSfenBoard } from "./core/sfen-board.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 
@@ -418,27 +432,31 @@ function closeWatch() {
     say(revealed ? `先生……わたしの弱点、「${revealed}」なんですね` : right ? "先生、よく見てますね。そこを稽古します" : "次は、そこに気をつけます");
   }
 }
-/** 盤のマス(選んだ印の局面。印を選んでいなければ最新の局面)。 */
-const boardCells = computed(() => {
-  const current = watch.value;
-  const moves = (current?.entries ?? []).map((entry) => entry.move);
-  const upto = selectedMark.value ? selectedMark.value.ply : moves.length;
-  const sfen = sfenAfter(moves.slice(0, upto)) ?? "";
-  const board = parseSfenBoard(sfen);
-  const last = moves[upto - 1]?.slice(2, 4) ?? "";
-  const cells = [];
-  for (let rank = 0; rank < 9; rank += 1) {
-    for (let file = 9; file >= 1; file -= 1) {
-      const key = `${file}${String.fromCharCode(97 + rank)}`;
-      const piece = board.get(key);
-      cells.push({ key, label: piece ? PIECE_LABELS[piece.kind] ?? "" : "", white: piece?.color === "white", last: key === last });
-    }
-  }
-  return cells;
+/** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
+const watchUpto = computed(() => (selectedMark.value ? selectedMark.value.ply : watch.value?.entries.length ?? 0));
+const watchSfen = computed(() => sfenAfter((watch.value?.entries ?? []).slice(0, watchUpto.value).map((entry) => entry.move)) ?? STANDARD_SFEN);
+const watchLastMove = computed(() => (watchUpto.value > 0 ? watch.value?.entries[watchUpto.value - 1]?.move ?? "" : ""));
+// 盤の枠を、描かれる盤と同じ大きさにする(TeamPeekSheet.vueと同じ方法)。
+const watchStageEl = ref<HTMLElement | null>(null);
+const boardBoxStyle = ref<Record<string, string>>({});
+const boardAspect = ref(878 / 1128);
+function onBoardResize({ width, height }: { width: number; height: number }) {
+  if (width > 0 && height > 0 && Math.abs(width / height - boardAspect.value) > 0.005) boardAspect.value = width / height;
+}
+function layoutBoardBox() {
+  const stage = watchStageEl.value;
+  if (!stage) return;
+  const width = Math.max(1, Math.floor(Math.min(stage.clientWidth, stage.clientHeight * boardAspect.value)));
+  boardBoxStyle.value = { width: `${width}px`, height: `${Math.max(1, Math.floor(width / boardAspect.value))}px` };
+}
+const boardObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => layoutBoardBox()) : null;
+vueWatch(watchStageEl, (stage) => {
+  boardObserver?.disconnect();
+  if (stage) boardObserver?.observe(stage);
+  layoutBoardBox();
 });
-const PIECE_LABELS: Record<string, string> = {
-  K: "玉", R: "飛", B: "角", G: "金", S: "銀", N: "桂", L: "香", P: "歩", "+R": "竜", "+B": "馬", "+S": "全", "+N": "圭", "+L": "杏", "+P": "と",
-};
+vueWatch(boardAspect, layoutBoardBox);
+onBeforeUnmount(() => boardObserver?.disconnect());
 /** 評価値のグラフ(弟子から見た値。±2000で頭打ち)。 */
 const graphPoints = computed(() => {
   const current = watch.value;
@@ -450,6 +468,11 @@ const graphPoints = computed(() => {
     return `${((index + 1) / total * 400).toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
 });
+/** 近い印は、ひとつ下の段にずらす(重ならないように)。 */
+const markRaised = (index: number) => {
+  const marks = watch.value?.marks ?? [];
+  return index > 0 && Math.abs(markLeft(marks[index].ply) - markLeft(marks[index - 1].ply)) < 12 && !markRaised(index - 1);
+};
 const markLeft = (ply: number) => Math.min(92, Math.max(4, (ply / Math.max(watch.value?.entries.length ?? 60, 60)) * 100));
 
 /** 戻る操作。観戦・稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
@@ -602,11 +625,8 @@ defineExpose({ goBack });
 .shogi-game .disciple__watch-head small { color: #b8c6d2; }
 .shogi-game .disciple .disciple__watch-close { margin-left: auto; min-height: 2.6rem; padding: 0 0.9rem; border: 1px solid #50606e; border-radius: 0.6rem; background: transparent; color: #fff; font-weight: 800; }
 .shogi-game .disciple__watch-board { display: grid; place-items: center; min-height: 0; }
-.shogi-game .disciple__ban { height: 100%; max-height: 30rem; aspect-ratio: 1; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr); background: #e3bd74; border: 3px solid #7a5426; }
-.shogi-game .disciple__ban--flip { transform: rotate(180deg); }
-.shogi-game .disciple__ban i { display: grid; place-items: center; border: 1px solid rgba(80, 50, 20, 0.45); color: #2a1a0a; font-style: normal; font-weight: 900; font-size: clamp(0.6rem, 2.2vh, 1.1rem); }
-.shogi-game .disciple__ban i.disciple__cell--white { transform: rotate(180deg); }
-.shogi-game .disciple__ban i.disciple__cell--last { background: rgba(90, 166, 106, 0.45); }
+.shogi-game .disciple__board-box { position: relative; }
+.shogi-game .disciple__board-box .shogi-match-theme-controls { display: none; }
 .shogi-game .disciple__watch-side { display: grid; align-content: start; gap: 0.5rem; min-height: 0; overflow-y: auto; }
 .shogi-game .disciple__ask { margin: 0; padding: 0.6rem; border-radius: 0.9rem; background: #fffaf0; color: var(--ink); font-size: 0.9rem; }
 .shogi-game .disciple__ask small { display: block; color: var(--muted); font-size: 0.74rem; }
@@ -647,7 +667,7 @@ defineExpose({ goBack });
   .shogi-game .disciple .disciple__go { left: 0.4rem; right: 0.4rem; bottom: 0.4rem; min-height: 3.2rem; }
   .shogi-game .disciple__watch { grid-template-columns: 1fr; grid-template-rows: auto auto auto minmax(0, 1fr); padding: 0.4rem; overflow-y: auto; }
   .shogi-game .disciple__watch-head small { display: none; }
-  .shogi-game .disciple__ban { height: auto; width: 100%; max-height: none; }
+  .shogi-game .disciple__watch-board { height: min(64vh, calc((100vw - 0.8rem) * 1.285)); }
   .shogi-game .disciple__graph { grid-column: auto; height: 5.5rem; order: -1; }
 }
 </style>
