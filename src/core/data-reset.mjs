@@ -26,7 +26,7 @@ export const RESET_GROUPS = Object.freeze([
       `${Y}ryuo-season`, `${Y}ryuo-career`, `${Y}ryuo-roster`, `${Y}ryuo-counter:v1`, `${Y}ryuo-oshi`, `${Y}ryuo-prediction`,
       `${Y}ryuo-watch:v1`, `${Y}meijin-season`, `${Y}meijin-career`, `${Y}shoreikai:v1`, `${Y}kenshukai:v1`,
       `${Y}tournament-world:v1`, `${Y}engine-game:v1`, `${Y}relay:v1`, `${Y}relay-view:v1`, `${Y}relay-predict:v1`, `${Y}relay-quiz:v1`,
-      `${Y}team-battle:v1`, `${Y}pro-year:v1`, `${Y}pro-year-slots:v1`, `${Y}disciple:v1`,
+      `${Y}team-battle:v1`, `${Y}pro-year:v1`, `${Y}pro-year-slots:v1`, `${Y}disciple:v1`, `${Y}disciple-slots:v1`,
     ]),
     snapshots: "tournament",
   }),

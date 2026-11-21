@@ -10,11 +10,42 @@
       <img :src="portrait" alt="" draggable="false">
     </div>
 
+    <!-- 弟子の記録(27章)。ほかの枠に記録があるときの入口と、上の帯の「記録」から -->
+    <template v-if="slotsShown">
+      <div class="disciple__top disciple__top--pick">
+        <button type="button" class="disciple__back" data-disciple-back @click="leaveSlots">← 戻る</button>
+        <b class="disciple__title">師匠の1年　{{ SLOT_TEXT.title }}</b>
+      </div>
+      <section class="disciple__panel disciple__slots" data-disciple-slots-screen>
+        <p class="disciple__muted">{{ SLOT_TEXT.sub }}</p>
+        <div v-for="card in slotList" :key="card.index" class="disciple__slot" :class="{ 'disciple__slot--active': card.active }">
+          <button type="button" class="disciple__slot-main" :data-disciple-slot="card.index" @click="openSlot(card.index)">
+            <small>{{ card.label }}<template v-if="card.active">・{{ card.summary?.end ? SLOT_TEXT.ended : SLOT_TEXT.playing }}</template></small>
+            <template v-if="card.summary">
+              <b>{{ card.summary.name }}</b>
+              <span>{{ card.summary.head }}・{{ card.summary.place }}</span>
+              <span v-if="card.summary.end" class="disciple__slot-end">評価 {{ card.summary.end.rank }}</span>
+            </template>
+            <template v-else><b>{{ SLOT_TEXT.empty }}</b><span>{{ SLOT_TEXT.emptyNote }}</span></template>
+          </button>
+          <template v-if="!card.empty">
+            <div v-if="slotAsk === card.index" class="disciple__slot-ask">
+              <small>{{ SLOT_TEXT.deleteAsk }}</small>
+              <button type="button" class="disciple__btn" @click="slotAsk = -1">{{ SLOT_TEXT.deleteKeep }}</button>
+              <button type="button" class="disciple__btn disciple__btn--danger" :data-disciple-slot-delete="card.index" @click="removeSlot(card.index)">{{ SLOT_TEXT.deleteDo }}</button>
+            </div>
+            <button v-else type="button" class="disciple__slot-del" :data-disciple-slot-ask="card.index" @click="slotAsk = card.index">{{ SLOT_TEXT.delete }}</button>
+          </template>
+        </div>
+      </section>
+    </template>
+
     <!-- 弟子を選ぶ -->
-    <template v-if="!state">
+    <template v-else-if="!state">
       <div class="disciple__top disciple__top--pick">
         <button type="button" class="disciple__back" data-disciple-back @click="emit('close')">← 戻る</button>
         <b class="disciple__title">師匠の1年　弟子を選ぶ</b>
+        <button v-if="otherSlots" type="button" class="disciple__title disciple__slots-link" data-disciple-slots-open @click="showSlots">記録を選ぶ</button>
       </div>
       <section class="disciple__panel disciple__pick-info" :aria-label="picked.name">
         <h2>{{ picked.name }}<small>（仮）</small></h2>
@@ -47,6 +78,7 @@
           <div><small>次の目標</small><b>{{ view.goal.text }}</b></div>
           <div v-if="view.goal.left" class="disciple__left">あと<b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
         </div>
+        <button type="button" class="disciple__menu-btn disciple__menu-btn--text" data-disciple-slots-open @click="showSlots">記録</button>
         <button type="button" class="disciple__menu-btn" aria-label="戻る" data-disciple-back @click="emit('close')">←</button>
       </header>
 
@@ -309,6 +341,7 @@ import ShogiMatchBoard from "./ShogiMatchBoard.vue";
 import NovelScene from "./NovelScene.vue";
 import { libraryScene } from "./core/novel-library.mjs";
 import { charmById, resolveScene } from "./core/disciple-events.mjs";
+import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, CAUSE_ORDER, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, discipleWatchMoves, skillById, statRank, watchMarks,
@@ -344,7 +377,44 @@ const storage = (): Storage | null => {
 const state = shallowRef<any>(null);
 onMounted(() => {
   state.value = loadDiscipleRun(storage());
+  // ほかの枠に記録があれば、どの弟子を育てるかから(27章)。
+  refreshSlots();
+  if (otherSlots.value) showSlots();
 });
+
+// ---- 弟子の記録(27章)。遊んでいる枠はdisciple:v1、ほかはdisciple-slots:v1にしまう。
+const slotsShown = ref(false);
+const slotList = ref<ReturnType<typeof discipleSlotCards>>([]);
+const slotAsk = ref(-1);
+const otherSlots = ref(false);
+function refreshSlots() {
+  slotList.value = discipleSlotCards(storage());
+  otherSlots.value = slotList.value.some((card) => !card.active && !card.empty);
+}
+function showSlots() {
+  refreshSlots();
+  slotAsk.value = -1;
+  slotsShown.value = true;
+}
+function openSlot(index: number) {
+  switchDiscipleSlot(storage(), index);
+  state.value = loadDiscipleRun(storage());
+  slotsShown.value = false;
+  line.value = "";
+  refreshSlots();
+}
+function removeSlot(index: number) {
+  const card = slotList.value.find((item) => item.index === index);
+  if (card?.active) commit(null);
+  else deleteDiscipleSlot(storage(), index);
+  refreshSlots();
+  slotAsk.value = -1;
+}
+/** 記録の一覧から戻る(遊んでいる記録があればそこへ、なければホームへ)。 */
+function leaveSlots() {
+  slotsShown.value = false;
+  if (!state.value) emit("close");
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function commit(next: any) {
   state.value = next;
@@ -442,7 +512,7 @@ const sceneChoice = ref<string | null>(null);
 /** いま見せる場面(言葉の窓・観戦・終わりの間は待つ)。 */
 const sceneData = computed(() => {
   const pending = view.value?.scene;
-  if (!pending || view.value?.kind === "words" || view.value?.end || watch.value) return null;
+  if (!pending || slotsShown.value || view.value?.kind === "words" || view.value?.end || watch.value) return null;
   return libraryScene(pending.script, { playerName: props.playerName, vars: pending.vars });
 });
 function closeScene() {
@@ -611,6 +681,12 @@ const markLeft = (ply: number) => Math.min(92, Math.max(4, (ply / Math.max(watch
 
 /** 戻る操作。観戦・稽古の札を開いていれば閉じる。閉じるものがなければfalse(ホームへ)。 */
 function goBack() {
+  if (slotsShown.value) {
+    if (slotAsk.value >= 0) slotAsk.value = -1;
+    else if (state.value) slotsShown.value = false;
+    else return false;
+    return true;
+  }
   if (sceneData.value) {
     if (!sceneEl.value?.goBack()) closeScene();
     return true;
@@ -751,6 +827,23 @@ defineExpose({ goBack });
 .shogi-game .disciple__note { margin: 0.4rem 0 0; }
 .shogi-game .disciple__stamp { display: inline-block; padding: 0.2rem 0.8rem; border: 4px solid #d8655b; border-radius: 0.5rem; color: #d8655b; font-size: 1.5rem; font-weight: 900; transform: rotate(-6deg); }
 
+/* 弟子の記録(27章) */
+.shogi-game .disciple__slots { left: 50%; top: 4.4rem; transform: translateX(-50%); display: grid; gap: 0.45rem; width: min(30rem, calc(100% - 1.2rem)); max-height: calc(100% - 5.4rem); overflow-y: auto; }
+.shogi-game .disciple__slots > p { margin: 0; font-size: 0.8rem; }
+.shogi-game .disciple__slot { display: grid; gap: 0.3rem; padding: 0.3rem; border: 3px solid transparent; border-radius: 0.9rem; background: #fff; }
+.shogi-game .disciple__slot--active { border-color: var(--accent); }
+.shogi-game .disciple .disciple__slot-main { display: grid; gap: 0.1rem; min-height: 4rem; padding: 0.35rem 0.5rem; border: 0; border-radius: 0.7rem; background: transparent; color: var(--ink); text-align: left; box-shadow: none; }
+.shogi-game .disciple .disciple__slot-main:not(:disabled):hover { background: #fffaf0; color: var(--ink); }
+.shogi-game .disciple__slot-main small { color: var(--muted); font-size: 0.7rem; font-weight: 800; }
+.shogi-game .disciple__slot-main b { font-size: 1.02rem; }
+.shogi-game .disciple__slot-main span { font-size: 0.78rem; }
+.shogi-game .disciple .disciple__slot-main .disciple__slot-end { color: #d8655b; font-weight: 900; }
+.shogi-game .disciple .disciple__slot-del { justify-self: end; min-height: 2.2rem; padding: 0 0.8rem; border: 0; border-radius: 999px; background: #efe9dc; color: var(--muted); font-size: 0.74rem; font-weight: 800; }
+.shogi-game .disciple__slot-ask { display: flex; align-items: center; gap: 0.4rem; }
+.shogi-game .disciple__slot-ask small { flex: 2; color: #b23b3b; font-size: 0.72rem; font-weight: 800; }
+.shogi-game .disciple .disciple__btn.disciple__btn--danger, .shogi-game .disciple .disciple__btn.disciple__btn--danger:not(:disabled):hover { background: #d8655b; color: #fff; box-shadow: 0 3px 0 #a8443c; }
+.shogi-game .disciple .disciple__slots-link { min-height: 2.75rem; border: 2px solid var(--accent); color: var(--accent-ink); font-weight: 900; }
+.shogi-game .disciple .disciple__menu-btn--text { width: auto; padding: 0 0.6rem; font-size: 0.8rem; }
 /* お守り(26章) */
 .shogi-game .disciple__charms { display: flex; flex-wrap: wrap; gap: 0.2rem; }
 .shogi-game .disciple__charms span { padding: 0.08rem 0.4rem; border-radius: 999px; background: #fde3e6; color: #8a2a3a; font-size: 0.66rem; font-weight: 800; }
@@ -825,7 +918,12 @@ defineExpose({ goBack });
   .shogi-game .disciple__top { top: 0.4rem; left: 0.4rem; right: 0.4rem; }
   .shogi-game .disciple__turn { min-width: 4.6rem; }
   .shogi-game .disciple__turn b { font-size: 0.86rem; }
-  .shogi-game .disciple__goal b { font-size: 0.78rem; }
+  .shogi-game .disciple__goal { gap: 0.3rem; padding: 0.25rem 0.45rem; }
+  .shogi-game .disciple__goal b { font-size: 0.74rem; }
+  .shogi-game .disciple__left { flex: none; white-space: nowrap; font-size: 0.64rem; }
+  .shogi-game .disciple__left b { font-size: 1.05rem; }
+  .shogi-game .disciple .disciple__menu-btn { width: 2.3rem; }
+  .shogi-game .disciple .disciple__menu-btn--text { width: auto; padding: 0 0.35rem; font-size: 0.7rem; }
   .shogi-game .disciple__stats { top: 3.8rem; left: 0.4rem; width: 9.8rem; padding: 0.4rem 0.45rem; gap: 0.2rem; }
   .shogi-game .disciple__stat { grid-template-columns: 2rem 1.4rem 1fr 2rem; font-size: 0.68rem; gap: 0.2rem; }
   .shogi-game .disciple__rank { min-width: 1.3rem; height: 1.3rem; font-size: 0.68rem; }

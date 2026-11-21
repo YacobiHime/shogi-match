@@ -6,6 +6,7 @@ import { TEAM_SCENES, teamScene } from './team-story.mjs';
 import { PRO_YEAR_SCENES, proYearScene } from './pro-year-story.mjs';
 import { isSceneRead } from './novel-ui.mjs';
 import { hasLibraryScene, libraryParsed, libraryScene } from './novel-library.mjs';
+import { DISCIPLES } from './disciple-strength.mjs';
 
 export const STORY_PROGRESS_KEY = 'yacobihime:shogi-match:story:v1';
 
@@ -64,11 +65,11 @@ const sub = (scene, label, unlock) => {
   });
 };
 
-/** 台本のファイルの場面のサブ(棋士の1年の絆の場面。15-3の4)。物語の画面から読むときの差し込みはvars。 */
-const fileSub = (scene, label, unlock, vars = {}) => {
+/** 台本のファイルの場面のサブ(棋士の1年の絆の場面。15-3の4)。物語の画面から読むときの差し込みはvars。idの頭はprefix。 */
+const fileSub = (scene, label, unlock, vars = {}, prefix = 'pro') => {
   const source = libraryParsed(scene)?.scene;
   return Object.freeze({
-    id: `pro:${scene}`,
+    id: `${prefix}:${scene}`,
     tab: 'sub',
     label,
     title: source?.title ?? '',
@@ -84,6 +85,19 @@ const BOND_VARS = Object.freeze({ mentor: '師匠', senior: '兄弟子', peer: '
 const BOND_LABELS = Object.freeze({ mentor: '師匠', senior: '兄弟子', hanane: '羽音', peer: '同期' });
 const bondSubs = () => [['mentor', [2, 3, 4, 5]], ['senior', [2, 3, 4, 5]], ['hanane', [2, 3, 4, 5]], ['peer', [3, 5]]]
   .flatMap(([role, levels]) => levels.map((level) => fileSub(`pro-bond-${role}-${level}`, '棋士の1年', `棋士の1年で、${BOND_LABELS[role]}との絆が段${level}になると読めます。`, BOND_VARS)));
+
+/** 師匠の1年の場面(docs/disciple-mode-design.mdの26・27章)。入門は弟子ごと、ほかは「弟子」と読む。読んだ場面はノベルの読んだ印で開く。 */
+const discipleSubs = () => [
+  ...DISCIPLES.map((disciple) => fileSub(`disciple-intro-${disciple.id}`, '師匠の1年', `師匠の1年で、${disciple.name}を弟子にすると読めます。`, { disciple: disciple.name }, 'disciple')),
+  ...[
+    ['disciple-school', '師匠の1年で、弟子の1年目の夏の試験の前に読めます。'],
+    ['disciple-school-2', '師匠の1年で、弟子の2年目の夏の試験の前に読めます。'],
+    ['disciple-school-3', '師匠の1年で、弟子の3年目の夏の試験の前に読めます。'],
+    ['disciple-promote', '師匠の1年で、弟子が研修会ではじめて昇級すると読めます。'],
+    ['disciple-family', '師匠の1年で、弟子が例会で勝てない日が続くと読めます。'],
+    ['disciple-slump', '師匠の1年で、弟子が大一番で続けて負けると読めます。'],
+  ].map(([scene, unlock]) => fileSub(scene, '師匠の1年', unlock, { disciple: '弟子' }, 'disciple')),
+];
 
 /**
  * 話の目録(並びは画面の並び)。
@@ -258,6 +272,7 @@ export const STORY_EPISODES = Object.freeze([
   sub('pro-seal-yoshihiko-2', '棋士の1年', '棋士の1年で、天鷺善彦との二日制の番勝負を指すと読めます。'),
   sub('pro-seal-yoshihiko-3', '棋士の1年', '棋士の1年で、天鷺善彦との二日制の番勝負を指すと読めます。'),
   ...bondSubs(),
+  ...discipleSubs(),
 ]);
 
 /** 目録の話(idから)。 */
