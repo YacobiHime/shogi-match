@@ -324,3 +324,136 @@ export function bookHeadline(book) {
   const card = planCard(id);
   return card ? { id, label: card.label, value: book.cards[id].mastery, count: ids.length } : null;
 }
+
+// ---- 作戦の覚え方(O3。35-4・35-12)。
+
+/** 段の並び(覚えてよい段は作戦の能力値で決める)。奇襲は研究会で教わるだけ。 */
+const TIER_ORDER = Object.freeze(['start', 'basic', 'advanced', 'special']);
+/** 作戦の能力値のLvで、覚えてよい段のいちばん上。 */
+export function learnableTier(planLevel) {
+  const lv = Number(planLevel) || 0;
+  return lv < 20 ? 'basic' : lv < 32 ? 'advanced' : 'special';
+}
+/** 新しく覚えた作戦のはじめの熟練度。 */
+export const LEARNED_MASTERY = 10;
+/** 囲いの続きが1段開くまでに、その作戦で指す局数(もとの囲いを何度も組む、の見立て)。 */
+export const CHAIN_GAMES = 6;
+/** 覚えられそうな作戦(負けた相手の作戦)を覚えておく数。 */
+const SEEN_MAX = 6;
+/** 覚える候補の数(UD:9 同じ種類の選択肢は3つほど)。 */
+const LEARN_CHOICES = 3;
+
+const tierIndex = (tier) => TIER_ORDER.indexOf(tier);
+
+/** 戦法と囲いのidから、近いカード(同じ組がなければ、矢倉戦法は居飛車＋矢倉に寄せる)。 */
+export function cardFor(strategyId, castleId) {
+  const exact = planCard(planCardId(strategyId, castleId)) ?? planCard(planCardId(strategyId, ''));
+  if (exact) return exact;
+  const strategy = strategyId === 'yagura-strategy' || strategyId === 'gangi-strategy' ? 'ibisha' : strategyId;
+  return planCard(planCardId(strategy, castleId));
+}
+
+/**
+ * 負けた相手の作戦を、覚えられそうな作戦に入れる(やられて覚える。35-2)。書き換えてよい写しを渡す。
+ * @returns {string} 入れたカードのid(知っている作戦・目録にない作戦なら空)
+ */
+export function noteSeen(book, style) {
+  const card = style ? cardFor(style.strategy, style.castle) : null;
+  if (!card || book.cards[card.id] || card.tier === 'surprise') return '';
+  book.seen = [card.id, ...(book.seen ?? []).filter((id) => id !== card.id)].slice(0, SEEN_MAX);
+  return card.id;
+}
+
+/**
+ * 新しく覚える作戦の候補(3つまで)。負けた相手の作戦を先に、知っている作戦で足りない相手の向き(振り飛車の相手など)に合う作戦を1つ入れ、
+ * あとは低い段から選ぶ(D:4-1 いきなり全部は開かない)。
+ * @param {any} book
+ * @param {{ planLevel?: number, color?: string, random?: () => number }} options
+ */
+export function learnChoices(book, { planLevel = 0, random = Math.random } = {}) {
+  const top = tierIndex(learnableTier(planLevel));
+  const pool = PLAN_CARDS.filter((card) => !book.cards[card.id] && tierIndex(card.tier) >= 0 && tierIndex(card.tier) <= top);
+  if (!pool.length) return [];
+  const picked = [];
+  const take = (card) => { if (card && !picked.includes(card.id) && picked.length < LEARN_CHOICES) picked.push(card.id); };
+  for (const id of book.seen ?? []) take(pool.find((card) => card.id === id));
+  const known = Object.keys(book.cards).map(planCard).filter(Boolean);
+  for (const stance of ['ranging', 'static']) {
+    if (!known.some((card) => card.vs === stance || card.vs === 'both')) {
+      const fits = pool.filter((card) => card.vs === stance || card.vs === 'both');
+      take(fits[Math.floor(random() * fits.length)]);
+    }
+  }
+  // 残りは低い段を先に(同じ段の中は種で混ぜる)。
+  const rest = pool.map((card) => ({ card, key: tierIndex(card.tier) + random() * 0.9 })).sort((a, b) => a.key - b.key);
+  for (const { card } of rest) take(card);
+  return picked;
+}
+
+/** 覚える候補を出す(もう出ていれば出し直さない)。書き換えてよい写しを渡す。 */
+export function offerLearn(book, options = {}) {
+  if (book.offer?.length) return book.offer;
+  const choices = learnChoices(book, options);
+  if (choices.length) book.offer = choices;
+  return book.offer ?? [];
+}
+
+/**
+ * 作戦を覚える。書き換えてよい写しを渡す。
+ * @returns {string} 覚えた作戦の名前(覚えられなければ空)
+ */
+export function learnCard(book, cardId, { mastery = LEARNED_MASTERY } = {}) {
+  const card = planCard(cardId);
+  if (!card || book.cards[cardId]) return '';
+  book.cards[cardId] = { mastery, games: 0, wins: 0 };
+  book.offer = (book.offer ?? []).filter((id) => id !== cardId);
+  if (!book.offer.length) delete book.offer;
+  book.seen = (book.seen ?? []).filter((id) => id !== cardId);
+  return card.label;
+}
+
+/** 研究会で教わる奇襲(まだ知らない奇襲のうち1つ)。 */
+export function surpriseToLearn(book, random = Math.random) {
+  const pool = PLAN_CARDS.filter((card) => card.tier === 'surprise' && !book.cards[card.id]);
+  return pool.length ? pool[Math.floor(random() * pool.length)].id : '';
+}
+
+/** その作戦で組める囲いの続きの深さ(続きの表の長さまで)。 */
+const chainDepth = (card) => (card?.castleId && !card.integrated ? castleChain(card.castleId, 3).length : 0);
+
+/**
+ * 指した局数で囲いの続きを開く(35-4。6局で1段)。書き換えてよい写しを渡す。
+ * @returns {string} 新しく組めるようになった囲いの名前(なければ空)
+ */
+export function unlockChain(book, cardId) {
+  const entry = book?.cards?.[cardId];
+  const card = planCard(cardId);
+  if (!entry || !card) return '';
+  const before = entry.chain ?? 0;
+  const now = Math.min(chainDepth(card), Math.floor(entry.games / CHAIN_GAMES));
+  if (now <= before) return '';
+  entry.chain = now;
+  return castleLabel(castleChain(card.castleId, now).at(-1));
+}
+
+/** 作戦帳のシートの行(段の順・熟練度の順)。囲いの続きは、組めるところまでと次の段までの局数。 */
+export function bookRows(book) {
+  return Object.entries(book?.cards ?? {}).map(([id, entry]) => {
+    const card = planCard(id);
+    if (!card) return null;
+    const depth = chainDepth(card);
+    const steps = Math.min(entry.chain ?? 0, depth);
+    const chain = card.castleId ? castleChain(card.castleId, depth) : [];
+    return {
+      id, label: card.label, tier: card.tier, tierLabel: PLAN_TIER_LABELS[card.tier], mastery: entry.mastery, games: entry.games, wins: entry.wins,
+      vs: card.vs === 'both' ? '相手を選ばない' : card.vs === 'ranging' ? '振り飛車の相手に' : '居飛車の相手に',
+      chainNow: chain.slice(0, steps).map(castleLabel),
+      chainNext: steps < depth ? { label: castleLabel(chain[steps]), left: (steps + 1) * CHAIN_GAMES - entry.games } : null,
+    };
+  }).filter(Boolean).sort((a, b) => [...TIER_ORDER, 'surprise'].indexOf(a.tier) - [...TIER_ORDER, 'surprise'].indexOf(b.tier) || b.mastery - a.mastery);
+}
+
+/** 囲いの続きを組める段の数(作戦帳で開いた段と、作戦の能力値の小さいほう)。 */
+export function bookChainSteps(book, cardId, planLevel) {
+  return Math.min(chainSteps(planLevel), book?.cards?.[cardId]?.chain ?? 0);
+}

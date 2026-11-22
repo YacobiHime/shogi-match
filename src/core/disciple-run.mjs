@@ -14,7 +14,8 @@ import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreika
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
 import { masteryForLevel, startingMastery } from './strategy-mastery.mjs';
 import {
-  battleKey, bookChoices, bookHeadline, chainSteps, chooseBookCard, createPlanBook, notePlanGames, opponentPlanSpec, planCard, planSpec,
+  battleKey, bookChainSteps, bookChoices, bookHeadline, bookRows, chooseBookCard, createPlanBook, learnCard, noteSeen, notePlanGames, offerLearn,
+  opponentPlanSpec, planCard, planSpec, surpriseToLearn, unlockChain,
 } from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
@@ -277,6 +278,15 @@ export function chooseAction(state, action) {
       if (preview.aptitude) next.aptitudes[preview.aptitude] = raiseAptitude(next.aptitudes[preview.aptitude], 1);
       const text = Object.entries(gains).map(([key, value]) => `${STAT_LABELS[key]}＋${value}`).join('・');
       result = { kind: 'train', failed: false, gains, lesson, text: `${training.label}の稽古${lesson ? `（${lesson.grade.label}）` : ''}。${text}` };
+      // 棋譜並べを2回するごとに、新しい作戦を覚えられる(作戦の勉強。35-12)。候補は作戦帳の札に出し、師匠が選ぶ。
+      if (training.id === 'kifu') {
+        next.planStudy = (next.planStudy ?? 0) + 1;
+        next.planBook = planBookOf(next);
+        if (next.planStudy % PLAN_STUDY_EVERY === 0 && offerLearn(next.planBook, { planLevel: currentStrength(next).levels?.plan, random: () => rng.next() }).length) {
+          result.text += '。新しい作戦を覚えられる';
+          result.learnOffer = true;
+        }
+      }
     }
   } else if (action.kind === 'rest') {
     next.stamina = clamp(next.stamina + 40, 0, 100);
@@ -295,7 +305,16 @@ export function chooseAction(state, action) {
     for (const id of present) next.bonds[id] = (next.bonds[id] ?? 0) + 1;
     const who = present.map((id) => teamOf(next).find((friend) => friend.id === id)?.name).filter(Boolean).join('・');
     const masteryUp = growMastery(next, MASTERY_GAIN.study);
-    result = { kind: 'study', gains, text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}${masteryUp ? `・戦法熟練度＋${masteryUp}` : ''}` };
+    // 研究会では、ときどき先輩から奇襲を教わる(35-12)。
+    let taught = '';
+    if (rng.next() < STUDY_SURPRISE_CHANCE) {
+      const id = surpriseToLearn(next.planBook, () => rng.next());
+      if (id) taught = learnCard(next.planBook, id);
+    }
+    result = {
+      kind: 'study', gains, learned: taught,
+      text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}${masteryUp ? `・戦法熟練度＋${masteryUp}` : ''}${taught ? `。${taught}を教わった` : ''}`,
+    };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
     const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));
@@ -468,6 +487,33 @@ function ensureKenshukai(state) {
  */
 /** 戦法熟練度の伸び(34-17): 対局1局ごとと、研究会。熟練度は作戦帳のカードごと(35章のO2)。 */
 export const MASTERY_GAIN = Object.freeze({ game: 1, study: 5 });
+/** 棋譜並べを何回するごとに新しい作戦を覚えられるか、研究会で奇襲を教わる見込み(35-12。初期値)。 */
+export const PLAN_STUDY_EVERY = 2;
+export const STUDY_SURPRISE_CHANCE = 0.25;
+
+/**
+ * 作戦帳の候補から作戦を覚える(35-12)。
+ * @returns {{ state: any, text: string }}
+ */
+export function learnPlan(state, cardId) {
+  const next = structuredClone(state);
+  next.planBook = planBookOf(next);
+  if (!next.planBook.offer?.includes(cardId)) return { state, text: '' };
+  const label = learnCard(next.planBook, cardId);
+  if (!label) return { state, text: '' };
+  // 候補はひとつ覚えたら閉じる(残りは次の作戦の勉強でまた出る)。
+  delete next.planBook.offer;
+  next.log.push({ turn: next.turn, text: `${label}を覚えた` });
+  return { state: next, text: `${label}を覚えました。次の対局で使ってみます` };
+}
+
+/** 作戦の候補を、いまは覚えずに閉じる(候補は次の作戦の勉強でまた出る)。 */
+export function skipLearn(state) {
+  if (!state?.planBook?.offer) return state;
+  const next = structuredClone(state);
+  delete next.planBook.offer;
+  return next;
+}
 
 /** 弟子の作戦帳(なければ作る。前の版の記録は、戦い方の得意戦法の熟練度を写す)。 */
 export function planBookOf(state) {
@@ -522,9 +568,20 @@ export function playEvent(state, options = {}) {
   const next = structuredClone(played.state);
   // その日の局は、その日の作戦で指したものとして作戦帳に数える(熟練度・局数・勝ち数。35章のO2)。
   next.planBook = planBookOf(next);
-  if (today?.card) notePlanGames(next.planBook, today.card.id, { games, wins: played.result.wins, gain: games * MASTERY_GAIN.game });
-  if (next.lastEvent) next.lastEvent.plan = today?.card ? today.card.label : '';
-  return { ...played, state: next, result: { ...played.result, plan: today?.card?.label ?? '' } };
+  const news = [];
+  if (today?.card) {
+    notePlanGames(next.planBook, today.card.id, { games, wins: played.result.wins, gain: games * MASTERY_GAIN.game });
+    // 囲いの続きは、その作戦で指した局数で開く(35-12)。
+    const chained = unlockChain(next.planBook, today.card.id);
+    if (chained) news.push(`${chained}まで組めるようになった`);
+  }
+  // 1局目に負けた相手の作戦は、覚えられそうな作戦に入る(やられて覚える。35-12)。
+  if (played.result.games[0] && !played.result.games[0].win && noteSeen(next.planBook, today?.opponentStyle)) news.push('相手の作戦を覚えられそう');
+  if (next.lastEvent) {
+    next.lastEvent.plan = today?.card ? today.card.label : '';
+    next.lastEvent.events = [...next.lastEvent.events, ...news];
+  }
+  return { ...played, state: next, result: { ...played.result, plan: today?.card?.label ?? '', events: [...played.result.events, ...news] } };
 }
 
 function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
@@ -766,7 +823,7 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {
-    [side]: ownCard ? planSpec(ownCard, { steps: chainSteps(strength.levels?.plan), castles: knownCastles }) : null,
+    [side]: ownCard ? planSpec(ownCard, { steps: bookChainSteps(book, ownCard.id, strength.levels?.plan), castles: knownCastles }) : null,
     [other]: opponentPlanSpec(opponentStyle, level),
   };
   const opponent = {
@@ -984,6 +1041,10 @@ function bookView(state) {
     count: Object.keys(book.cards).length,
     choices: day ? bookChoices(book, { opponentRook: day.opponentRook, color: day.side }) : [],
     opponentStyle: day?.opponentStyle?.label ?? '',
+    /** 作戦帳のシートの行と、覚えられる候補・覚えられそうな作戦(35-12)。 */
+    rows: bookRows(book),
+    offer: (book.offer ?? []).map((id) => planCard(id)).filter(Boolean).map((card) => ({ id: card.id, label: card.label, tier: card.tier, vs: card.vs })),
+    seen: (book.seen ?? []).map((id) => planCard(id)?.label).filter(Boolean),
   };
 }
 

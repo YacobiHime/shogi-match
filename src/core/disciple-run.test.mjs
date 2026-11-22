@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EXAM_TURN, MAX_TURNS, applyFindings, praiseLine, masteryView, MASTERY_GAIN, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
+  EXAM_TURN, MAX_TURNS, PLAN_STUDY_EVERY, learnPlan, skipLearn, applyFindings, praiseLine, masteryView, MASTERY_GAIN, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
 } from './disciple-run.mjs';
 import { dayResultView, endCardText } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
@@ -287,5 +287,51 @@ describe('戦法熟練度(34-17)と作戦帳(35章のO2)', () => {
     expect(view.count).toBeGreaterThan(2);
     const book = discipleView(old).book;
     expect(book.count).toBe(view.count);
+  });
+});
+
+describe('作戦の覚え方(35-12)', () => {
+  it('棋譜並べを2回すると新しい作戦の候補が出て、1つ覚えられる。あとで閉じることもできる', () => {
+    let s = createDiscipleRun({ seed: 5, discipleId: 'minato' });
+    s = { ...s, stamina: 100 };
+    let offered = null;
+    for (let i = 0; i < 8 && !offered; i += 1) {
+      const { state: next, result } = chooseAction({ ...s, stamina: 100 }, { kind: 'train', id: 'kifu' });
+      s = next;
+      if (result.learnOffer) offered = result;
+    }
+    expect(offered?.text).toMatch(/新しい作戦を覚えられる/);
+    expect(s.planStudy % PLAN_STUDY_EVERY).toBe(0);
+    const offer = discipleView(s).book.offer;
+    expect(offer.length).toBeGreaterThan(0);
+    expect(skipLearn(s).planBook.offer).toBeUndefined();
+    const { state: learned, text } = learnPlan(s, offer[0].id);
+    expect(text).toMatch(/覚えました/);
+    expect(learned.planBook.cards[offer[0].id]).toBeTruthy();
+    expect(learned.planBook.offer).toBeUndefined();
+    expect(learnPlan(learned, offer[1]?.id ?? 'x').text).toBe('');
+  });
+
+  it('研究会で、ときどき奇襲を教わる', () => {
+    let taught = '';
+    for (let seed = 1; seed < 40 && !taught; seed += 1) {
+      const s = createDiscipleRun({ seed, discipleId: 'ao' });
+      taught = chooseAction(s, { kind: 'study' }).result.learned;
+    }
+    expect(taught).toBeTruthy();
+  });
+
+  it('1局目に負けた相手の作戦は、覚えられそうな作戦に入る', () => {
+    let found = null;
+    for (let seed = 21; seed < 60 && !found; seed += 1) {
+      let s = createDiscipleRun({ seed, discipleId: 'ao' });
+      for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
+      const { state: after, result } = playEvent(s, { forced: [false] });
+      if (result.events.includes('相手の作戦を覚えられそう')) found = { before: s, after };
+    }
+    expect(found).toBeTruthy();
+    const [seen] = found.after.planBook.seen;
+    expect(found.before.planBook.cards[seen]).toBeUndefined();
+    expect(found.after.lastEvent.events).toContain('相手の作戦を覚えられそう');
   });
 });

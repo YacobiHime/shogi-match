@@ -111,7 +111,10 @@
           <span class="disciple__chip disciple__chip--style">{{ PLAY_STYLES[view.style]?.label }}</span>
           <span v-for="id in view.skills" :key="id" class="disciple__chip">{{ skillById(id)?.name }}{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span>
           <span class="disciple__chip disciple__chip--hidden">弱点 {{ view.weakness ? view.weakness : '？' }}</span>
-          <span v-if="view.mastery" class="disciple__chip disciple__chip--mastery" data-disciple-mastery title="定跡のあと、研究してきた手を何手まで指せるか">戦法熟練度 {{ view.mastery.label }} {{ view.mastery.value }}</span>
+          <!-- 押すと作戦帳(35-12)。覚えられる作戦があれば、隣に札を出す。 -->
+          <button v-if="view.mastery" type="button" class="disciple__chip disciple__chip--mastery disciple__chip--btn" data-disciple-mastery data-disciple-plans-open
+            title="作戦帳を開く（定跡のあと、研究してきた手を何手まで指せるか）" @click="plansOpen = !plansOpen">作戦帳 {{ view.book.count }}・戦法熟練度 {{ view.mastery.label }} {{ view.mastery.value }}</button>
+          <button v-if="view.book.offer.length" type="button" class="disciple__chip disciple__chip--btn disciple__chip--learn" data-disciple-learn-open @click="plansOpen = true">新しい作戦を覚えられる</button>
           <span v-if="view.spotted?.length" class="disciple__chip disciple__chip--spotted" data-disciple-spotted title="観戦で見抜いた崩れ方の回数">見抜いた {{ view.spotted.map((item) => `${item.label} ${item.count}`).join('・') }}</span>
           <span v-if="view.rival" class="disciple__chip disciple__chip--rival" data-disciple-rival :title="`羽音の弟子（${view.rival.where}）`">ライバル {{ view.rival.name }} {{ view.rival.wins }}勝{{ view.rival.losses }}敗</span>
           <button type="button" class="disciple__chip disciple__chip--btn" data-disciple-skills-open @click="skillsOpen = !skillsOpen">スキルの条件</button>
@@ -144,6 +147,31 @@
             <span v-if="!row.have" class="disciple__skill-bar"><i :style="{ width: `${(row.now / row.need) * 100}%` }"></i></span>
           </li>
         </ul>
+      </section>
+
+      <!-- 作戦帳(35-12)。知っている作戦と熟練度・局数・囲いの続き、覚えられる作戦の候補。 -->
+      <section v-if="plansOpen && !view.end" class="disciple__panel disciple__skills disciple__plans" data-disciple-plans>
+        <h4>作戦帳（{{ view.book.count }}）<button type="button" class="disciple__x" aria-label="閉じる" @click="plansOpen = false">×</button></h4>
+        <div v-if="view.book.offer.length" class="disciple__learn" data-disciple-learn>
+          <p><b>新しい作戦を1つ覚えられる</b><small>棋譜並べの勉強の成果。残りは、また次に出る</small></p>
+          <div class="disciple__choice">
+            <button v-for="card in view.book.offer" :key="card.id" type="button" class="disciple__opt" :data-disciple-learn-card="card.id" @click="learn(card.id)">
+              {{ card.label }}<small>{{ PLAN_TIER_TEXT[card.tier] }}・{{ PLAN_VS_TEXT[card.vs] }}</small>
+            </button>
+          </div>
+          <button type="button" class="disciple__link" data-disciple-learn-skip @click="skipLearnNow">いまは覚えない</button>
+        </div>
+        <ul>
+          <li v-for="row in view.book.rows" :key="row.id" :data-disciple-plan-row="row.id">
+            <b>{{ row.label }}</b>
+            <small>{{ row.tierLabel }}・{{ row.vs }}　熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝</small>
+            <small v-if="row.chainNow.length || row.chainNext" class="disciple__plan-chain">
+              <template v-if="row.chainNow.length">囲いの続き {{ row.chainNow.join('→') }}</template>
+              <template v-if="row.chainNext">{{ row.chainNow.length ? '　' : '' }}次は{{ row.chainNext.label }}（あと{{ row.chainNext.left }}局）</template>
+            </small>
+          </li>
+        </ul>
+        <p v-if="view.book.seen.length" class="disciple__muted" data-disciple-plan-seen>覚えられそう（負けた相手の作戦）：{{ view.book.seen.join('・') }}</p>
       </section>
 
       <p v-if="line" class="disciple__say" data-disciple-say>{{ line }}</p>
@@ -498,7 +526,7 @@ import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import {
-  FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, loadDiscipleRun, playEvent, saveDiscipleRun, watchSpec,
+  FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
@@ -677,6 +705,24 @@ function growthLine(result: { newSkills?: string[]; newCards?: string[]; newChar
   return charms ? `お守り${charms}を手に入れた。大一番に持たせられる` : "";
 }
 const skillsOpen = ref(false);
+/** 作戦帳のシート(35-12)。覚えられる作戦が出たら開く。 */
+const plansOpen = ref(false);
+const PLAN_TIER_TEXT: Record<string, string> = { start: "はじめ", basic: "基本", advanced: "応用", special: "特殊な囲い", surprise: "奇襲" };
+const PLAN_VS_TEXT: Record<string, string> = { both: "相手を選ばない", static: "居飛車の相手に", ranging: "振り飛車の相手に" };
+vueWatch(() => view.value?.book?.offer?.length ?? 0, (now, before) => {
+  if (now > (before ?? 0)) plansOpen.value = true;
+});
+function learn(id: string) {
+  if (!state.value) return;
+  const { state: next, text } = learnPlan(state.value, id);
+  if (!text) return;
+  commit(next);
+  say(text);
+}
+function skipLearnNow() {
+  if (!state.value) return;
+  commit(skipLearn(state.value));
+}
 
 // ---- 問題の場面(26章)
 const sceneEl = ref<InstanceType<typeof NovelScene> | null>(null);
@@ -1129,6 +1175,10 @@ function goBack() {
     lesson.value = null;
     return true;
   }
+  if (plansOpen.value) {
+    plansOpen.value = false;
+    return true;
+  }
   if (skillsOpen.value) {
     skillsOpen.value = false;
     return true;
@@ -1315,6 +1365,16 @@ defineExpose({ goBack });
 .shogi-game .disciple__skills ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .disciple__skills li { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem; align-items: center; font-size: 0.8rem; }
 .shogi-game .disciple__skills small { color: var(--muted); font-size: 0.68rem; }
+/* 作戦帳(35-12)。 */
+.shogi-game .disciple__plans li { grid-template-columns: 1fr; }
+.shogi-game .disciple__plans .disciple__plan-chain { color: #2a4f86; }
+.shogi-game .disciple__learn { display: grid; gap: 0.35rem; margin-bottom: 0.5rem; padding: 0.5rem; border-radius: 0.7rem; background: #fff7e0; }
+.shogi-game .disciple__learn p { margin: 0; font-size: 0.8rem; }
+.shogi-game .disciple__learn p small { display: block; }
+.shogi-game .disciple .disciple__link { justify-self: end; min-height: 2.75rem; padding: 0 0.6rem; border: 0; background: transparent; color: var(--muted); font-size: 0.76rem; text-decoration: underline; }
+.shogi-game .disciple .disciple__chip--btn.disciple__chip--learn, .shogi-game .disciple .disciple__chip--btn.disciple__chip--learn:not(:disabled):hover { background: #f0a24a; color: #fff; box-shadow: none; animation: disciple-learn-pulse 1.6s ease-in-out 2; }
+@keyframes disciple-learn-pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .shogi-game .disciple .disciple__chip--btn.disciple__chip--learn { animation: none; } }
 .shogi-game .disciple__skill--have b { color: #c0661b; }
 .shogi-game .disciple__skill-bar { grid-column: 1 / -1; height: 0.35rem; border-radius: 999px; background: #e7e1d3; overflow: hidden; }
 .shogi-game .disciple__skill-bar i { display: block; height: 100%; background: var(--accent); }

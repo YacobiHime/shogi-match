@@ -218,4 +218,41 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     // 左美濃を知らないので、矢倉のまま。
     expect(next).toMatchObject({ castleId: 'yagura', adapted: true });
   });
+
+  it('覚え方: 候補は負けた相手の作戦を先に、足りない向きを1つ、あとは低い段から。能力値で段の上限', () => {
+    const startingMastery = () => 20;
+    const book = plans.createPlanBook({ style: 'lead', aptitudes: {}, startingMastery });
+    expect(plans.learnableTier(15)).toBe('basic');
+    expect(plans.learnableTier(25)).toBe('advanced');
+    expect(plans.learnableTier(40)).toBe('special');
+    const low = plans.learnChoices(book, { planLevel: 15, random: () => 0.5 });
+    expect(low).toHaveLength(3);
+    for (const id of low) expect(['start', 'basic']).toContain(plans.planCard(id).tier);
+    // 負けた相手の作戦(居飛車＋矢倉)は先頭に。知っている作戦は入れない。
+    expect(plans.noteSeen(book, { strategy: 'yagura-strategy', castle: 'yagura' })).toBe('ibisha+yagura');
+    expect(plans.noteSeen(book, { strategy: 'shiken', castle: 'mino' })).toBe('');
+    expect(plans.learnChoices(book, { planLevel: 15, random: () => 0.5 })[0]).toBe('ibisha+yagura');
+    // 候補を出し、1つ覚える。
+    const offer = plans.offerLearn(book, { planLevel: 15, random: () => 0.5 });
+    expect(offer).toHaveLength(3);
+    expect(plans.learnCard(book, offer[0])).toBeTruthy();
+    expect(book.cards[offer[0]]).toEqual({ mastery: plans.LEARNED_MASTERY, games: 0, wins: 0 });
+    expect(book.seen).not.toContain(offer[0]);
+    expect(plans.learnCard(book, offer[0])).toBe('');
+    // 奇襲は研究会で教わるだけ(覚える候補には出ない)。
+    expect(plans.learnChoices(book, { planLevel: 49 }).some((id) => plans.planCard(id).tier === 'surprise')).toBe(false);
+    expect(plans.planCard(plans.surpriseToLearn(book, () => 0)).tier).toBe('surprise');
+  });
+
+  it('囲いの続きは、その作戦で指した局数で1段ずつ開き、作戦の能力値と小さいほうまで組む', () => {
+    const book = plans.createPlanBook({ style: 'counter', aptitudes: {}, startingMastery: () => 20 });
+    expect(plans.unlockChain(book, 'shiken+mino')).toBe('');
+    plans.notePlanGames(book, 'shiken+mino', { games: plans.CHAIN_GAMES });
+    expect(plans.unlockChain(book, 'shiken+mino')).toBe('高美濃');
+    expect(plans.unlockChain(book, 'shiken+mino')).toBe('');
+    expect(plans.bookChainSteps(book, 'shiken+mino', 40)).toBe(1);
+    expect(plans.bookChainSteps(book, 'shiken+mino', 10)).toBe(0);
+    const row = plans.bookRows(book).find((item) => item.id === 'shiken+mino');
+    expect(row).toMatchObject({ chainNow: ['高美濃'], chainNext: { label: expect.any(String), left: plans.CHAIN_GAMES } });
+  });
 });
