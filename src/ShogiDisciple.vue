@@ -184,13 +184,20 @@
       <!-- 入会試験・例会 -->
       <section v-else-if="view.kind === 'exam' || view.kind === 'reikai'" class="disciple__panel disciple__sheet" data-disciple-event>
         <h3>{{ view.eventTitle }}<small v-if="view.big" class="disciple__bigtag">大一番</small></h3>
-        <p v-if="view.opponent" class="disciple__muted">相手：{{ view.opponent.name }}（{{ view.opponent.label }}）</p>
+        <p v-if="view.opponent" class="disciple__muted">相手：{{ view.opponent.name }}（{{ view.opponent.label }}）<template v-if="view.book.opponentStyle">　得意 {{ view.book.opponentStyle }}</template></p>
         <p v-if="view.stakes" class="disciple__stakes" data-disciple-stakes>{{ view.stakes }}</p>
         <template v-if="view.big">
           <h4>序盤の方針</h4>
           <div class="disciple__choice">
             <button v-for="option in PLANS.opening" :key="option.id" type="button" class="disciple__opt" :aria-pressed="plan.opening === option.id"
               :data-disciple-plan="option.id" @click="plan.opening = option.id">{{ option.label }}<small>{{ option.note }}</small></button>
+          </div>
+          <!-- 作戦帳から選ぶ(35章のO2)。同じ種類の選択肢は、おまかせと3つまで(UD:9)。力戦では選べない。 -->
+          <h4>作戦<small class="disciple__muted">　作戦帳 {{ view.book.count }}</small></h4>
+          <div class="disciple__choice disciple__choice--plans" data-disciple-plan-cards>
+            <button type="button" class="disciple__opt" :aria-pressed="!plan.card" :disabled="plan.opening === 'wild'" data-disciple-plan-card="" @click="plan.card = ''">おまかせ<small>熟練度で選ぶ</small></button>
+            <button v-for="card in view.book.choices" :key="card.id" type="button" class="disciple__opt" :aria-pressed="plan.card === card.id" :disabled="plan.opening === 'wild'"
+              :data-disciple-plan-card="card.id" @click="plan.card = card.id">{{ card.label }}<small>熟練度 {{ card.mastery }}</small></button>
           </div>
           <h4>終盤の構え</h4>
           <div class="disciple__choice disciple__choice--two">
@@ -319,6 +326,8 @@
         <button type="button" aria-label="最後へ" data-disciple-nav-last @click="goPly(watch.entries.length)">⏭</button>
       </div>
       <div class="disciple__watch-side">
+        <!-- 今日の作戦(35-7)。観戦のはじめから最後まで同じ行に出す。 -->
+        <p v-if="watch.plans" class="disciple__today-plan" data-disciple-today-plan>今日の作戦 <b>{{ watch.plans.own }}</b><small v-if="watch.plans.opponent">相手の得意 {{ watch.plans.opponent }}</small></p>
         <p v-if="watchThought" class="disciple__thought" data-disciple-thought><b>{{ view?.name }}の考え</b>{{ watchThought }}
           <small v-if="watchReading" data-disciple-reading>読み筋 {{ watchReading.text }}<template v-if="watchReading.surprised">　相手は{{ watchReading.actualText }}（読んでいなかった手）</template></small></p>
         <p v-if="watch.error" class="disciple__ask">{{ watch.error }}</p>
@@ -687,14 +696,18 @@ function closeScene() {
 }
 
 // ---- 入会試験・例会
-const plan = reactive({ opening: "own", ending: "wait" });
+/** 大一番の作戦。cardは作戦帳から選んだ作戦(空ならおまかせ。35章のO2)。 */
+const plan = reactive({ opening: "own", ending: "wait", card: "" });
 /** 大一番に持たせるお守り(26章)。空なら持たせない。 */
 const charmPick = ref("");
 function play() {
   const big = Boolean(view.value?.big);
   const charm = big ? charmPick.value || null : null;
   charmPick.value = "";
-  const { state: next, result } = playEvent(state.value, { plan: big ? { ...plan } : null, charm });
+  const chosen = big ? { ...plan } : null;
+  // 選んだ作戦は、その日の相手に合わせたものなので持ち越さない。
+  plan.card = "";
+  const { state: next, result } = playEvent(state.value, { plan: chosen, charm });
   commit(next);
   const grown = growthLine(result);
   if (grown) return say(grown);
@@ -715,7 +728,9 @@ type WatchMark = {
   from?: number; to?: number; startWord?: string; endWord?: string;
 };
 type Watch = {
-  label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string } | null; charm: string | null;
+  label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string; card?: string } | null; charm: string | null;
+  /** 今日の作戦(35-7)。棋譜帳から開いた前の版の局には無い。 */
+  plans?: { own: string; opponent: string } | null;
   entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
   marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
   /** 観戦の段(33-3)。指している→終局の札→その日の結果発表→検討。 */
@@ -749,7 +764,7 @@ function startWatch() {
     return;
   }
   const current: Watch = {
-    label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, entries: [], end: null, win: false, done: false,
+    label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, plans: made.plans, entries: [], end: null, win: false, done: false,
     marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null, mode: "live", upto: 0, endReason: "",
     seek: null, good: [], goodSel: -1, praised: "",
   };
@@ -780,6 +795,8 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   const watchedMin = Math.min(0, ...current.entries.map((entry) => sign * (Number(entry?.eval) || 0)));
   const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm });
   charmPick.value = "";
+  // 選んだ作戦は、その日の相手に合わせたものなので持ち越さない。
+  plan.card = "";
   commit(next);
   // 崩れ方は盤面で起きたことから決める(33-5)。言えない手は印にしない。大一番は背景の札に。
   current.marks = reviewMarks(current.entries, current.side, { dan: eyeDan(state.value?.eye), big: Boolean(current.plan) });
@@ -1356,6 +1373,10 @@ defineExpose({ goBack });
 .shogi-game .disciple__thought { margin: 0; padding: 0.4rem 0.6rem; border-radius: 0.7rem; background: #fff7e0; color: #5a3410; font-size: 0.82rem; }
 .shogi-game .disciple__thought b { margin-right: 0.45rem; color: #8a5a00; }
 .shogi-game .disciple__thought small { display: block; margin-top: 0.2rem; color: #6b5a3a; font-size: 0.74rem; }
+/* 今日の作戦(35-7)。 */
+.shogi-game .disciple__today-plan { margin: 0; padding: 0.35rem 0.6rem; border-radius: 0.7rem; background: #eef3fb; color: #22344a; font-size: 0.8rem; }
+.shogi-game .disciple__today-plan b { margin-left: 0.3rem; color: #2a4f86; }
+.shogi-game .disciple__today-plan small { display: block; color: #5a6b80; font-size: 0.72rem; }
 .shogi-game .disciple .disciple__book-row { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: 0.5rem; width: 100%; padding: 0.45rem; border: 0; border-radius: 0.6rem; background: transparent; color: var(--ink); text-align: left; }
 .shogi-game .disciple__book-row small { display: block; color: var(--muted); font-size: 0.72rem; }
 .shogi-game .disciple__watch-head { grid-area: head; display: flex; align-items: center; gap: 0.6rem; }

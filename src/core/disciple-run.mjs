@@ -12,8 +12,10 @@ import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, 
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
-import { MASTERY_MAX, discipleMastery, masteryForLevel } from './strategy-mastery.mjs';
-import { battleKey, chainSteps, disciplePlanCard, opponentPlanSpec, planSpec } from './disciple-plans.mjs';
+import { masteryForLevel, startingMastery } from './strategy-mastery.mjs';
+import {
+  battleKey, bookChoices, bookHeadline, chainSteps, chooseBookCard, createPlanBook, notePlanGames, opponentPlanSpec, planCard, planSpec,
+} from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -142,6 +144,8 @@ export function createDiscipleRun({ seed, discipleId, team = null }) {
     end: null,
   };
   state.friends = assignFriends(rng, members);
+  // 作戦帳(35章のO2)。はじめは2つの作戦だけを知っている。
+  state.planBook = planBookOf(state);
   state.rng = rng.state;
   return state;
 }
@@ -462,37 +466,65 @@ function ensureKenshukai(state) {
  *   watchedMinは観戦した局の弟子から見たいちばん低い評価値(劣勢から勝つと逆境の粘りの条件に数える)
  * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[], charm?: string | null, overcome?: boolean } }}
  */
-/** 戦法熟練度の伸び(34-17): 対局1局ごとと、研究会。 */
+/** 戦法熟練度の伸び(34-17): 対局1局ごとと、研究会。熟練度は作戦帳のカードごと(35章のO2)。 */
 export const MASTERY_GAIN = Object.freeze({ game: 1, study: 5 });
-/** 弟子の得意戦法の名前(熟練度の札)。 */
-export const MASTERY_LABELS = Object.freeze({ hayaguri: '早繰り銀', yagura: '矢倉', ibisha: '居飛車', 'kakugawari-kg': '角換わり腰掛け銀' });
-/** 熟練度に使う戦法の適性の段(角換わりは角換わり、それ以外は対居飛車)。 */
-const masteryRank = (state, opening) => aptitudeRanks(state)[String(opening).startsWith('kakugawari') ? 'kakugawari' : 'static'];
 
-/** 弟子の得意戦法の熟練度を伸ばす(書き換えてよい写しを渡す)。 */
-function growMastery(next, amount) {
-  const opening = STYLE_OPENINGS[next.style];
-  if (!opening || !(amount > 0)) return 0;
-  next.mastery ??= {};
-  const before = discipleMastery(next, opening, masteryRank(next, opening));
-  next.mastery[opening] = Math.min(MASTERY_MAX, before + amount);
-  return next.mastery[opening] - before;
+/** 弟子の作戦帳(なければ作る。前の版の記録は、戦い方の得意戦法の熟練度を写す)。 */
+export function planBookOf(state) {
+  return state?.planBook ?? createPlanBook({
+    style: state?.style ?? '', aptitudes: state?.aptitudes ? aptitudeRanks(state) : {},
+    legacy: state?.mastery ?? null, legacyOpening: STYLE_OPENINGS[state?.style] ?? null, startingMastery,
+  });
 }
 
-/** 弟子の得意戦法と熟練度(画面の札)。 */
+/** 研究会で、最後に指した作戦(なければ熟練度のいちばん高い作戦)の熟練度を伸ばす(書き換えてよい写しを渡す)。 */
+function growMastery(next, amount) {
+  if (!(amount > 0)) return 0;
+  next.planBook = planBookOf(next);
+  const head = bookHeadline(next.planBook);
+  return head ? notePlanGames(next.planBook, head.id, { gain: amount }) : 0;
+}
+
+/** 弟子の札の作戦と熟練度。 */
 export function masteryView(state) {
-  const opening = STYLE_OPENINGS[state?.style];
-  if (!opening) return null;
-  return { opening, label: MASTERY_LABELS[opening] ?? opening, value: discipleMastery(state, opening, masteryRank(state, opening)) };
+  const head = bookHeadline(planBookOf(state));
+  return head ? { card: head.id, label: head.label, value: head.value, count: head.count } : null;
+}
+
+/** その日の局を指す前の形(研修会の挑戦がまだなければ作る)。watchSpecとplayEventで同じものを見る。 */
+function prepareDay(state) {
+  return state.shoreikai ? structuredClone(state) : ensureKenshukai(structuredClone(state));
+}
+
+/**
+ * その日の作戦(35-5)。相手が研修会・奨励会のその局に選んだ得意戦法と、弟子の作戦帳から決める。種から決まるので、観戦しても結果だけ見ても同じ。
+ * @param {any} next prepareDayの形
+ * @param {{ opening?: string, card?: string } | null} plan 大一番の作戦(cardは師匠が選んだ作戦帳のカード)
+ */
+function dayPlan(next, plan) {
+  const run = next.shoreikai ?? next.kenshukai;
+  const member = run?.world.members[run.pending?.opponentId] ?? run?.guests?.[run?.pending?.opponentId];
+  const opponentStyle = run?.pending?.style ?? member?.style ?? null;
+  const opponentRook = opponentStyle?.rook === 'ranging' ? 'ranging' : 'static';
+  const side = run?.pending?.color === 'white' ? 'white' : 'black';
+  const book = planBookOf(next);
+  const rng = createRng((next.seed ^ Math.imul(next.turn + 1, 0x2c1b3c6d) ^ Math.imul((run?.dayNo ?? 0) + 7, 0x297a2d39)) >>> 0);
+  const card = chooseBookCard(book, { opponentRook, opening: plan?.opening ?? null, cardId: plan?.card ?? null, color: side, random: () => rng.next() });
+  return { card, book, opponentStyle, opponentRook, side, member, run };
 }
 
 export function playEvent(state, options = {}) {
+  const kind = turnKind(state);
+  const today = kind === 'exam' || kind === 'reikai' ? dayPlan(prepareDay(state), options.plan ?? null) : null;
   const played = playEventInner(state, options);
   const games = played.result?.games?.length ?? 0;
   if (!games) return played;
   const next = structuredClone(played.state);
-  growMastery(next, games * MASTERY_GAIN.game);
-  return { ...played, state: next };
+  // その日の局は、その日の作戦で指したものとして作戦帳に数える(熟練度・局数・勝ち数。35章のO2)。
+  next.planBook = planBookOf(next);
+  if (today?.card) notePlanGames(next.planBook, today.card.id, { games, wins: played.result.wins, gain: games * MASTERY_GAIN.game });
+  if (next.lastEvent) next.lastEvent.plan = today?.card ? today.card.label : '';
+  return { ...played, state: next, result: { ...played.result, plan: today?.card?.label ?? '' } };
 }
 
 function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
@@ -518,7 +550,8 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
     if (startPhase === 'exam' && run.phase !== 'exam') break;
     const member = run.world.members[run.pending.opponentId] ?? run.guests?.[run.pending.opponentId];
     const level = opponentLevel(member, run.cls);
-    const battle = member?.style === 'ranging' ? 'ranging' : 'static';
+    // 相手の飛車の向きは、その局に選んだ得意戦法で見る(前は比べ方の誤りで、いつも対居飛車だった。35-1)。
+    const battle = (run.pending?.style ?? member?.style)?.rook === 'ranging' ? 'ranging' : 'static';
     const charmed = withCharm(next, charmUsed);
     const strength = currentStrength(charmed, { battle, time: 'fast' });
     const fit = big && plan ? planFit(charmed, plan, { level }).bonus : 0;
@@ -635,7 +668,8 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
     if (run.dayNo !== startDay) break;
     const member = run.world.members[run.pending.opponentId];
     const level = shoreikaiOpponentLevel(member);
-    const battle = member?.style === 'ranging' ? 'ranging' : 'static';
+    // 相手の飛車の向きは、その局に選んだ得意戦法で見る(前は比べ方の誤りで、いつも対居飛車だった。35-1)。
+    const battle = (run.pending?.style ?? member?.style)?.rook === 'ranging' ? 'ranging' : 'static';
     const charmed = withCharm(next, charmUsed);
     // 三段リーグは長い持ち時間ではないが、1局の重みが大きい(大一番の作戦が効く)。
     const strength = currentStrength(charmed, { battle, time: 'fast' });
@@ -711,35 +745,28 @@ export const ENDING_ATTACK = Object.freeze({ attack: 0.3, wait: -0.3 });
 export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return null;
-  const next = state.shoreikai ? structuredClone(state) : ensureKenshukai(structuredClone(state));
-  const run = next.shoreikai ?? next.kenshukai;
-  const member = run.world.members[run.pending?.opponentId] ?? run.guests?.[run.pending?.opponentId];
+  const next = prepareDay(state);
+  const { card: ownCard, book, opponentStyle, opponentRook, side, member, run } = dayPlan(next, plan);
   if (!member) return null;
   const level = next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
   const eventKind = next.shoreikai ? 'shoreikai' : 'kenshukai';
-  const side = run.pending.color === 'white' ? 'white' : 'black';
   const other = side === 'black' ? 'white' : 'black';
   // 相手の作戦は、研修会・奨励会が1局ごとに相手の得意戦法から選んだもの(pending.style)。前は比べ方の誤りで、いつも相掛かり＋舟囲いだった(35-1)。
-  const opponentStyle = run.pending?.style ?? member.style ?? null;
-  const opponentRook = opponentStyle?.rook === 'ranging' ? 'ranging' : 'static';
-  // 弟子の作戦は、相手の飛車の向きに合うカード(戦い方で決まる。作戦帳はO2)。力戦なら定跡なし。
-  const ownCard = disciplePlanCard({ style: next.style, opponentRook, opening: plan?.opening ?? null, color: side });
+  // 弟子の作戦は、作戦帳の中から、相手の飛車の向きに合うカードを熟練度で選ぶ(35-5)。力戦なら定跡なし。
   const battle = battleKey(ownCard, opponentRook);
   const strength = currentStrength(isBigEvent(state) ? withCharm(next, charm) : next, { battle, time: 'fast' });
   const attack = clamp(strength.attack + (ENDING_ATTACK[plan?.ending ?? ''] ?? 0), -1, 1);
-  // 熟練度は、今までどおり戦い方の得意戦法で数える(作戦のカードごとにするのはO2)。
-  const ownOpening = ownCard ? STYLE_OPENINGS[next.style] ?? null : null;
-  // 弟子と相手は、評価関数を使わず理由で指す(34-16)。能力値のLvで読みの手数・大局観・うっかり・詰みの手数が決まる。
-  // 定跡のあとの研究の続きだけ、戦法熟練度の手数をエンジンで指す(34-10)。
-  const aptitudeRank = aptitudeRanks(next)[battle];
+  const mastery = ownCard ? book.cards[ownCard.id]?.mastery ?? 0 : 0;
+  // 組み替えてよい囲いは、作戦帳で知っている囲いだけ。
+  const knownCastles = [...new Set(Object.keys(book.cards).map((id) => planCard(id)?.castleId).filter(Boolean))];
   const disciple = {
     id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: eventKind,
     disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
-    reason: { levels: { ...strength.levels }, mastery: ownOpening ? discipleMastery(next, ownOpening, aptitudeRank) : 0 },
+    reason: { levels: { ...strength.levels }, mastery },
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {
-    [side]: ownCard ? planSpec(ownCard, { steps: chainSteps(strength.levels?.plan) }) : null,
+    [side]: ownCard ? planSpec(ownCard, { steps: chainSteps(strength.levels?.plan), castles: knownCastles }) : null,
     [other]: opponentPlanSpec(opponentStyle, level),
   };
   const opponent = {
@@ -751,10 +778,12 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
     event: eventKind, kind: 'game', label: next.shoreikai ? run.pending?.label ?? '奨励会' : kind === 'exam' ? '入会試験' : `第${run.dayNo}回例会`,
     [side]: disciple, [other]: opponent,
-    openings: { [side]: ownOpening, [other]: opponentStyle?.opening ?? opponentStyle?.id ?? null },
+    openings: { [side]: null, [other]: opponentStyle?.opening ?? opponentStyle?.id ?? null },
     plans,
   };
-  return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next };
+  // 観戦の札の「今日の作戦」(35-7)。
+  const today = { own: ownCard?.label ?? '力戦', opponent: opponentStyle?.label ?? '' };
+  return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next, card: ownCard?.id ?? null, plans: today };
 }
 
 /** 師匠の眼の段(見抜いた数で上がる。19-5)。 */
@@ -946,6 +975,18 @@ function eventTitle(state) {
  * 画面に出す形(育成のホーム)。
  * @param {any} state
  */
+/** 作戦帳の見え方(知っている作戦の数と、その日の相手に合う作戦の候補)。 */
+function bookView(state) {
+  const book = planBookOf(state);
+  const kind = turnKind(state);
+  const day = kind === 'exam' || kind === 'reikai' ? dayPlan(prepareDay(state), null) : null;
+  return {
+    count: Object.keys(book.cards).length,
+    choices: day ? bookChoices(book, { opponentRook: day.opponentRook, color: day.side }) : [],
+    opponentStyle: day?.opponentStyle?.label ?? '',
+  };
+}
+
 export function discipleView(state) {
   if (!state) return null;
   const strength = currentStrength(state);
@@ -986,6 +1027,8 @@ export function discipleView(state) {
     eventTitle: eventTitle(state),
     big: isBigEvent(state),
     opponent: turnKind(state) === 'exam' || turnKind(state) === 'reikai' ? eventOpponent(state) : null,
+    /** 作戦帳(35章のO2)。大一番の作戦の欄は、相手の飛車の向きに合う作戦を3つまで。 */
+    book: bookView(state),
     words: state.words,
     lastEvent: state.lastEvent,
     log: state.log.slice(-6),

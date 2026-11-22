@@ -130,8 +130,12 @@ describe('観戦(24章)', () => {
     const own = watchSpec(s, { plan: { opening: 'own', ending: 'attack' } });
     const wild = watchSpec(s, { plan: { opening: 'wild', ending: 'wait' } });
     expect(own.spec[own.side].disciple).toBeTruthy();
-    expect(own.spec.openings[own.side]).toBe('hayaguri');
-    expect(wild.spec.openings[wild.side]).toBeNull();
+    // 作戦は作戦帳のカードを、定跡補助の戦法と囲いのidで渡す(35章)。力戦なら定跡なし。
+    expect(Object.keys(s.planBook.cards)).toContain(own.card);
+    expect(own.spec.plans[own.side]).toMatchObject({ strategyId: expect.any(String) });
+    expect(own.plans.own).toBeTruthy();
+    expect(wild.spec.plans[wild.side]).toBeNull();
+    expect(wild.plans.own).toBe('力戦');
     expect(own.spec[own.side].disciple.strength.attack).toBeGreaterThan(wild.spec[wild.side].disciple.strength.attack);
     expect(own.state.kenshukai).toBeTruthy();
     expect(s.kenshukai).toBeNull();
@@ -243,13 +247,45 @@ describe('観戦した日の結果発表(33-3)', () => {
   });
 });
 
-describe('戦法熟練度(34-17)', () => {
-  it('研究会で得意戦法の熟練度が上がり、札に出る', () => {
+describe('戦法熟練度(34-17)と作戦帳(35章のO2)', () => {
+  it('研究会で作戦の熟練度が上がり、札に出る', () => {
     const s = createDiscipleRun({ seed: 3, discipleId: 'minato' });
     const before = masteryView(s);
-    expect(before).toMatchObject({ opening: 'yagura', label: '矢倉' });
+    expect(before).toMatchObject({ count: 2 });
     const { state: next, result } = chooseAction(s, { kind: 'study' });
     expect(masteryView(next).value).toBe(before.value + MASTERY_GAIN.study);
     expect(result.text).toMatch(/戦法熟練度＋5/);
+  });
+
+  it('弟子をとった日は2つの作戦を知っていて、指した日の作戦に局数・勝ち数・熟練度を数える', () => {
+    let s = createDiscipleRun({ seed: 21, discipleId: 'ao' });
+    expect(Object.keys(s.planBook.cards).sort()).toEqual(['bougin+kanigakoi', 'shiken+mino']);
+    for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
+    const made = watchSpec(s, {});
+    const { state: after, result } = playEvent(s, { forced: [true] });
+    const entry = after.planBook.cards[made.card];
+    expect(entry.games).toBe(result.games.length);
+    expect(entry.wins).toBe(result.wins);
+    expect(entry.mastery).toBe(s.planBook.cards[made.card].mastery + result.games.length * MASTERY_GAIN.game);
+    expect(after.planBook.last).toBe(made.card);
+    expect(result.plan).toBe(made.plans.own);
+  });
+
+  it('大一番で師匠が選んだ作戦で指す', () => {
+    let s = createDiscipleRun({ seed: 21, discipleId: 'ao' });
+    for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
+    for (const id of Object.keys(s.planBook.cards)) {
+      const made = watchSpec(s, { plan: { opening: 'own', ending: 'wait', card: id } });
+      expect(made.card).toBe(id);
+    }
+  });
+
+  it('前の版の記録は、得意戦法の熟練度をその戦法の作戦へ写す', () => {
+    const s = createDiscipleRun({ seed: 3, discipleId: 'minato' });
+    const old = { ...s, planBook: undefined, mastery: { yagura: 55 } };
+    const view = masteryView(old);
+    expect(view.count).toBeGreaterThan(2);
+    const book = discipleView(old).book;
+    expect(book.count).toBe(view.count);
   });
 });

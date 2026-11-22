@@ -181,4 +181,41 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     const next = plans.advancePlan(plan, { color: 'black', ownMoves: ['7g7f', '2g2f'], opponentMoves: ['3c3d', '8b4b'], sfen: record.position.sfen });
     expect(next).toMatchObject({ castleId: 'left-mino', adapted: true });
   });
+
+  it('作戦帳: はじめの2枚と熟練度、合う作戦の選び方、記録', () => {
+    const ranks = { static: 'C', ranging: 'E', kakugawari: 'B' };
+    const startingMastery = (rank) => ({ B: 30, C: 20, E: 10 }[rank] ?? 20);
+    const book = plans.createPlanBook({ style: 'lead', aptitudes: ranks, startingMastery });
+    // 早繰り銀の戦い方(先行)は原始棒銀を少し高く。
+    expect(book.cards).toEqual({
+      'shiken+mino': { mastery: 20, games: 0, wins: 0 },
+      'bougin+kanigakoi': { mastery: 30, games: 0, wins: 0 },
+    });
+    // 相手が振り飛車なら、知っている作戦のうち合う作戦(四間飛車＋本美濃)だけ。
+    expect(plans.bookChoices(book, { opponentRook: 'ranging' }).map((card) => card.id)).toEqual(['shiken+mino']);
+    expect(plans.chooseBookCard(book, { opponentRook: 'ranging', random: () => 0.99 })?.id).toBe('shiken+mino');
+    // 相手の得意を外すときは、相手と違う飛車の向きの作戦を先に見る(居飛車の相手には振り飛車。合う作戦がなければそのまま)。
+    expect(plans.chooseBookCard(book, { opponentRook: 'static', opening: 'avoid', random: () => 0.99 })?.id).toBe('shiken+mino');
+    expect(plans.chooseBookCard(book, { opponentRook: 'ranging', opening: 'avoid', random: () => 0.99 })?.id).toBe('shiken+mino');
+    expect(plans.chooseBookCard(book, { opening: 'wild' })).toBeNull();
+    expect(plans.chooseBookCard(book, { cardId: 'shiken+mino', random: () => 0.99 })?.id).toBe('shiken+mino');
+    // 知らない作戦は選べない。
+    expect(plans.chooseBookCard(book, { cardId: 'ibisha+yagura', random: () => 0 })?.id).not.toBe('ibisha+yagura');
+    expect(plans.notePlanGames(book, 'shiken+mino', { games: 2, wins: 1, gain: 2 })).toBe(2);
+    expect(book.cards['shiken+mino']).toEqual({ mastery: 22, games: 2, wins: 1 });
+    expect(plans.bookHeadline(book)).toMatchObject({ id: 'shiken+mino', value: 22, count: 2 });
+    // 前の版の熟練度は、その戦い方の作戦へ写す。
+    const legacy = plans.createPlanBook({ style: 'counter', aptitudes: ranks, legacy: { yagura: 55 }, legacyOpening: 'yagura', startingMastery });
+    expect(legacy.cards['ibisha+yagura'].mastery).toBe(55);
+    expect(legacy.cards['ibisha+left-mino'].mastery).toBe(55);
+  });
+
+  it('組み替えは、作戦帳で知っている囲いの中から選ぶ', () => {
+    const plan = plans.planSpec(plans.planCard('hayaguri-gin+yagura'), { steps: 0, castles: ['yagura', 'kanigakoi'] });
+    const record = createGameRecord();
+    ['7g7f', '3c3d', '2g2f', '8b4b'].forEach((usi) => appendUsiMove(record, usi));
+    const next = plans.advancePlan(plan, { color: 'black', ownMoves: ['7g7f', '2g2f'], opponentMoves: ['3c3d', '8b4b'], sfen: record.position.sfen });
+    // 左美濃を知らないので、矢倉のまま。
+    expect(next).toMatchObject({ castleId: 'yagura', adapted: true });
+  });
 });

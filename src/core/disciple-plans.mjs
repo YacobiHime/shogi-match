@@ -127,9 +127,10 @@ const LONG_WINDOW = Object.freeze({ ply: 70, own: 35 });
 /**
  * 本局に渡す作戦(engine-game.mjsのspec.plans)。カードと、続けて組む囲いの数から作る。
  * @param {{ strategyId: string, castleId: string }} card
- * @param {{ steps?: number, adapt?: boolean }} [options] adaptは、相手の飛車の向きで囲いを組み替えるか
+ * @param {{ steps?: number, adapt?: boolean, castles?: string[] | null }} [options] adaptは、相手の飛車の向きで囲いを組み替えるか。
+ *   castlesは組み替えてよい囲い(弟子は作戦帳で知っている囲いだけ。省くとCPUと同じ候補)
  */
-export function planSpec(card, { steps = 0, adapt = true } = {}) {
+export function planSpec(card, { steps = 0, adapt = true, castles = null } = {}) {
   if (!card) return null;
   const chain = card.castleId && !card.integrated ? castleChain(card.castleId, steps) : [];
   return {
@@ -138,6 +139,7 @@ export function planSpec(card, { steps = 0, adapt = true } = {}) {
     chain,
     adapt: Boolean(adapt && card.strategyId && !card.integrated && CPU_ADAPTIVE_CASTLES[card.strategyId]),
     window: chain.length ? LONG_WINDOW : null,
+    ...(castles ? { castles: [...castles] } : {}),
   };
 }
 
@@ -203,7 +205,7 @@ export function advancePlan(plan, { color, ownMoves, opponentMoves, sfen }) {
     const stance = opponentOpeningStance({ opponentColor, opponentMoves, currentSfen: sfen });
     const pools = CPU_ADAPTIVE_CASTLES[next.strategyId];
     if (stance && pools) {
-      const pool = pools[stance] ?? [];
+      const pool = (pools[stance] ?? []).filter((castle) => !next.castles || next.castles.includes(castle));
       // 角換わりになったら、矢倉の候補があれば矢倉へ(CPUと同じ)。
       const wanted = stance === 'static' && bishopExchangeState(sfen, color) === 'exchanged' && pool.includes('yagura') ? 'yagura' : pool[0];
       if (pool.includes(next.castleId) || !wanted || castleStartedForPlan(next, color, ownMoves)) {
@@ -220,4 +222,105 @@ export function advancePlan(plan, { color, ownMoves, opponentMoves, sfen }) {
     next = { ...next, strategyId: '', castleId, chain: rest, adapt: false, previous: [...(next.previous ?? []), next.castleId] };
   }
   return next;
+}
+
+// ---- 作戦帳(O2。35-3・35-5)。弟子の記録(disciple:v1)の planBook に持つ。
+
+/** 弟子をとった日に知っている作戦(35-4の「はじめ」)。 */
+export const START_CARDS = Object.freeze(['shiken+mino', 'bougin+kanigakoi']);
+/** 戦い方ごとの、はじめに少し熟練度の高い作戦。 */
+const FAVORITE_START = Object.freeze({ lead: 'bougin+kanigakoi', study: 'bougin+kanigakoi', counter: 'shiken+mino', grit: 'shiken+mino' });
+const FAVORITE_BONUS = 10;
+/** 大一番で選べる作戦の数(同じ種類の選択肢は3つほどに。UD:9)。 */
+export const BOOK_CHOICES = 3;
+
+/** カードの熟練度のはじめの値に使う適性(振り飛車は対居飛車、対振り飛車のカードは対振り飛車、角換わりは角換わり)。 */
+export function cardAptitudeKey(card) {
+  if (!card) return 'static';
+  if (battleKey(card, 'static') === 'kakugawari') return 'kakugawari';
+  return card.rook !== 'ranging' && card.vs === 'ranging' ? 'ranging' : 'static';
+}
+
+/**
+ * 作戦帳を作る。前の版の記録(戦い方の得意戦法ごとの熟練度 state.mastery)があれば、その戦法のカードを足して熟練度を写す。
+ * @param {{ style?: string, aptitudes?: Record<string, string>, legacy?: Record<string, number> | null, legacyOpening?: string | null, startingMastery: (rank: string) => number }} options
+ */
+export function createPlanBook({ style = '', aptitudes = {}, legacy = null, legacyOpening = null, startingMastery }) {
+  const cards = {};
+  for (const id of START_CARDS) {
+    const card = planCard(id);
+    const base = startingMastery(aptitudes[cardAptitudeKey(card)]);
+    cards[id] = { mastery: Math.min(100, base + (FAVORITE_START[style] === id ? FAVORITE_BONUS : 0)), games: 0, wins: 0 };
+  }
+  const old = legacyOpening ? legacy?.[legacyOpening] : undefined;
+  if (Number.isFinite(old) && STYLE_CARDS[style]) {
+    for (const id of Object.values(STYLE_CARDS[style])) cards[id] ??= { mastery: Math.min(100, Math.max(0, old)), games: 0, wins: 0 };
+  }
+  return { cards, last: null };
+}
+
+/** 作戦帳の中で、手番と相手の飛車の向きに合うカード(熟練度の高い順)。 */
+export function bookFits(book, { opponentRook = 'static', color = 'black' } = {}) {
+  const stance = opponentRook === 'ranging' ? 'ranging' : 'static';
+  const known = Object.keys(book?.cards ?? {}).map(planCard).filter((card) => card && card.colors.includes(color));
+  const fits = known.filter((card) => card.vs === 'both' || card.vs === stance);
+  const mastery = (card) => book.cards[card.id]?.mastery ?? 0;
+  return (fits.length ? fits : known).sort((a, b) => mastery(b) - mastery(a) || a.id.localeCompare(b.id));
+}
+
+/**
+ * その日の作戦のカード(35-5)。大一番で師匠が選んだカードがあればそれ、力戦なら定跡なし。
+ * 相手の得意を外すときは、相手と違う飛車の向きのカードを先に見る。ほかは熟練度で重みを付けて選ぶ。
+ * @param {any} book
+ * @param {{ opponentRook?: string, opening?: string | null, cardId?: string | null, color?: string, random?: () => number }} options
+ */
+export function chooseBookCard(book, { opponentRook = 'static', opening = null, cardId = null, color = 'black', random = Math.random } = {}) {
+  if (opening === 'wild') return null;
+  const picked = cardId && book?.cards?.[cardId] ? planCard(cardId) : null;
+  if (picked?.colors.includes(color)) return picked;
+  let fits = bookFits(book, { opponentRook, color });
+  if (opening === 'avoid') {
+    const other = fits.filter((card) => card.rook !== (opponentRook === 'ranging' ? 'ranging' : 'static'));
+    if (other.length) fits = other;
+  }
+  if (!fits.length) return planCard(DEFAULT_CARDS.static);
+  const weights = fits.map((card) => 10 + (book.cards[card.id]?.mastery ?? 0));
+  let roll = random() * weights.reduce((sum, value) => sum + value, 0);
+  for (let index = 0; index < fits.length; index += 1) {
+    roll -= weights[index];
+    if (roll <= 0) return fits[index];
+  }
+  return fits.at(-1);
+}
+
+/** 大一番の作戦の欄(おまかせのほかに、合う作戦を熟練度の高い順に3つまで)。 */
+export function bookChoices(book, options = {}) {
+  return bookFits(book, options).slice(0, BOOK_CHOICES).map((card) => ({
+    id: card.id, label: card.label, mastery: book.cards[card.id]?.mastery ?? 0, tier: card.tier,
+  }));
+}
+
+/**
+ * 指した日の記録(熟練度の伸び・局数・勝ち数)。書き換えてよい写しを渡す。
+ * @returns {number} 熟練度の伸び
+ */
+export function notePlanGames(book, cardId, { games = 0, wins = 0, gain = 0 } = {}) {
+  const entry = book?.cards?.[cardId];
+  if (!entry) return 0;
+  const before = entry.mastery;
+  entry.mastery = Math.min(100, before + gain);
+  entry.games += games;
+  entry.wins += wins;
+  book.last = cardId;
+  return entry.mastery - before;
+}
+
+/** 弟子の札の作戦(最後に指した作戦。まだなければ熟練度のいちばん高い作戦)。 */
+export function bookHeadline(book) {
+  const ids = Object.keys(book?.cards ?? {});
+  if (!ids.length) return null;
+  const id = book.last && book.cards[book.last] ? book.last
+    : ids.sort((a, b) => book.cards[b].mastery - book.cards[a].mastery || a.localeCompare(b))[0];
+  const card = planCard(id);
+  return card ? { id, label: card.label, value: book.cards[id].mastery, count: ids.length } : null;
 }
