@@ -3026,7 +3026,14 @@ export function openingPlanCandidates({
         const candidate = availableMove(next);
         if (candidate) return [candidate];
         const progress = castleProgress();
-        return progress.length ? progress : shapeFallback();
+        if (progress.length) return progress;
+        // 進化の続きの囲い(銀冠穴熊など)は、もとの囲いを組んだ形から始まる。手順の前の方の手(もとの囲いの手)が
+        // 別の形で済んでいて指せないときは、後ろの手で指せるものへ進む(道をあける8八の歩など。docs/disciple-mode-design.mdの35-10)。
+        if (phase === "castle" && definition.evolvesFrom) {
+          const later = pending.slice(1).map(availableMove).find(Boolean);
+          if (later) return [later];
+        }
+        return shapeFallback();
       }
       // 手順を指し終えたのに完成していない(金が1マスずれたなど)ときは、完成形の駒を戻す手を出す。
       const progress = castleProgress();

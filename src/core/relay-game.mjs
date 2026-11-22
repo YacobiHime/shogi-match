@@ -660,6 +660,9 @@ async function widerCandidates({ sfen, moves, legal, candidates, search, evaluat
 
 /** 棋士の、この局の戦法と囲い(定跡案内の戦法・囲いのid)。 */
 export function openingPlanOf(spec, side) {
+  // 師匠の1年の棋士は、定跡補助の戦法と囲いのidで作戦を受け取る(disciple-plans.mjsのplanSpec。docs/disciple-mode-design.mdの35章)。
+  const direct = spec.plans?.[side];
+  if (direct && (direct.strategyId || direct.castleId)) return { ...direct, chain: [...(direct.chain ?? [])] };
   const id = spec.openings?.[side];
   if (!id || !proOpening(id)) return null;
   const castle = spec.castles?.[side] ?? proOpening(id)?.castles?.[0]?.[0] ?? '';
@@ -674,7 +677,10 @@ export function openingPlanMove({ plans, side, ply, record, moves, legal, format
   const other = moves.filter((_, index) => sideOf(index) !== side);
   const sfen = record.position.sfen;
   const inCheck = Boolean(record.position.checked);
-  if (!shouldUseCpuOpening({ ply, cpuMoveCount: own.length, inCheck, lastMoveWasCapture: lastCapture })) return null;
+  // 囲いの続きを組む作戦は、定跡を指す窓を広げる(plan.window。駒がぶつかった直後と王手のときは今までどおり指さない)。
+  const window = plan.window;
+  if (window ? (inCheck || lastCapture || ply >= window.ply || own.length >= window.own)
+    : !shouldUseCpuOpening({ ply, cpuMoveCount: own.length, inCheck, lastMoveWasCapture: lastCapture })) return null;
   try {
     const move = nextOpeningPlanMove({
       strategyId: plan.strategyId, castleId: plan.castleId, color: side, playedMoves: own, opponentMoves: other, moveHistory: moves,

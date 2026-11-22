@@ -1,10 +1,13 @@
 // 理由で指す棋士(docs/disciple-mode-design.mdの34-16)が、序盤に定跡の手をどれだけ指すかを測る。
 // 両側に戦法と囲いを持たせ、40手まで指して、定跡の手が出た数・指した数・外れた理由を数える。
+// 上書きデータを入れて測る(35-10)。
 // 使い方: npx vite-node scripts/reason-book-report.mjs -- [--levels 12,20,30,40,49] [--games 4]
-import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../src/game-state';
-import { openingPlanMove } from '../src/core/relay-game.mjs';
-import { createFormationState } from '../src/core/formation-tracker.mjs';
-import { thinkHere } from '../src/core/reason-think.mjs';
+// 本番と同じ定跡(定跡エディターの上書きデータを含む)で測るため、環境変数を立ててからモジュールを読む。
+process.env.OPENING_GUIDE_EDITOR_OVERRIDES = '1';
+const { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } = await import('../src/game-state');
+const { openingPlanMove } = await import('../src/core/relay-game.mjs');
+const { createFormationState } = await import('../src/core/formation-tracker.mjs');
+const { thinkHere } = await import('../src/core/reason-think.mjs');
 
 const args = process.argv.slice(2);
 const option = (key, fallback) => {

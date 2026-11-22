@@ -505,6 +505,8 @@ export function adaptCpuOpeningPlan({
 }
 
 export { ADAPTIVE_CASTLES as CPU_ADAPTIVE_CASTLES, OPENING_DISTRIBUTION as CPU_OPENING_DISTRIBUTION };
+/** 囲いの駒を動かし始めたか(歩の手は数えない)。師匠の1年の作戦の組み替え(disciple-plans.mjs)でも使う。 */
+export const castleStartedForPlan = (plan, color, moves) => castleStarted(plan, color, moves);
 
 /**
  * 「おまかせ」で、登録済みの戦法・囲いをランダムに組み合わせる割合。

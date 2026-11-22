@@ -101,8 +101,16 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   const checkDepth = Math.max(1, depth - 1);
   const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale });
   if (planMove && planMove !== best.move) {
-    const planScore = scoreMoves(sfen, [planMove], scoreOpts()).get(planMove);
-    if (planScore && planScore.score >= best.score - BOOK_MARGIN) return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv });
+    // 定跡の手は、駒の損得と詰みだけで比べる(形の点では外さない。docs/disciple-mode-design.mdの35-6)。
+    // 前は形の点も入れて比べ、強い棋士ほど5手目あたりで定跡を外れていた。
+    // 駒をただで取られる・取り合いで損をするかを見るだけなので、2手(自分の手と相手の返し)と末端の取り合いで足りる。
+    // 深く読むと時間が足りず、点が出ないまま定跡を外れていた。
+    const scores = scoreMoves(sfen, [planMove, best.move], { ...scoreOpts(), depth: Math.min(2, checkDepth), shapeScale: 0, maxTimeMs: 400 });
+    const planScore = scores.get(planMove);
+    const bestScore = scores.get(best.move);
+    if (planScore && planScore.score >= (bestScore?.score ?? best.score) - BOOK_MARGIN) {
+      return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv });
+    }
   } else if (planMove === best.move) {
     return done(planMove, 'book', 'book', { score: best.score, line: best.pv });
   }

@@ -13,6 +13,7 @@ import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
 import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
 import { MASTERY_MAX, discipleMastery, masteryForLevel } from './strategy-mastery.mjs';
+import { battleKey, chainSteps, disciplePlanCard, opponentPlanSpec, planSpec } from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
@@ -716,23 +717,31 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   if (!member) return null;
   const level = next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
   const eventKind = next.shoreikai ? 'shoreikai' : 'kenshukai';
-  const battle = member.style === 'ranging' ? 'ranging' : 'static';
-  const strength = currentStrength(isBigEvent(state) ? withCharm(next, charm) : next, { battle, time: 'fast' });
-  const attack = clamp(strength.attack + (ENDING_ATTACK[plan?.ending ?? ''] ?? 0), -1, 1);
   const side = run.pending.color === 'white' ? 'white' : 'black';
   const other = side === 'black' ? 'white' : 'black';
-  const opponentOpening = battle === 'ranging' ? 'shiken' : 'aigakari';
-  // 相手の得意を外すなら、相手の戦型に合う形(振り飛車には対抗形の居飛車、居飛車には矢倉)。力戦なら定跡なし。
-  const ownOpening = plan?.opening === 'wild' ? null : plan?.opening === 'avoid' ? (battle === 'ranging' ? 'ibisha' : 'yagura') : STYLE_OPENINGS[next.style] ?? null;
+  // 相手の作戦は、研修会・奨励会が1局ごとに相手の得意戦法から選んだもの(pending.style)。前は比べ方の誤りで、いつも相掛かり＋舟囲いだった(35-1)。
+  const opponentStyle = run.pending?.style ?? member.style ?? null;
+  const opponentRook = opponentStyle?.rook === 'ranging' ? 'ranging' : 'static';
+  // 弟子の作戦は、相手の飛車の向きに合うカード(戦い方で決まる。作戦帳はO2)。力戦なら定跡なし。
+  const ownCard = disciplePlanCard({ style: next.style, opponentRook, opening: plan?.opening ?? null, color: side });
+  const battle = battleKey(ownCard, opponentRook);
+  const strength = currentStrength(isBigEvent(state) ? withCharm(next, charm) : next, { battle, time: 'fast' });
+  const attack = clamp(strength.attack + (ENDING_ATTACK[plan?.ending ?? ''] ?? 0), -1, 1);
+  // 熟練度は、今までどおり戦い方の得意戦法で数える(作戦のカードごとにするのはO2)。
+  const ownOpening = ownCard ? STYLE_OPENINGS[next.style] ?? null : null;
   // 弟子と相手は、評価関数を使わず理由で指す(34-16)。能力値のLvで読みの手数・大局観・うっかり・詰みの手数が決まる。
   // 定跡のあとの研究の続きだけ、戦法熟練度の手数をエンジンで指す(34-10)。
-  const aptitudeRank = aptitudeRanks(next)[String(ownOpening ?? '').startsWith('kakugawari') ? 'kakugawari' : battle === 'ranging' ? 'ranging' : 'static'];
+  const aptitudeRank = aptitudeRanks(next)[battle];
   const disciple = {
     id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: eventKind,
     disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
     reason: { levels: { ...strength.levels }, mastery: ownOpening ? discipleMastery(next, ownOpening, aptitudeRank) : 0 },
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
+  const plans = {
+    [side]: ownCard ? planSpec(ownCard, { steps: chainSteps(strength.levels?.plan) }) : null,
+    [other]: opponentPlanSpec(opponentStyle, level),
+  };
   const opponent = {
     id: member.id, name: member.name, level: Math.round(level), kind: eventKind, character: member.character ?? null,
     repertoire: member.repertoire ?? null, style: member.style ?? null,
@@ -742,7 +751,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
     event: eventKind, kind: 'game', label: next.shoreikai ? run.pending?.label ?? '奨励会' : kind === 'exam' ? '入会試験' : `第${run.dayNo}回例会`,
     [side]: disciple, [other]: opponent,
-    openings: { [side]: ownOpening, [other]: opponentOpening },
+    openings: { [side]: ownOpening, [other]: opponentStyle?.opening ?? opponentStyle?.id ?? null },
+    plans,
   };
   return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next };
 }

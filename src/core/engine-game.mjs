@@ -6,6 +6,7 @@
 import { discipleMoveSettings } from './disciple-strength.mjs';
 import { thinkHere } from './reason-think.mjs';
 import { createBookTracker, followUpTurn, noteBook } from './strategy-mastery.mjs';
+import { advancePlan } from './disciple-plans.mjs';
 import { appendUsiMove, createGameRecord, enumerateLegalMoves, STANDARD_SFEN } from '../game-state';
 import { createRng } from './ryuo-random.mjs';
 import { CPU_STRENGTH_PRESETS, getStrengthSearchSettings, logicLevelOf } from './strength-settings.mjs';
@@ -260,6 +261,14 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
       : situation
         ? applyCharacter(strength.settings, player.character, { ...situation, advantage }, { skill: strength.skill })
         : strength.settings);
+    // 師匠の1年の棋士の作戦は、相手の飛車の向きで囲いを組み替え、完成したら囲いの続きへ進む(docs/disciple-mode-design.mdの35章)。
+    if (plans[side]?.adapt || plans[side]?.chain?.length) {
+      plans[side] = advancePlan(plans[side], {
+        color: side, sfen,
+        ownMoves: moves.filter((_, index) => sideOf(index) === side),
+        opponentMoves: moves.filter((_, index) => sideOf(index) !== side),
+      });
+    }
     const planMove = openingPlanMove({ plans, side, ply, record, moves, legal: allowed, formations, lastCapture });
 
     const reasoner = player?.reason ?? null;
