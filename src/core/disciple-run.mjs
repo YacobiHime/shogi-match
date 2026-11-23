@@ -15,7 +15,7 @@ import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-cause
 import { masteryForLevel, startingMastery } from './strategy-mastery.mjs';
 import {
   battleKey, bookChainSteps, bookChoices, bookHeadline, bookRows, chooseBookCard, createPlanBook, learnCard, noteSeen, notePlanGames, offerLearn,
-  opponentPlanSpec, planCard, planSpec, surpriseToLearn, unlockChain,
+  noteResearch, opponentPlanSpec, planCard, planSpec, researchNotes, surpriseToLearn, unlockChain,
 } from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
@@ -480,7 +480,7 @@ function ensureKenshukai(state) {
 /**
  * 入会試験・例会を弟子が指す(観戦しない局)。その日の局を全部決め、ターンを進める。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[], watchedMin?: number | null, charm?: string | null }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け。
+ * @param {{ plan?: { opening?: string, ending?: string, card?: string } | null, forced?: boolean[], watchedMin?: number | null, charm?: string | null, entries?: any[] }} [options] forcedは観戦してエンジンで決めた、はじめの局の勝ち負け。entriesは観戦した本局の手(研究メモに使う)。
  *   charmは大一番に持たせたお守り(その日の局だけ効き、使うとなくなる。26章)
  *   watchedMinは観戦した局の弟子から見たいちばん低い評価値(劣勢から勝つと逆境の粘りの条件に数える)
  * @returns {{ state: any, result: { kind: 'exam' | 'reikai', games: { name: string, level: number, win: boolean, chance: number }[], wins: number, losses: number, text: string, events: string[], newSkills?: string[], newCards?: string[], charm?: string | null, overcome?: boolean } }}
@@ -574,6 +574,13 @@ export function playEvent(state, options = {}) {
     // 囲いの続きは、その作戦で指した局数で開く(35-12)。
     const chained = unlockChain(next.planBook, today.card.id);
     if (chained) news.push(`${chained}まで組めるようになった`);
+    // 観戦した局から、研究メモを書き足す(35-13)。メモの手で勝てば「研究が当たった」。
+    if (options.entries?.length) {
+      const memo = noteResearch(next.planBook, today.card.id, options.entries, { side: today.side, win: Boolean(played.result.games[0]?.win) });
+      if (memo.used && played.result.games[0]?.win) news.push(`研究が当たった（研究メモの手${memo.used}手）`);
+      if (memo.added) news.push(`研究メモに${memo.added}つ書き足した`);
+      if (memo.forgot) news.push('外れた研究を消した');
+    }
   }
   // 1局目に負けた相手の作戦は、覚えられそうな作戦に入る(やられて覚える。35-12)。
   if (played.result.games[0] && !played.result.games[0].win && noteSeen(next.planBook, today?.opponentStyle)) news.push('相手の作戦を覚えられそう');
@@ -797,7 +804,7 @@ export const ENDING_ATTACK = Object.freeze({ attack: 0.3, wait: -0.3 });
  * 観戦する1局(その日のはじめの局)の本局の設定(engine-game.mjsのplayEngineGameに渡す)。授けた作戦は戦法と攻めの向きになる。
  * 研修会の挑戦がまだなければ作った状態も返す(試験の相手を決めるため)。
  * @param {any} state
- * @param {{ plan?: { opening?: string, ending?: string } | null, charm?: string | null }} [options] charmは大一番に持たせたお守り
+ * @param {{ plan?: { opening?: string, ending?: string, card?: string } | null, charm?: string | null }} [options] charmは大一番に持たせたお守り
  */
 export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
@@ -819,7 +826,7 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const disciple = {
     id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: eventKind,
     disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
-    reason: { levels: { ...strength.levels }, mastery },
+    reason: { levels: { ...strength.levels }, mastery, notes: ownCard ? researchNotes(book, ownCard.id) : {} },
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {

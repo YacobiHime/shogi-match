@@ -234,3 +234,24 @@ describe('本物の世界の本局(docs/tournament-strength-spread-design.mdの9
     expect(engineStrength(spec.white).settings.searchThreads).toBe(2);
   });
 });
+
+describe('研究メモ(師匠の1年の35-13)', () => {
+  it('理由で指す棋士は、定跡のない局面で研究メモにある局面なら、エンジンに聞かずメモの手を指す', async () => {
+    const start = createGameRecord().position.sfen.split(' ').slice(0, 3).join(' ');
+    const think = async ({ sfen }) => {
+      const record = createGameRecord(sfen);
+      const move = enumerateLegalMoves(record.position).map(({ usi }) => usi).sort()[0];
+      return { move, stage: 'shape', reason: 'read', skipped: [], line: [move], depth: 1 };
+    };
+    const levels = { reading: 20, plan: 20, steady: 20, mate: 20 };
+    const game = spec(20, 20);
+    game.black = { ...game.black, reason: { levels, mastery: 0, notes: { [start]: '9g9f' } }, reasonRecord: true };
+    game.white = { ...game.white, reason: { levels, mastery: 0 } };
+    const seen = [];
+    let count = 0;
+    await playEngineGame({ spec: game, search: fakeSearch().search, think, onMove: (entry) => seen.push(entry), isCancelled: () => (count += 1) > 12 });
+    expect(seen[0]).toMatchObject({ move: '9g9f', d: { s: 'memo', r: 'memo' } });
+    // メモのない局面は、ふだんの考え方で指す。
+    expect(seen[2]?.d?.s).toBe('shape');
+  });
+});

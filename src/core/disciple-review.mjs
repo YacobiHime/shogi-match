@@ -136,7 +136,7 @@ export const bookList = (state) => [...(state?.games ?? [])].reverse();
 
 /** 弟子の考えの一言(思考の記録の理由から。34-17)。 */
 export const THOUGHT_LINES = Object.freeze({
-  book: '定跡どおりに指します', follow: '研究してきた手です', mate: '詰みが見えました', 'mate-threat': '詰みまで読み切りました',
+  book: '定跡どおりに指します', follow: '研究してきた手です', memo: '前にも指した形です。研究メモどおりに指します', mate: '詰みが見えました', 'mate-threat': '詰みまで読み切りました',
   material: '駒得になります', promote: '成れるところは成ります', check: '王手をかけます', attack: '攻め駒を玉に近づけます',
   castle: '囲いを固めます', mobility: '駒を働かせます', read: '読んで決めました', develop: '銀を繰り出します',
   'rook-pawn': '飛車先の歩を伸ばします', 'edge-pawn': '端歩を突いて様子を見ます', wait: '手待ちして相手の出方を見ます',

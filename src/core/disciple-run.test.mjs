@@ -335,3 +335,21 @@ describe('作戦の覚え方(35-12)', () => {
     expect(found.after.lastEvent.events).toContain('相手の作戦を覚えられそう');
   });
 });
+
+describe('研究メモ(35-13)', () => {
+  it('観戦した局の研究の続きの手を作戦の研究メモに書き足し、次の本局に渡す', () => {
+    let s = createDiscipleRun({ seed: 21, discipleId: 'ao' });
+    for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
+    const made = watchSpec(s, {});
+    const entries = made.side === 'black'
+      ? [{ move: '7g7f', loss: 10, d: { s: 'follow' } }]
+      : [{ move: '7g7f', loss: 0 }, { move: '3c3d', loss: 10, d: { s: 'follow' } }];
+    const { state: after, result } = playEvent(s, { forced: [true], entries });
+    expect(result.events).toContain('研究メモに1つ書き足した');
+    expect(Object.values(after.planBook.notes[made.card])).toHaveLength(1);
+    // 同じ作戦の次の本局は、研究メモを受け取る。
+    const book = after.planBook;
+    expect(Object.keys(book.notes[made.card])).toHaveLength(1);
+    expect(discipleView(after).book.rows.find((row) => row.id === made.card).memo).toBe(1);
+  });
+});

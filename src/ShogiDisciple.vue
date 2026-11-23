@@ -164,7 +164,7 @@
         <ul>
           <li v-for="row in view.book.rows" :key="row.id" :data-disciple-plan-row="row.id">
             <b>{{ row.label }}</b>
-            <small>{{ row.tierLabel }}・{{ row.vs }}　熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝</small>
+            <small>{{ row.tierLabel }}・{{ row.vs }}　熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝<template v-if="row.memo">・研究メモ {{ row.memo }}局面</template></small>
             <small v-if="row.chainNow.length || row.chainNext" class="disciple__plan-chain">
               <template v-if="row.chainNow.length">囲いの続き {{ row.chainNow.join('→') }}</template>
               <template v-if="row.chainNext">{{ row.chainNow.length ? '　' : '' }}次は{{ row.chainNext.label }}（あと{{ row.chainNext.left }}局）</template>
@@ -839,7 +839,8 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   // 弟子から見たいちばん低い評価値(劣勢から勝つと、逆境の粘りの条件に数える。25-3)。
   const sign = current.side === "black" ? 1 : -1;
   const watchedMin = Math.min(0, ...current.entries.map((entry) => sign * (Number(entry?.eval) || 0)));
-  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm });
+  // 観戦した本局の手は、研究メモ(35-13)に使う。
+  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm, entries: current.entries });
   charmPick.value = "";
   // 選んだ作戦は、その日の相手に合わせたものなので持ち越さない。
   plan.card = "";

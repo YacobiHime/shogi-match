@@ -140,6 +140,7 @@ export function classifyMove(entries, side, ply, { sfen = STANDARD_SFEN, sfens =
   // 何もない局面の手順表の手なら方針の誤り(局面に合わない手を選んだ)。
   if (swing > -CAUSE_RULES.lostPoints && before < CAUSE_RULES.winning) {
     if (thought.s === 'follow') return result('plan', 'policy', 'research', [], '');
+    if (thought.s === 'memo') return result('plan', 'policy', 'memo', [], '');
     if (thought.s === 'book') return result('plan', 'policy', 'book', [], '');
     if (thought.s === 'quiet') return result('policy', ply <= openingPly ? 'plan' : null, 'quiet', [], '');
   }
@@ -250,6 +251,7 @@ export function causeExplain(mark) {
     case 'defense': return `受け損ない${time}。自分の玉の危険を見落とした`;
     case 'yose': return `寄せの誤り${time}。${mark.sub === 'mate' ? 'この局面には詰みがあった' : '勝っている終盤で、寄せが遅れた'}`;
     case 'plan':
+      if (mark.sub === 'memo') return '作戦負け。研究メモの手（前の局で指した手）が、この相手には通じなかった（負けた局で大きく損をした研究の手は、メモから消える）';
       if (mark.sub === 'research') return '作戦負け。定跡のあとの研究の続きで、研究が足りなかった（戦法熟練度が上がると、研究の手が増える）';
       if (mark.sub === 'book') return '作戦負け。定跡の手順のまま進めて、相手の手に合っていなかった';
       return `作戦負け。序盤の駒組みのあいだに、少しずつ形勢を損ねた（${mark.startWord ?? '互角'} → ${mark.endWord ?? ''}）`;

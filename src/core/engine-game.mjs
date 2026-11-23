@@ -290,7 +290,10 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     let choice = null;
     if (reasoner) {
       // 理由で指す棋士(34-16)。定跡のあとの研究の続きだけエンジンで指す(34-10)。エンジンの読み(read)は判定役。
-      const follow = followUpTurn(books, side, ownMoves, reasoner.mastery ?? 0);
+      // 研究メモ(前の局で研究の続きに指して形勢を保った手。35-13)。定跡が終わったあと、同じ局面ならエンジンに聞かずにその手を指す。
+      const memo = planMove ? null : reasoner.notes?.[positionKey(sfen)];
+      if (memo && allowed.includes(memo)) choice = { move: memo, reason: { stage: 'memo', reason: 'memo', skipped: [] } };
+      const follow = choice ? null : followUpTurn(books, side, ownMoves, reasoner.mastery ?? 0);
       if (follow) {
         const deep = await search({ moves: [...moves], nodes: follow.nodes, multiPv: 1 });
         if (isCancelled()) return null;

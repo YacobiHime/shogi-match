@@ -8,6 +8,7 @@ import {
   openingDefinitionRookStyle,
 } from './opening-guide.mjs';
 import { CPU_ADAPTIVE_CASTLES, castleStartedForPlan, opponentOpeningStance } from './cpu-opening-repertoire.mjs';
+import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
 
 /** 段(覚える順番)。 */
 export const PLAN_TIERS = Object.freeze(['start', 'basic', 'advanced', 'special', 'surprise']);
@@ -449,6 +450,7 @@ export function bookRows(book) {
       vs: card.vs === 'both' ? '相手を選ばない' : card.vs === 'ranging' ? '振り飛車の相手に' : '居飛車の相手に',
       chainNow: chain.slice(0, steps).map(castleLabel),
       chainNext: steps < depth ? { label: castleLabel(chain[steps]), left: (steps + 1) * CHAIN_GAMES - entry.games } : null,
+      memo: Object.keys(book.notes?.[id] ?? {}).length,
     };
   }).filter(Boolean).sort((a, b) => [...TIER_ORDER, 'surprise'].indexOf(a.tier) - [...TIER_ORDER, 'surprise'].indexOf(b.tier) || b.mastery - a.mastery);
 }
@@ -457,3 +459,60 @@ export function bookRows(book) {
 export function bookChainSteps(book, cardId, planLevel) {
   return Math.min(chainSteps(planLevel), book?.cards?.[cardId]?.chain ?? 0);
 }
+
+// ---- 研究メモ(O4。小さな定跡ファイル。35-3・35-13)。
+
+/** 研究メモに残す手の損の上限(形勢を保った手だけ覚える)と、忘れる手の損(負けた局で大きく損をした研究の手)。 */
+export const MEMO_KEEP_LOSS = 120;
+export const MEMO_FORGET_LOSS = 250;
+/** 作戦ごとに覚えておける局面の数(熟練度0で10、100で40)。 */
+export const memoLimit = (mastery) => 10 + Math.round((Math.max(0, Math.min(100, Number(mastery) || 0)) / 100) * 30);
+
+/** 局面の見分け(盤・手番・持ち駒。手数は見ない。engine-game.mjsの千日手の見分けと同じ形)。 */
+const memoKey = (sfen) => String(sfen).split(' ').slice(0, 3).join(' ');
+
+/**
+ * 観戦した本局から、その作戦の研究メモを書き足す(書き換えてよい写しを渡す)。
+ * 研究の続き(エンジン)とメモの手のうち、損の小さい手を局面ごとに覚える。負けた局で大きく損をしたメモの手は忘れる(次は避ける)。
+ * @param {any} book
+ * @param {string} cardId
+ * @param {readonly { move: string, loss?: number, d?: { s?: string } }[]} entries
+ * @param {{ side: 'black' | 'white', win: boolean }} game
+ * @returns {{ added: number, used: number, forgot: number }}
+ */
+export function noteResearch(book, cardId, entries, { side, win }) {
+  const entry = book?.cards?.[cardId];
+  if (!entry || !entries?.length) return { added: 0, used: 0, forgot: 0 };
+  book.notes ??= {};
+  const notes = { ...(book.notes[cardId] ?? {}) };
+  const record = createGameRecord(STANDARD_SFEN);
+  let added = 0;
+  let used = 0;
+  let forgot = 0;
+  entries.forEach((item, index) => {
+    const mine = (index % 2 === 0 ? 'black' : 'white') === side;
+    const key = memoKey(record.position.sfen);
+    const stage = item?.d?.s;
+    if (mine && (stage === 'follow' || stage === 'memo')) {
+      const loss = Number(item.loss) || 0;
+      if (stage === 'memo') used += 1;
+      if (!win && loss >= MEMO_FORGET_LOSS && notes[key] === item.move) {
+        delete notes[key];
+        forgot += 1;
+      } else if (loss <= MEMO_KEEP_LOSS && notes[key] !== item.move) {
+        delete notes[key];
+        notes[key] = item.move;
+        added += 1;
+      }
+    }
+    if (!appendUsiMove(record, item.move)) return;
+  });
+  // 多すぎたら古い局面から忘れる。
+  const keys = Object.keys(notes);
+  for (const key of keys.slice(0, Math.max(0, keys.length - memoLimit(entry.mastery)))) delete notes[key];
+  book.notes[cardId] = notes;
+  return { added, used, forgot };
+}
+
+/** 本局に渡す、その作戦の研究メモ(局面→手)。 */
+export const researchNotes = (book, cardId) => ({ ...(book?.notes?.[cardId] ?? {}) });

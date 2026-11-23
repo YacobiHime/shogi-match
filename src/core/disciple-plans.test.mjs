@@ -255,4 +255,29 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     const row = plans.bookRows(book).find((item) => item.id === 'shiken+mino');
     expect(row).toMatchObject({ chainNow: ['高美濃'], chainNext: { label: expect.any(String), left: plans.CHAIN_GAMES } });
   });
+
+  it('研究メモ: 研究の続きで損の小さい手を局面ごとに覚え、負けた局で大きく損をしたメモの手は忘れる', () => {
+    const book = plans.createPlanBook({ style: 'counter', aptitudes: {}, startingMastery: () => 0 });
+    const entries = [
+      { move: '7g7f', loss: 0, d: { s: 'book' } },
+      { move: '3c3d', loss: 0 },
+      { move: '6g6f', loss: 40, d: { s: 'follow' } },
+      { move: '8c8d', loss: 0 },
+      { move: '2g2f', loss: 300, d: { s: 'follow' } },
+    ];
+    expect(plans.noteResearch(book, 'shiken+mino', entries, { side: 'black', win: true })).toMatchObject({ added: 1, used: 0, forgot: 0 });
+    const notes = plans.researchNotes(book, 'shiken+mino');
+    const record = createGameRecord();
+    appendUsiMove(record, '7g7f');
+    appendUsiMove(record, '3c3d');
+    expect(notes[record.position.sfen.split(' ').slice(0, 3).join(' ')]).toBe('6g6f');
+    expect(Object.keys(notes)).toHaveLength(1);
+    // 次の局でメモの手を指して負け、大きく損をしたら、そのメモは消える。
+    const lost = [entries[0], entries[1], { move: '6g6f', loss: 400, d: { s: 'memo' } }];
+    expect(plans.noteResearch(book, 'shiken+mino', lost, { side: 'black', win: false })).toMatchObject({ used: 1, forgot: 1 });
+    expect(plans.researchNotes(book, 'shiken+mino')).toEqual({});
+    expect(plans.memoLimit(0)).toBe(10);
+    expect(plans.memoLimit(100)).toBe(40);
+    expect(plans.noteResearch(book, 'ibisha+yagura', entries, { side: 'black', win: true })).toMatchObject({ added: 0 });
+  });
 });
