@@ -116,7 +116,7 @@
             title="作戦帳を開く（定跡のあと、研究してきた手を何手まで指せるか）" @click="plansOpen = !plansOpen">作戦帳 {{ view.book.count }}・戦法熟練度 {{ view.mastery.label }} {{ view.mastery.value }}</button>
           <button v-if="view.book.offer.length" type="button" class="disciple__chip disciple__chip--btn disciple__chip--learn" data-disciple-learn-open @click="plansOpen = true">新しい作戦を覚えられる</button>
           <span v-if="view.spotted?.length" class="disciple__chip disciple__chip--spotted" data-disciple-spotted title="観戦で見抜いた崩れ方の回数">見抜いた {{ view.spotted.map((item) => `${item.label} ${item.count}`).join('・') }}</span>
-          <span v-if="view.rival" class="disciple__chip disciple__chip--rival" data-disciple-rival :title="`羽音の弟子（${view.rival.where}）`">ライバル {{ view.rival.name }} {{ view.rival.wins }}勝{{ view.rival.losses }}敗</span>
+          <span v-if="view.rival" class="disciple__chip disciple__chip--rival" data-disciple-rival :title="`羽音の弟子（${view.rival.where}）${view.rival.plan ? `・得意 ${view.rival.plan}（作戦${view.rival.plans}つ）` : ''}`">ライバル {{ view.rival.name }} {{ view.rival.wins }}勝{{ view.rival.losses }}敗<template v-if="view.rival.plan">・得意 {{ view.rival.plan }}</template></span>
           <button type="button" class="disciple__chip disciple__chip--btn" data-disciple-skills-open @click="skillsOpen = !skillsOpen">スキルの条件</button>
         </div>
       </aside>

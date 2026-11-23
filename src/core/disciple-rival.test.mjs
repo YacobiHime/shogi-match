@@ -87,3 +87,73 @@ describe('羽音の一門の場面(30-2)', () => {
     expect(scripts).toEqual(['disciple-rival-lose-1', 'disciple-rival-lose-2']);
   });
 });
+
+describe('羽音の弟子の作戦帳(35-14)', () => {
+  it('はじめは居飛車党の2枚で、例会の日ごとに研究し、強さで開く段の作戦を順に覚える', async () => {
+    const { RIVAL_GROWTH, RIVAL_START_CARDS, createRivalBook, growRivalBook } = await import('./disciple-rival.mjs');
+    expect(Object.keys(createRival().book.cards)).toEqual(Object.keys(RIVAL_START_CARDS));
+    const rival = createRival();
+    const learned = [];
+    for (let day = 0; day < RIVAL_GROWTH.learnEvery * 3; day += 1) {
+      const name = growRivalBook(rival, { level: 15 });
+      if (name) learned.push(name);
+    }
+    // Lv20より下は基本の段まで。角換わり腰掛け銀(応用)はまだ覚えない。
+    expect(learned).toHaveLength(3);
+    expect(rival.book.cards['ibisha+ibisha-anaguma']).toBeTruthy();
+    expect(rival.book.cards['kakugawari-koshikake-gin+']).toBeUndefined();
+    const strong = { ...createRival(), book: createRivalBook() };
+    for (let day = 0; day < RIVAL_GROWTH.learnEvery * 3; day += 1) growRivalBook(strong, { level: 30 });
+    expect(strong.book.cards['kakugawari-koshikake-gin+']).toBeTruthy();
+    // 研究で、最後の作戦の熟練度が上がる。
+    expect(Math.max(...Object.values(strong.book.cards).map((entry) => entry.mastery))).toBeGreaterThan(20);
+  });
+
+  it('前の版の記録(作戦帳なし)でも、はじめの形から育てられる', async () => {
+    const { growRivalBook, rivalBook } = await import('./disciple-rival.mjs');
+    const old = { ...createRival() };
+    delete old.book;
+    expect(Object.keys(rivalBook(old).cards).length).toBe(2);
+    growRivalBook(old, { level: 20 });
+    expect(old.book.days).toBe(1);
+  });
+
+  it('羽音の弟子との局を作戦帳に数え、負けた局は悔しさで多く伸びる', async () => {
+    const { RIVAL_GROWTH, noteRivalBookGame } = await import('./disciple-rival.mjs');
+    const rival = createRival();
+    const before = rival.book.cards['ibisha+yagura'].mastery;
+    noteRivalBookGame(rival, 'ibisha+yagura', { win: false });
+    expect(rival.book.cards['ibisha+yagura']).toMatchObject({ games: 1, wins: 0, mastery: before + RIVAL_GROWTH.game + RIVAL_GROWTH.loss });
+    noteRivalBookGame(rival, 'ibisha+yagura', { win: true });
+    expect(rival.book.cards['ibisha+yagura']).toMatchObject({ games: 2, wins: 1 });
+    expect(noteRivalBookGame(rival, 'shiken+mino', { win: true })).toEqual([]);
+  });
+
+  it('羽音の弟子と当たる日は、観戦でも結果だけでも、羽音の弟子の作戦帳の作戦で指す', async () => {
+    const { watchSpec } = await import('./disciple-run.mjs');
+    const { RIVAL_START_CARDS } = await import('./disciple-rival.mjs');
+    let s = afterExam();
+    let found = null;
+    for (let i = 0; i < 200 && !s.end && !s.shoreikai && !found; i += 1) {
+      const kind = turnKind(s);
+      if (kind === 'reikai' && pendingIsRival(s)) { found = s; break; }
+      if (kind === 'free') s = chooseAction(s, { kind: s.stamina < 45 ? 'rest' : 'train', id: 'jissen' }).state;
+      else if (kind === 'words') s = { ...s, words: null };
+      else s = playEvent(s, {}).state;
+    }
+    expect(found).toBeTruthy();
+    const made = watchSpec(found, {});
+    const other = made.side === 'black' ? 'white' : 'black';
+    const plan = made.spec.plans[other];
+    const cardId = `${plan.strategyId}+${plan.castleId}`;
+    expect(Object.keys(found.rival.book?.cards ?? RIVAL_START_CARDS)).toContain(cardId);
+    expect(made.spec[other].reason.mastery).toBe((found.rival.book?.cards ?? {})[cardId]?.mastery ?? RIVAL_START_CARDS[cardId]);
+    expect(made.plans.opponent).toBeTruthy();
+    // 結果だけ見ても、同じ作戦が羽音の弟子の作戦帳に数えられる。
+    const before = found.rival.book?.cards?.[cardId]?.games ?? 0;
+    const after = playEvent(found, {}).state;
+    expect(after.rival.book.cards[cardId].games).toBeGreaterThan(before);
+    expect(after.rival.book.days).toBe((found.rival.book?.days ?? 0) + 1);
+    expect(rivalView(after).plan).toBeTruthy();
+  });
+});

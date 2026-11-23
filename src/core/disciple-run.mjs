@@ -10,7 +10,10 @@ import {
 } from './disciple-strength.mjs';
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
 import { BASE_FRIENDS, friendWeight } from './disciple-ichimon.mjs';
-import { createRival, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalFate, syncRival } from './disciple-rival.mjs';
+import {
+  createRival, growRivalBook, noteRivalBookGame, noteRivalGame, placeRivalInKenshukai, placeRivalInShoreikai, rivalBook, rivalCard, rivalFate,
+  rivalPlanSpec, rivalStyle, syncRival,
+} from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
 import { masteryForLevel, startingMastery } from './strategy-mastery.mjs';
 import {
@@ -550,22 +553,27 @@ function prepareDay(state) {
 function dayPlan(next, plan) {
   const run = next.shoreikai ?? next.kenshukai;
   const member = run?.world.members[run.pending?.opponentId] ?? run?.guests?.[run?.pending?.opponentId];
-  const opponentStyle = run?.pending?.style ?? member?.style ?? null;
-  const opponentRook = opponentStyle?.rook === 'ranging' ? 'ranging' : 'static';
   const side = run?.pending?.color === 'white' ? 'white' : 'black';
   const book = planBookOf(next);
   const rng = createRng((next.seed ^ Math.imul(next.turn + 1, 0x2c1b3c6d) ^ Math.imul((run?.dayNo ?? 0) + 7, 0x297a2d39)) >>> 0);
+  // 羽音の弟子は、自分の作戦帳から選ぶ(35-14)。弟子がよく指す作戦の飛車の向きに備える。
+  const rivalPick = member?.rival && next.rival
+    ? rivalCard(next.rival, { opponentRook: planCard(bookHeadline(book)?.id ?? '')?.rook ?? 'static', color: side === 'black' ? 'white' : 'black', random: () => rng.next() })
+    : null;
+  const opponentStyle = rivalPick ? rivalStyle(rivalPick) : run?.pending?.style ?? member?.style ?? null;
+  const opponentRook = opponentStyle?.rook === 'ranging' ? 'ranging' : 'static';
   const card = chooseBookCard(book, { opponentRook, opening: plan?.opening ?? null, cardId: plan?.card ?? null, color: side, random: () => rng.next() });
-  return { card, book, opponentStyle, opponentRook, side, member, run };
+  return { card, book, opponentStyle, opponentRook, side, member, run, rivalCard: rivalPick };
 }
 
 export function playEvent(state, options = {}) {
   const kind = turnKind(state);
   const today = kind === 'exam' || kind === 'reikai' ? dayPlan(prepareDay(state), options.plan ?? null) : null;
-  const played = playEventInner(state, options);
+  const played = playEventInner(withRivalStyle(state, today), options);
   const games = played.result?.games?.length ?? 0;
   if (!games) return played;
   const next = structuredClone(played.state);
+  const rivalNews = noteRivalDay(next, played.result.games, today, options);
   // その日の局は、その日の作戦で指したものとして作戦帳に数える(熟練度・局数・勝ち数。35章のO2)。
   next.planBook = planBookOf(next);
   const news = [];
@@ -584,11 +592,45 @@ export function playEvent(state, options = {}) {
   }
   // 1局目に負けた相手の作戦は、覚えられそうな作戦に入る(やられて覚える。35-12)。
   if (played.result.games[0] && !played.result.games[0].win && noteSeen(next.planBook, today?.opponentStyle)) news.push('相手の作戦を覚えられそう');
+  news.push(...rivalNews);
   if (next.lastEvent) {
     next.lastEvent.plan = today?.card ? today.card.label : '';
     next.lastEvent.events = [...next.lastEvent.events, ...news];
   }
   return { ...played, state: next, result: { ...played.result, plan: today?.card?.label ?? '', events: [...played.result.events, ...news] } };
+}
+
+/** その日のはじめの相手が羽音の弟子なら、研修会・奨励会の相手の得意戦法を、羽音の弟子の作戦にそろえる(結果だけ見ても観戦しても同じ作戦。35-14)。 */
+function withRivalStyle(state, today) {
+  if (!today?.rivalCard) return state;
+  const next = structuredClone(state);
+  const run = next.shoreikai ?? next.kenshukai;
+  if (run?.pending) run.pending.style = rivalStyle(today.rivalCard);
+  return next;
+}
+
+/**
+ * 羽音の弟子の作戦帳に、その日の局を数えて育てる(35-14)。書き換えてよい状態を渡す。
+ * はじめの局はその日の作戦、ほかの局は羽音の弟子の得意(最後に指した作戦)で指したものとして数える。
+ * @returns {string[]} 知らせ
+ */
+function noteRivalDay(next, games, today, { entries = null } = {}) {
+  const rival = next.rival;
+  if (!rival?.id || rival.gone) return [];
+  const news = [];
+  games.forEach((game, index) => {
+    if (!game.rival) return;
+    const first = index === 0 && today?.rivalCard;
+    const cardId = first ? today.rivalCard.id : bookHeadline(rivalBook(rival))?.id;
+    if (!cardId) return;
+    const other = today?.side === 'white' ? 'black' : 'white';
+    news.push(...noteRivalBookGame(rival, cardId, { win: !game.win, entries: first ? entries : null, side: other }));
+  });
+  const run = next.shoreikai ?? next.kenshukai;
+  const level = Number(run?.world?.members?.[rival.id]?.rivalLevel) || OPPONENT_BASE_LEVEL;
+  const learned = growRivalBook(rival, { level });
+  if (learned && rival.met) news.push(`羽音の弟子の${rival.name}が、${learned}を指しはじめたらしい`);
+  return news;
 }
 
 function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
@@ -810,7 +852,7 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return null;
   const next = prepareDay(state);
-  const { card: ownCard, book, opponentStyle, opponentRook, side, member, run } = dayPlan(next, plan);
+  const { card: ownCard, book, opponentStyle, opponentRook, side, member, run, rivalCard: rivalPick } = dayPlan(next, plan);
   if (!member) return null;
   const level = next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
   const eventKind = next.shoreikai ? 'shoreikai' : 'kenshukai';
@@ -831,12 +873,15 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {
     [side]: ownCard ? planSpec(ownCard, { steps: bookChainSteps(book, ownCard.id, strength.levels?.plan), castles: knownCastles }) : null,
-    [other]: opponentPlanSpec(opponentStyle, level),
+    [other]: rivalPick ? rivalPlanSpec(next.rival, rivalPick, level) : opponentPlanSpec(opponentStyle, level),
   };
   const opponent = {
     id: member.id, name: member.name, level: Math.round(level), kind: eventKind, character: member.character ?? null,
     repertoire: member.repertoire ?? null, style: member.style ?? null,
-    reason: { levels: opponentLevels, mastery: masteryForLevel(level) },
+    // 羽音の弟子は作戦帳の熟練度と研究メモで指す(35-14)。
+    reason: rivalPick
+      ? { levels: opponentLevels, mastery: rivalBook(next.rival).cards[rivalPick.id]?.mastery ?? 0, notes: researchNotes(rivalBook(next.rival), rivalPick.id) }
+      : { levels: opponentLevels, mastery: masteryForLevel(level) },
   };
   const spec = {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
@@ -1016,7 +1061,9 @@ export function rivalView(state) {
   const member = run?.world?.members?.[rival.id];
   const where = rival.gone === 'pro' ? '四段' : member ? member.dan ?? '' : rival.ahead ? '奨励会' : '';
   // 育成が終わったら、羽音の弟子も四段になるか(32章)。
-  return { name: rival.name, where, wins: rival.wins, losses: rival.losses, met: rival.met, pro: Boolean(state.end) && rivalFate(state) === 'pro' };
+  // 羽音の弟子の得意(最後に指した作戦)と、知っている作戦の数(35-14)。
+  const head = bookHeadline(rivalBook(rival));
+  return { name: rival.name, where, wins: rival.wins, losses: rival.losses, met: rival.met, plan: head?.label ?? '', plans: head?.count ?? 0, pro: Boolean(state.end) && rivalFate(state) === 'pro' };
 }
 
 /** いまいる場所の短い言葉(能力の欄・記録の札)。 */

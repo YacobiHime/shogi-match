@@ -6,6 +6,9 @@
 
 import { CLASS_RATINGS } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, rankLabel } from './shoreikai.mjs';
+import {
+  PLAN_TIERS, bookChainSteps, bookHeadline, chooseBookCard, learnCard, learnableTier, notePlanGames, noteResearch, planCard, planSpec, unlockChain,
+} from './disciple-plans.mjs';
 
 /** 羽音の弟子(名前は仮)。 */
 export const RIVAL_DISCIPLE = Object.freeze({ name: '氷室 凛', master: '羽音' });
@@ -21,7 +24,7 @@ const SHO_PER_RATING = 11.5 / (1490 - 1150);
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 
 /** 羽音の弟子の記録のはじめ(育成の状態の`rival`)。 */
-export const createRival = () => ({ id: null, name: RIVAL_DISCIPLE.name, edge: RIVAL_EDGE.start, wins: 0, losses: 0, met: 0, ahead: false, gone: '', last: '' });
+export const createRival = () => ({ id: null, name: RIVAL_DISCIPLE.name, edge: RIVAL_EDGE.start, wins: 0, losses: 0, met: 0, ahead: false, gone: '', last: '', book: createRivalBook() });
 
 /** 羽音の弟子のいまのLv(弟子のLvに差を足す。CPUの上限Lv49まで)。 */
 export const rivalLevel = (discipleLevel, rival) => clamp(discipleLevel + (Number(rival?.edge) || 0), 12, 49);
@@ -133,3 +136,81 @@ export function rivalFate(state) {
 
 /** 会員が羽音の弟子か。 */
 export const isRivalMember = (member) => Boolean(member?.rival);
+
+// ---- 羽音の弟子の作戦帳(35章のO5。35-14)。
+
+/** はじめの作戦帳(羽音と同じ居飛車党。カードのidと熟練度)。弟子のはじめ(四間飛車・棒銀)とは違う道から始める。 */
+export const RIVAL_START_CARDS = Object.freeze({ 'ibisha+yagura': 20, 'bougin+kanigakoi': 15 });
+/** 覚えていく作戦の順(振り飛車の相手への備えのあと、羽音の得意の角換わり・相掛かりへ向かう)。段は強さで開く。 */
+export const RIVAL_PATH = Object.freeze([
+  'ibisha+left-mino', 'koshikake-gin+yagura', 'kakugawari-koshikake-gin+', 'aigakari+nakahara',
+  'ibisha+ibisha-anaguma', 'kakugawari+yagura', 'ibisha+millennium',
+]);
+/** 育ち方(初期値)。例会の日ごとに最後の作戦を研究し、learnEvery日ごとに1つ覚える。指した局と、負けた悔しさでも伸びる。 */
+export const RIVAL_GROWTH = Object.freeze({ learnEvery: 4, study: 1, game: 1, loss: 2 });
+
+/** 羽音の弟子の作戦帳のはじめ。 */
+export function createRivalBook() {
+  const cards = {};
+  for (const [id, mastery] of Object.entries(RIVAL_START_CARDS)) cards[id] = { mastery, games: 0, wins: 0 };
+  return { cards, last: null, days: 0 };
+}
+
+/** 羽音の弟子の作戦帳(前の版の記録にはないので、なければはじめの形)。 */
+export const rivalBook = (rival) => rival?.book ?? createRivalBook();
+
+/**
+ * 例会の日のあとに、羽音の弟子の作戦帳を育てる(会わない日も育つ。D:8-3 ライバルも伸びる)。書き換えてよい記録を渡す。
+ * @param {any} rival
+ * @param {{ level: number }} options 羽音の弟子のLv(覚えてよい段を決める)
+ * @returns {string} 新しく覚えた作戦の名前(なければ空)
+ */
+export function growRivalBook(rival, { level }) {
+  const book = (rival.book ??= createRivalBook());
+  book.days = (book.days ?? 0) + 1;
+  const head = bookHeadline(book);
+  if (head) book.cards[head.id].mastery = Math.min(100, book.cards[head.id].mastery + RIVAL_GROWTH.study);
+  if (book.days % RIVAL_GROWTH.learnEvery) return '';
+  const top = PLAN_TIERS.indexOf(learnableTier(level));
+  const next = RIVAL_PATH.find((id) => !book.cards[id] && PLAN_TIERS.indexOf(planCard(id)?.tier ?? 'surprise') <= top);
+  return next ? learnCard(book, next) : '';
+}
+
+/**
+ * その日の羽音の弟子の作戦。弟子がよく指す作戦の飛車の向きに合うカードを、熟練度で重みを付けて選ぶ。
+ * @param {any} rival
+ * @param {{ opponentRook?: string, color?: string, random?: () => number }} options
+ */
+export function rivalCard(rival, { opponentRook = 'static', color = 'black', random = Math.random } = {}) {
+  return chooseBookCard(rivalBook(rival), { opponentRook, color, random });
+}
+
+/** カードを、研修会・奨励会の相手の得意戦法(pending.style)と同じ形にする。 */
+export function rivalStyle(card) {
+  if (!card) return null;
+  return { strategy: card.strategyId || null, castle: card.castleId || null, rook: card.rook === 'ranging' ? 'ranging' : 'static', label: card.label, opening: null };
+}
+
+/** 本局に渡す羽音の弟子の作戦(囲いの続きは開いた段まで。組み替えは知っている囲いだけ)。 */
+export function rivalPlanSpec(rival, card, level) {
+  const book = rivalBook(rival);
+  const castles = [...new Set(Object.keys(book.cards).map((id) => planCard(id)?.castleId).filter(Boolean))];
+  return planSpec(card, { steps: bookChainSteps(book, card.id, level), castles });
+}
+
+/**
+ * 羽音の弟子との局を作戦帳に数える(局数・勝ち数・熟練度・囲いの続き・観戦した局なら研究メモ)。書き換えてよい記録を渡す。
+ * @param {any} rival
+ * @param {string} cardId その局の作戦
+ * @param {{ win: boolean, entries?: readonly any[] | null, side?: 'black' | 'white' }} game winは羽音の弟子が勝ったか
+ * @returns {string[]} 知らせ
+ */
+export function noteRivalBookGame(rival, cardId, { win, entries = null, side = 'white' }) {
+  const book = (rival.book ??= createRivalBook());
+  if (!book.cards[cardId]) return [];
+  notePlanGames(book, cardId, { games: 1, wins: win ? 1 : 0, gain: RIVAL_GROWTH.game + (win ? 0 : RIVAL_GROWTH.loss) });
+  unlockChain(book, cardId);
+  if (!entries?.length) return [];
+  const memo = noteResearch(book, cardId, entries, { side, win });
+  return memo.added && !win ? [`${rival.name}は、この局を研究してくるはず`] : [];
+}
