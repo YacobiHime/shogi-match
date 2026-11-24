@@ -4691,43 +4691,24 @@
   .shogi-title__tiles--play .shogi-title__desc { font-size: 0.6em; letter-spacing: -0.02em; }
 }
 /*
- * 図鑑の5つは、1枚の横長のタイルにまとめる。中に5つの絵を小さく並べて何が入っているかを見せ、
- * 押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。
+ * しらべるは、5つの図鑑と研究の6枚を3つずつ2行に並べる(docs/home-roadmap-design.mdの7章)。
+ * あそぶの行と同じく、アイコンの下に名前を置き、名前の大きさをタイルの幅から決める(「将棋界図鑑」の5字が入る18cqi)。
  */
-.shogi-game .shogi-title__tile--dex {
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  grid-template-areas: "icons label desc go";
-  min-height: 0;
-  width: 100%;
-  padding: 0.45em 0.8em;
+.shogi-title__tiles--dex { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.shogi-game .shogi-title__tiles--dex .shogi-title__tile {
+  container-type: inline-size;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "icon" "label";
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: center;
+  row-gap: 0.25em;
+  padding-inline: 0.2em;
+  text-align: center;
 }
-.shogi-game .shogi-home--title .shogi-title__tile--dex {
-  min-height: 44px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  grid-template-areas: "icons label go";
-}
-.shogi-title__dex-icons {
-  grid-area: icons;
-  display: flex;
-  gap: 0.15em;
-}
-.shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.6em; height: 1.6em; }
-/* 図鑑と研究(docs/research-mode-design.mdの4章)を1行に並べる。図鑑のほうを広く。 */
-.shogi-title__tiles--dex {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  gap: 0.45em;
-}
-@media (max-width: 560px) {
-  /* スマホの幅では、研究のタイルの一言をしまい、名前と絵だけにする。 */
-  .shogi-title__tile--research .shogi-title__desc { display: none; }
-  .shogi-game .shogi-title__tile--research { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "icons label go"; }
-}
-.shogi-title__dex-go {
-  grid-area: go;
-  color: var(--group-color);
-  font-size: 1.4em;
-  font-weight: 900;
+.shogi-game .shogi-title__tiles--dex .shogi-title__label {
+  max-width: 100%;
+  font-size: min(1.1em, 18cqi);
 }
 @media (hover: hover) {
   .shogi-game .shogi-title__tile:not(:disabled):hover,
@@ -4804,7 +4785,6 @@
   .shogi-title__tile .shogi-title__icon { width: 2.8em; height: 2.8em; }
   .shogi-title__label { font-size: 1.15em; }
   .shogi-title__desc { font-size: 0.75em; }
-  .shogi-title__tile--dex .shogi-title__dex-icons .shogi-title__icon { width: 1.9em; height: 1.9em; }
 }
 /* 背の低いスマホの縦向き: 基準の文字を少し小さくし、すき間を詰めて、スクロールせずに1画面へ収める。 */
 @media (orientation: portrait) and (max-height: 800px) {
@@ -4857,7 +4837,6 @@
   .shogi-title__group { gap: 0.2em; }
   /* 基準の文字が小さくなっても、タイルの押せる高さは44px以上にする(7-4)。 */
   .shogi-game .shogi-title__tile { min-height: max(3.2em, 44px); padding: 0.35em 0.6em; }
-  .shogi-game .shogi-title__tile--dex { min-height: 44px; }
   .shogi-title__tile .shogi-title__icon { width: 2.2em; height: 2.2em; }
 }
 /*
@@ -4967,10 +4946,9 @@
 .shogi-title__panel--off { visibility: hidden; }
 /* まなぶ・しらべるのタブ。ホームの札がない分、タイルを大きくする。 */
 .shogi-title__panels[data-home-tab="learn"] .shogi-title__tiles--learn .shogi-title__tile,
-.shogi-title__panels[data-home-tab="dex"] .shogi-title__tile--dex { min-height: 6em; }
+.shogi-title__panels[data-home-tab="dex"] .shogi-title__tiles--dex .shogi-title__tile { min-height: 6em; }
 .shogi-title__panels[data-home-tab="learn"] .shogi-title__group-title,
 .shogi-title__panels[data-home-tab="dex"] .shogi-title__group-title { font-size: 1em; }
-.shogi-title__panels[data-home-tab="dex"] .shogi-title__tiles--dex { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1100px) and (min-height: 600px) {
   .shogi-title__tile--pillar .shogi-title__icon { width: 3.4em; height: 3.4em; }
   .shogi-game .shogi-home--title .shogi-title__tile--pillar { min-height: 5.8em; }
@@ -4991,6 +4969,14 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .shogi-title__chara { animation: none; }
+}
+/*
+ * 広い横向きの画面で、ホームから開いたノートは左のタブの列の右に置き、列を残す(docs/home-roadmap-design.mdの7章)。
+ * 列の幅(--note-rail)は対局画面が実際の列から測って渡す。
+ */
+.shogi-game .shogi-dex.shogi-note--beside-rail {
+  left: var(--note-rail, 0px);
+  border-left: 1px solid rgba(255, 252, 244, 0.22);
 }
 
 /* ===== 学習対局 ===== */

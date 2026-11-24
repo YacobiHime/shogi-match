@@ -206,7 +206,7 @@
 | 記憶の宮殿 | `src/core/memory-palace.mjs`（`CASTLE_LOCI`・`PALACE_LESSONS`・`palaceWordSet`・`nextPracticeCount`・`shogiSequence`・`cleanCustomLoci`）、言葉と格言`src/data/memory-palace-words.mjs`、画面`src/brain/BrainPalace.vue` |
 | 盤の部品 | `src/brain/BrainBoard.vue`（駒・薄い駒・緑と赤の升の印・座標・押せる盤）。駒の字は盤の幅に合わせる（`container-type`）ので、駒が増えても升の高さが変わらない |
 | 道場の入口・結果・根拠のシート | `src/ShogiBrainTraining.vue`（遊べる種目`AVAILABLE`、根拠の文`EVIDENCE`は1章の「言ってよいこと」だけ） |
-| ホーム | `src/ShogiMatchGame.vue`の脳トレのタイル（`data-brain-tile`・`openBrainTraining`）、図鑑のタイル（`data-dex-tile`・`openHomeDexShelf`・`dexShelfFrom`）、`navigateBack`・`canGoBack`、まだ見ていない遊びの`brain`（`home-extras.mjs`） |
+| ホーム | `src/ShogiMatchGame.vue`の脳トレのタイル（`data-brain-tile`・`openBrainTraining`）、図鑑のタイル（`data-dex-tile`。2026-11-24に5つの図鑑のタイルに分け、棚はやめた。`docs/home-roadmap-design.md`の7章）、`navigateBack`・`canGoBack`、まだ見ていない遊びの`brain`（`home-extras.mjs`） |
 
 設計から変えたこと・決めたこと:
 

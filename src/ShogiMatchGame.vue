@@ -415,44 +415,46 @@
               </button>
             </div>
           </section>
-          <!-- 図鑑は5つを1枚のタイルにまとめ、押すと棚のシートから選ぶ(docs/brain-training-design.mdの4章)。 -->
+          <!-- 図鑑は種類ごとに1枚ずつのタイルにし、押すとその図鑑をすぐ開く。研究と合わせて3つずつ2行(docs/home-roadmap-design.mdの7章)。 -->
           <section class="shogi-title__panel shogi-title__group shogi-title__group--dex" :class="{ 'shogi-title__panel--off': homeTab !== 'dex' }" :inert="homeTab !== 'dex'" aria-labelledby="shogi-home-dex" data-home-group="dex">
             <h2 id="shogi-home-dex" class="shogi-title__group-title">しらべる</h2>
-            <div class="shogi-title__tiles--dex">
-              <button type="button" class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf">
-                <span class="shogi-title__dex-icons" aria-hidden="true">
-                  <DexIcon v-for="shelf in DEX_SHELF" :key="shelf.kind" class="shogi-title__icon" :kind="shelf.kind" />
-                </span>
-                <span class="shogi-title__label">図鑑</span>
-                <span class="shogi-title__dex-go" aria-hidden="true">›</span>
+            <div class="shogi-title__tiles shogi-title__tiles--dex">
+              <button
+                v-for="shelf in DEX_SHELF"
+                :key="shelf.kind"
+                type="button"
+                class="shogi-title__tile"
+                :data-dex-tile="shelf.kind"
+                @click="openDexFromHome(shelf.kind)"
+              >
+                <DexIcon class="shogi-title__icon" :kind="shelf.kind" />
+                <span class="shogi-title__label">{{ shelf.label }}</span>
               </button>
               <!-- 研究モード(docs/research-mode-design.md)。好きな局面をAIと一緒に調べる。 -->
-              <button type="button" class="shogi-title__tile shogi-title__tile--dex shogi-title__tile--research" data-research-tile @click="openResearch()">
-                <span class="shogi-title__dex-icons" aria-hidden="true">
-                  <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges">
-                    <g fill="#fffcf4"><rect x="1" y="2" width="9" height="9" /></g>
-                    <g fill="#1d303f"><rect x="2" y="3" width="7" height="7" /></g>
-                    <g fill="#fffcf4"><rect x="4" y="5" width="3" height="1" /><rect x="4" y="7" width="3" height="1" /></g>
-                    <g fill="#d7d1fd"><rect x="9" y="9" width="2" height="2" /><rect x="11" y="11" width="2" height="2" /><rect x="13" y="13" width="2" height="2" /></g>
-                  </svg>
-                </span>
+              <button type="button" class="shogi-title__tile" data-research-tile @click="openResearch()">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#fffcf4"><rect x="1" y="2" width="9" height="9" /></g>
+                  <g fill="#1d303f"><rect x="2" y="3" width="7" height="7" /></g>
+                  <g fill="#fffcf4"><rect x="4" y="5" width="3" height="1" /><rect x="4" y="7" width="3" height="1" /></g>
+                  <g fill="#d7d1fd"><rect x="9" y="9" width="2" height="2" /><rect x="11" y="11" width="2" height="2" /><rect x="13" y="13" width="2" height="2" /></g>
+                </svg>
                 <span class="shogi-title__label">研究</span>
-                <span class="shogi-title__dex-go" aria-hidden="true">›</span>
               </button>
             </div>
           </section>
         </div>
       </nav>
       <!-- 下のタブ(広い画面は左の列)。まなぶにおすすめがあれば点を付ける(6章)。 -->
-      <div class="shogi-title__tabs" role="tablist" aria-label="ホームの切り替え">
+      <div ref="homeTabsEl" class="shogi-title__tabs" role="tablist" aria-label="ホームの切り替え">
         <button
           v-for="tab in HOME_TABS"
           :key="tab.id"
           type="button"
           class="shogi-title__tab"
-          :class="{ 'shogi-title__tab--on': homeTab === tab.id }"
+          :class="{ 'shogi-title__tab--on': homeTabOn(tab.id) }"
           :role="tab.id === 'note' ? undefined : 'tab'"
-          :aria-selected="tab.id === 'note' ? undefined : homeTab === tab.id"
+          :aria-selected="tab.id === 'note' ? undefined : homeTabOn(tab.id)"
+          :aria-current="tab.id === 'note' && noteBesideRail ? 'page' : undefined"
           :data-home-tab-button="tab.id"
           @click="selectHomeTab(tab.id)"
         >
@@ -675,6 +677,8 @@
     <YakobiNote
       v-if="yakobiNoteOpen"
       ref="noteView"
+      :class="{ 'shogi-note--beside-rail': noteBesideRail }"
+      :style="noteBesideRail ? { '--note-rail': `${homeRailWidth}px` } : undefined"
       :asset-base-url="assetBaseUrl"
       :back-label="'戻る'"
       :initial-tab="noteInitialTab"
@@ -2151,24 +2155,22 @@
     </div>
 
     <!--
-      図鑑の棚。対局中の「図鑑」とホームの「図鑑」のタイルで同じ棚を開く。
-      対局から開いた図鑑は閉じると対局へ、ホームから開いた図鑑は閉じるとホームへ戻る。
+      図鑑の棚。対局中の「図鑑」から開き、選んだ図鑑を閉じると対局へ戻る。
+      ホームの「しらべる」は図鑑ごとのタイルなので、棚を挟まない(docs/home-roadmap-design.mdの7章)。
     -->
     <div
       v-if="dexShelfOpen"
       class="shogi-game__confirm shogi-game__dex-shelf"
-      :class="{ 'shogi-game__confirm--over-home': dexShelfFrom === 'home' }"
       role="dialog"
       aria-modal="true"
       aria-labelledby="dex-shelf-title"
       data-dex-shelf
-      :data-dex-shelf-from="dexShelfFrom"
       @click.self="dexShelfOpen = false"
       @keydown.esc.stop="dexShelfOpen = false"
     >
       <div class="shogi-game__confirm-panel shogi-game__dex-shelf-panel">
         <h2 id="dex-shelf-title">図鑑でしらべる</h2>
-        <p>{{ dexShelfFrom === "home" ? "見たい図鑑を選んでね。" : "見終わったら、この対局に戻ります。" }}</p>
+        <p>見終わったら、この対局に戻ります。</p>
         <div class="shogi-game__dex-shelf-items">
           <button
             v-for="shelf in DEX_SHELF"
@@ -2183,7 +2185,7 @@
             <small>{{ shelf.desc }}</small>
           </button>
         </div>
-        <button type="button" class="shogi-game__dex-shelf-close" @click="dexShelfOpen = false">{{ dexShelfFrom === "home" ? "ホームに戻る" : "対局に戻る" }}</button>
+        <button type="button" class="shogi-game__dex-shelf-close" @click="dexShelfOpen = false">対局に戻る</button>
       </div>
     </div>
 
@@ -3827,41 +3829,18 @@ const DEX_SHELF = [
 ] as const;
 type DexKind = (typeof DEX_SHELF)[number]["kind"];
 const dexShelfOpen = ref(false);
-/** 棚をどこから開いたか。ホームから開いた棚はホームの上に出し、図鑑を閉じるとホームへ戻る。 */
-const dexShelfFrom = ref<"home" | "match">("match");
 const dexFromMatch = ref(false);
 const dexOverMatch = computed(() => dexFromMatch.value && (dexOpen.value || Boolean(referenceDexKind.value)));
 const dexBackLabel = computed(() => "戻る");
 watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => { if (!open) dexFromMatch.value = false; });
-/*
- * ホームの図鑑の棚から開いた図鑑は、閉じると棚へ戻る(来た場所へ戻る。docs/return-path-design.mdの5章)。
- * ほかの図鑑へ移ったとき(開いたまま種類が替わる)は、棚へは戻さない。
- */
-const dexFromHomeShelf = ref(false);
-watch(() => dexOpen.value || Boolean(referenceDexKind.value), (open) => {
-  if (open || !dexFromHomeShelf.value) return;
-  dexFromHomeShelf.value = false;
-  if (homeOpen.value) {
-    dexShelfFrom.value = "home";
-    showDexShelf();
-  }
-});
 watch(homeOpen, (open) => { if (open) dexShelfOpen.value = false; });
 function openDex(kind: DexKind) {
   openDexFromTutorial({ kind });
 }
+/** 対局中の「図鑑」。棚のシートから選び、閉じると対局へ戻る。 */
 function openDexShelf() {
   closeSettings();
   closeAssistTools();
-  dexShelfFrom.value = "match";
-  showDexShelf();
-}
-/** ホームの「図鑑」のタイル。5つの図鑑を、対局中と同じ棚から選ぶ。 */
-function openHomeDexShelf() {
-  dexShelfFrom.value = "home";
-  showDexShelf();
-}
-function showDexShelf() {
   dexShelfOpen.value = true;
   void nextTick(() => {
     (gameRoot.value?.querySelector("[data-dex-shelf] button") as HTMLElement | null)?.focus();
@@ -3869,8 +3848,12 @@ function showDexShelf() {
 }
 function openDexFromShelf(kind: DexKind) {
   dexShelfOpen.value = false;
-  dexFromMatch.value = dexShelfFrom.value === "match";
-  dexFromHomeShelf.value = dexShelfFrom.value === "home";
+  dexFromMatch.value = true;
+  openDex(kind);
+}
+/** ホームの「しらべる」の図鑑のタイル。棚を挟まずにその図鑑を開き、閉じるとしらべるのタブへ戻る(docs/home-roadmap-design.mdの7章)。 */
+function openDexFromHome(kind: DexKind) {
+  dexFromMatch.value = false;
   openDex(kind);
 }
 // やこび姫の将棋教室を開いているか。
@@ -10138,8 +10121,49 @@ const HOME_TABS = [
 type HomeTab = "home" | "learn" | "dex";
 const homeTab = ref<HomeTab>("home");
 function selectHomeTab(id: (typeof HOME_TABS)[number]["id"]) {
-  if (id === "note") openYakobiNote();
-  else homeTab.value = id;
+  if (id === "note") {
+    if (!yakobiNoteOpen.value) openYakobiNote();
+    return;
+  }
+  // 左の列を残してノートを開いているときは、ほかのタブを押すとノートを閉じてそのタブへ(7章)。
+  if (noteBesideRail.value) closeYakobiNote();
+  homeTab.value = id;
+}
+/*
+ * 広い横向きの画面では、ホームから開いたノートを左のタブの列の右に置き、列を残す(docs/home-roadmap-design.mdの7章。UD:3-2 階層を浅く)。
+ * 列の幅は実際の列から測る(文字の大きさが画面の高さで変わるため)。縦向き(下の帯)と狭い横向き(スマホの横)ではいつものように画面いっぱい。
+ */
+const NOTE_RAIL_MIN_WIDTH = 900;
+const homeTabsEl = ref<HTMLElement | null>(null);
+const homeRailWidth = ref(0);
+function measureHomeRail() {
+  const el = homeTabsEl.value;
+  if (!el || typeof window === "undefined" || window.innerWidth < NOTE_RAIL_MIN_WIDTH) {
+    homeRailWidth.value = 0;
+    return;
+  }
+  const rect = el.getBoundingClientRect();
+  // 下の帯(横に長い)のときは列ではない。
+  homeRailWidth.value = rect.height > rect.width ? Math.round(rect.width) : 0;
+}
+let homeRailObserver: ResizeObserver | undefined;
+watch(homeTabsEl, (el) => {
+  homeRailObserver?.disconnect();
+  if (el && typeof ResizeObserver !== "undefined") {
+    homeRailObserver = new ResizeObserver(measureHomeRail);
+    homeRailObserver.observe(el);
+  }
+  measureHomeRail();
+});
+if (typeof window !== "undefined") window.addEventListener("resize", measureHomeRail);
+onBeforeUnmount(() => {
+  homeRailObserver?.disconnect();
+  if (typeof window !== "undefined") window.removeEventListener("resize", measureHomeRail);
+});
+const noteBesideRail = computed(() => homeOpen.value && yakobiNoteOpen.value && homeRailWidth.value > 0);
+/** タブを光らせるか。左の列を残してノートを開いているあいだは、ノートのタブを光らせる。 */
+function homeTabOn(id: (typeof HOME_TABS)[number]["id"]) {
+  return noteBesideRail.value ? id === "note" : homeTab.value === id;
 }
 /** まなぶのタイルに、強くなる道のおすすめがあるか(タブに点を付ける)。 */
 const homeLearnRecommended = computed(() => homeTile("tutorial").recommended || homeTile("problems").recommended);
@@ -10540,8 +10564,6 @@ function navigateBack() {
     // 研究は、重ねて開いたもの(シート・読み筋・局面編集)から閉じ、最後に研究を閉じる。
     if (researchView.value) researchView.value.goBack();
     else closeResearch();
-  } else if (dexShelfOpen.value && dexShelfFrom.value === "home") {
-    dexShelfOpen.value = false;
   } else if (homeOpen.value && homeTab.value !== "home") {
     // まなぶ・しらべるのタブからは、ホームのタブへ戻る(6章)。
     homeTab.value = "home";
@@ -10575,7 +10597,7 @@ function navigateBack() {
 // ホームを出す単体表示のときだけ、ブラウザの戻るをアプリ内の戻るにする。埋め込み先の履歴には触れない。
 useBackNavigation({
   enabled: props.showHome,
-  canGoBack: () => !homeOpen.value || homeTab.value !== "home" || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || discipleOpen.value || researchOpen.value || (dexShelfOpen.value && dexShelfFrom.value === "home") || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
+  canGoBack: () => !homeOpen.value || homeTab.value !== "home" || ladderNoticeOpen.value || exhibitResetOpen.value || saveTransferOpen.value || Boolean(discardSuspendedPending.value) || nameDialogOpen.value || Boolean(measureStartFrom.value) || skillTestOpen.value || Boolean(skillTestReport.value) || tournamentOpen.value || tutorialOpen.value || problemSetOpen.value || brainTrainingOpen.value || storyOpen.value || discipleOpen.value || researchOpen.value || dexOpen.value || yakobiNoteOpen.value || Boolean(referenceDexKind.value),
   goBack: navigateBack,
 });
 

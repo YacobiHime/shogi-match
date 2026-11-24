@@ -1089,7 +1089,7 @@ describe("match screen regressions", () => {
     // メニューにしまわず、いつも見出しに出す。
     expect(source).toMatch(/<template v-if="!menuCollapsed && !reviewMode">[\s\S]*?<\/template>[\s\S]{0,700}?class="shogi-game__command shogi-game__dex-open"[\s\S]{0,120}?data-match-dex\s*@click="openDexShelf"/);
     expect(source).toMatch(/v-for="shelf in DEX_SHELF"[\s\S]{0,200}?@click="openDexFromShelf\(shelf\.kind\)"/);
-    expect(source).toMatch(/function openDexFromShelf\(kind: DexKind\) \{\s*dexShelfOpen\.value = false;\s*dexFromMatch\.value = dexShelfFrom\.value === "match";/);
+    expect(source).toMatch(/function openDexFromShelf\(kind: DexKind\) \{\s*dexShelfOpen\.value = false;\s*dexFromMatch\.value = true;/);
     // 対局のエンジンを借りない。占いから新しい対局を始めない。戻る先は対局。
     expect(source).toMatch(/:analysis-engine="dexFromMatch \? null : dexAnalysisEngine"/);
     expect(source).toMatch(/:can-play="!dexFromMatch"/);
@@ -1099,13 +1099,20 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\.shogi-game--dex-over-match > :not\(\.shogi-dex\) \{\s*visibility: hidden;/);
     expect(source).toMatch(/\} else if \(dexShelfOpen\.value\) \{\s*dexShelfOpen\.value = false;/);
   });
-  it("ホームの図鑑は1枚のタイルにまとめ、対局中と同じ棚をホームの上に開く。戻る操作で閉じる(docs/brain-training-design.mdの4章)", () => {
+  it("ホームのしらべるは5つの図鑑と研究の6枚で、図鑑のタイルは棚を挟まずにその図鑑を開く(docs/home-roadmap-design.mdの7章)", () => {
     expect(source).not.toMatch(/shogi-title__tile--small/);
-    expect(source).toMatch(/class="shogi-title__tile shogi-title__tile--dex" data-dex-tile @click="openHomeDexShelf"/);
-    expect(source).toMatch(/'shogi-game__confirm--over-home': dexShelfFrom === 'home'/);
-    expect(source).toMatch(/dexShelfFrom === "home" \? "ホームに戻る" : "対局に戻る"/);
-    expect(source).toMatch(/\} else if \(dexShelfOpen\.value && dexShelfFrom\.value === "home"\) \{\s*dexShelfOpen\.value = false;\s*\} else if \(homeOpen\.value(?: && homeTab\.value !== "home")?\) \{/);
-    expect(source).toMatch(/canGoBack: \(\) => [^\n]*\(dexShelfOpen\.value && dexShelfFrom\.value === "home"\)/);
+    expect(source).toMatch(/<div class="shogi-title__tiles shogi-title__tiles--dex">\s*<button\s*v-for="shelf in DEX_SHELF"[\s\S]{0,200}?:data-dex-tile="shelf\.kind"\s*@click="openDexFromHome\(shelf\.kind\)"/);
+    expect(source).toMatch(/data-research-tile @click="openResearch\(\)"/);
+    expect(source).toMatch(/function openDexFromHome\(kind: DexKind\) \{\s*dexFromMatch\.value = false;\s*openDex\(kind\);/);
+    expect(source).not.toMatch(/openHomeDexShelf|dexShelfFrom/);
+    expect(source).toMatch(/\.shogi-title__tiles--dex \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
+  });
+  it("広い横向きの画面では、ホームから開いたノートを左のタブの列の右に置き、列を残す(docs/home-roadmap-design.mdの7章)", () => {
+    expect(source).toMatch(/:class="\{ 'shogi-note--beside-rail': noteBesideRail \}"/);
+    expect(source).toMatch(/const noteBesideRail = computed\(\(\) => homeOpen\.value && yakobiNoteOpen\.value && homeRailWidth\.value > 0\);/);
+    expect(source).toMatch(/homeRailWidth\.value = rect\.height > rect\.width \? Math\.round\(rect\.width\) : 0;/);
+    expect(source).toMatch(/if \(noteBesideRail\.value\) closeYakobiNote\(\);\s*homeTab\.value = id;/);
+    expect(source).toMatch(/\.shogi-game \.shogi-dex\.shogi-note--beside-rail \{\s*left: var\(--note-rail, 0px\);/);
   });
   it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
     expect(source).toMatch(/class="shogi-title__tiles shogi-title__tiles--learn"[\s\S]*?将棋教室[\s\S]*?問題集[\s\S]*?data-brain-tile @click="openBrainTraining"/);
@@ -1171,7 +1178,7 @@ describe("match screen regressions", () => {
   });
   it("ホームは下のタブ(広い画面は左の列)で、ホーム・まなぶ・しらべるを切り替え、ノートはやこびノートを開く(docs/home-roadmap-design.mdの6章)", () => {
     expect(source).toMatch(/const HOME_TABS = \[\s*\{ id: "home", label: "ホーム" \},\s*\{ id: "learn", label: "まなぶ" \},\s*\{ id: "dex", label: "しらべる" \},\s*\{ id: "note", label: "ノート" \},/);
-    expect(source).toMatch(/if \(id === "note"\) openYakobiNote\(\);\s*else homeTab\.value = id;/);
+    expect(source).toMatch(/if \(id === "note"\) \{\s*if \(!yakobiNoteOpen\.value\) openYakobiNote\(\);\s*return;\s*\}/);
     // 戻る操作: まなぶ・しらべるのタブからはホームのタブへ。
     expect(source).toMatch(/\} else if \(homeOpen\.value && homeTab\.value !== "home"\) \{\s*\/\/[^\n]*\n\s*homeTab\.value = "home";/);
     expect(source).toMatch(/canGoBack: \(\) => !homeOpen\.value \|\| homeTab\.value !== "home" \|\|/);
@@ -1276,7 +1283,6 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/if \(planSheetFromNote\) leavePregame\(\);/);
     expect(source).toMatch(/function choosePlan\([^)]*\) \{\s*const context = [^;]*;\s*planSheetFromNote = false;\s*closePlanSheet\(\);/);
     // ノートから開いた図鑑は「ノートへ戻る」で、閉じるとノートへ。
-    expect(source).toMatch(/const dexFromHomeShelf = ref\(false\);[\s\S]*?showDexShelf\(\);/);
     expect(source).toMatch(/function openDexFromNote\([^)]*\) \{\s*yakobiNoteOpen\.value = false;\s*dexFromNote\.value = true;/);
     // ノートから始めた棋力テストは、やめても結果を閉じてもノートへ。
     expect(source).toMatch(/function openSkillTest\(band: readonly number\[\] \| null, from: MeasureOrigin = yakobiNoteOpen\.value \? "note" : ""\)/);
