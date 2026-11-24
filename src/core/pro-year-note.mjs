@@ -25,6 +25,12 @@ function countRows(counts) {
     .map(([id, count]) => ({ id, name: proEvent(id)?.name ?? id, short: proEvent(id)?.short ?? id, count: Number(count) }));
 }
 
+/**
+ * 永世称号の呼び名。名人は「二十世名人」と呼ぶ(実在の永世名人は十九世まで。docs/pro-year-design.mdの39章)。
+ * @param {string} id
+ */
+export const eternalLabel = (id) => (id === 'meijin' ? '二十世名人' : ETERNAL_RULES[/** @type {keyof typeof ETERNAL_RULES} */ (id)]?.name ?? '');
+
 /** 「三冠」のような冠の数(2以上)。 */
 export const crownName = (count) => (count >= 2 && count < NUMERALS.length ? `${NUMERALS[count]}冠` : count >= 2 ? `${count}冠` : '');
 
@@ -100,7 +106,8 @@ export function proYearNote(packed) {
 export function proYearProfileTitles(state) {
   if (!state?.user) return [];
   const result = [];
-  // 防衛の数・連覇・永世称号も説明に(docs/pro-year-design.mdの19章)。永世称号は1つずつ称号に。
+  // 称号の名前は「竜王」「永世竜王」のように短く(ノートには棋士の1年の称号だけを並べる。39章)。
+  // 防衛の数・連覇・永世称号は説明に(19章)。永世称号は1つずつ称号に。
   for (const row of countRows(state.user.titleCounts)) {
     const record = state.user.titleRecord?.[row.id] ?? null;
     const holding = state.titles?.[row.id] === USER_ID;
@@ -108,17 +115,74 @@ export function proYearProfileTitles(state) {
       record?.defenses ? `防衛${record.defenses}回` : '',
       holding && (record?.streak ?? 0) >= 2 ? `${record.streak}連覇中` : (record?.best ?? 0) >= 2 ? `最長${record.best}連覇` : '',
     ].filter(Boolean).join('・');
-    result.push({ id: `pro-title-${row.id}`, label: `棋士の1年 ${row.short}`, detail: `棋士の1年で${row.name}・通算${row.count}期${extra ? `（${extra}）` : ''}`, rank: 20, weight: row.count });
-    const eternal = ETERNAL_RULES[row.id];
-    if (record?.eternal && eternal) result.push({ id: `pro-eternal-${row.id}`, label: `棋士の1年 ${eternal.name}`, detail: `棋士の1年で${eternal.name}の資格を得た（${record.eternal}年度）`, rank: 30, weight: 1 });
+    result.push({ id: `pro-title-${row.id}`, label: row.short, detail: `棋士の1年で${row.name}・通算${row.count}期${extra ? `（${extra}）` : ''}`, rank: 20, weight: row.count });
+    const eternal = ETERNAL_RULES[/** @type {keyof typeof ETERNAL_RULES} */ (row.id)];
+    if (record?.eternal && eternal) {
+      const label = eternalLabel(row.id);
+      const named = label === eternal.name ? '' : `（${label}）`;
+      result.push({ id: `pro-eternal-${row.id}`, label, detail: `棋士の1年で${eternal.name}${named}の資格を得た（${record.eternal}年度）`, rank: 30, weight: 1 });
+    }
+  }
+  // 8つすべての永世称号(pro-milestones.mjsの永世八冠と同じ)。
+  if (TITLE_ORDER.every((id) => state.user.titleRecord?.[id]?.eternal)) {
+    result.push({ id: 'pro-eternal-all', label: '永世八冠', detail: '棋士の1年で、8つのタイトルすべての永世称号の資格を得た', rank: 40, weight: 8 });
   }
   const holding = TITLE_ORDER.filter((id) => state.titles?.[id] === USER_ID).length;
   const best = Math.max(holding, Number(state.user.bestCrowns) || 0);
-  if (best >= 2) result.push({ id: 'pro-crowns', label: `棋士の1年 ${crownName(best)}`, detail: `棋士の1年で、タイトルを同時に${best}つ持った`, rank: 20 + best, weight: best });
+  if (best >= 2) result.push({ id: 'pro-crowns', label: crownName(best), detail: `棋士の1年で、タイトルを同時に${best}つ持った`, rank: 20 + best, weight: best });
   for (const row of countRows(state.user.cupCounts)) {
     result.push({ id: `pro-cup-${row.id}`, label: `${row.name}優勝`, detail: `棋士の1年で${row.name}に優勝（通算${row.count}回）`, rank: 9, weight: row.count });
   }
   return result;
+}
+
+/** 称号のidのタイトルの格の順(タイトルでなければ後ろ)。 */
+function titleOrderOf(id) {
+  const index = TITLE_ORDER.findIndex((title) => id.endsWith(`-${title}`));
+  return index < 0 ? 99 : index;
+}
+
+/**
+ * やこびノートに並べる称号(棋士の1年のものだけ。docs/pro-year-design.mdの39章)。
+ * どの記録の枠の称号も合わせたもの(pro-year-slots.mjsのbestTitles)を受け取り、永世称号の資格を得たタイトルは
+ * 「竜王」を消して「永世竜王」だけにする。高い称号から、同じ高さならタイトルの格の順。
+ * @param {{ id: string, label: string, detail?: string, rank: number, weight?: number }[]} titles
+ */
+export function noteTitleBadges(titles) {
+  const eternal = new Set(titles.filter((title) => title.id.startsWith('pro-eternal-')).map((title) => title.id.slice('pro-eternal-'.length)));
+  return titles
+    .filter((title) => !(title.id.startsWith('pro-title-') && eternal.has(title.id.slice('pro-title-'.length))))
+    .sort((a, b) => b.rank - a.rank || titleOrderOf(a.id) - titleOrderOf(b.id) || (b.weight ?? 0) - (a.weight ?? 0));
+}
+
+/**
+ * 代表の称号の候補(39章)。ノートの称号に、いま同時に持っているタイトルの組を足す。
+ * 竜王と名人を持っていれば「竜王・名人」、2つか3つ持っていれば「竜王・王位・棋聖」のような組。4つ以上は○冠で呼ぶ。
+ * @param {ReturnType<typeof noteTitleBadges>} badges
+ * @param {any} state いま遊んでいる記録の枠(pro-year:v1)
+ */
+export function featuredChoices(badges, state) {
+  const holding = TITLE_ORDER.filter((id) => state?.titles?.[id] === USER_ID);
+  const combos = [];
+  if (holding.includes('ryuo') && holding.includes('meijin')) combos.push(['ryuo', 'meijin']);
+  if (holding.length >= 2 && holding.length <= 3 && !(holding.length === 2 && combos.length)) combos.push(holding);
+  const extra = combos.map((ids) => ({
+    id: `pro-combo-${ids.join('-')}`,
+    label: ids.map((id) => proEvent(id)?.short ?? id).join('・'),
+    detail: 'いま同時に持っているタイトル',
+    rank: 20 + ids.length,
+    weight: ids.length,
+  }));
+  return [...badges, ...extra];
+}
+
+/**
+ * 代表の称号。選んだものがなければ(失冠して組がなくなったときなど)、いちばん高い称号。
+ * @param {ReturnType<typeof featuredChoices>} choices
+ * @param {string} featuredId
+ */
+export function featuredTitle(choices, featuredId) {
+  return choices.find((choice) => choice.id === featuredId) ?? choices[0] ?? null;
 }
 
 /** localStorageから読む(読めなければnull)。 */

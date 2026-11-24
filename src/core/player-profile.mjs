@@ -4,7 +4,17 @@
 export const PROFILE_STORAGE_KEY = 'yacobihime:shogi-match:player-profile';
 
 export function createProfile() {
-  return { titles: [] };
+  /** featured: 代表の称号のid(やこびノートで選ぶ。空なら、いちばん高い称号。docs/pro-year-design.mdの39章)。 */
+  return { titles: /** @type {{ id: string, label: string, detail: string, rank: number, at: number }[]} */ ([]), featured: '' };
+}
+
+/**
+ * 代表の称号を選ぶ(空にすると、いちばん高い称号に戻る)。
+ * @param {ReturnType<typeof createProfile>} profile
+ * @param {string} id
+ */
+export function setFeaturedTitle(profile, id) {
+  return { ...profile, featured: text(id) };
 }
 
 const text = (value) => (typeof value === 'string' ? value : '');
@@ -36,6 +46,7 @@ export function loadProfile(storage) {
           .filter((title) => title && typeof title.id === 'string' && typeof title.label === 'string')
           .map((title) => ({ id: title.id, label: title.label, detail: text(title.detail), rank: Number(title.rank) || 0, at: Number(title.at) || 0 }))
         : [],
+      featured: text(parsed.featured),
     };
   } catch {
     return createProfile();

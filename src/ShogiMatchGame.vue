@@ -348,6 +348,28 @@
                 </svg>
                 <span class="shogi-title__label">師匠の1年</span>
               </button>
+              <!-- 棋士の1年(docs/pro-year-design.md)。大会の選択から出して、師匠の1年の隣に置く(39章)。 -->
+              <button type="button" class="shogi-title__tile" data-pro-year-tile @click="openTournamentAt('pro-year')">
+                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
+                  <g fill="#f1a54c">
+                    <rect x="2" y="3" width="12" height="11" />
+                    <rect x="4" y="1" width="2" height="3" />
+                    <rect x="10" y="1" width="2" height="3" />
+                  </g>
+                  <g fill="#172632">
+                    <rect x="3" y="6" width="10" height="7" />
+                  </g>
+                  <g fill="#fffcf4">
+                    <rect x="4" y="7" width="2" height="2" />
+                    <rect x="7" y="7" width="2" height="2" />
+                    <rect x="10" y="7" width="2" height="2" />
+                    <rect x="4" y="10" width="2" height="2" />
+                    <rect x="7" y="10" width="2" height="2" />
+                  </g>
+                  <rect x="10" y="10" width="2" height="2" fill="#f1948a" />
+                </svg>
+                <span class="shogi-title__label">棋士の1年</span>
+              </button>
             </div>
             <p class="shogi-title__live" role="status">{{ loadNotice }}</p>
           </section>
@@ -683,7 +705,10 @@
       :back-label="'戻る'"
       :initial-tab="noteInitialTab"
       :state="ratingState"
-      :profile="profileState"
+      :titles="noteTitles"
+      :title-choices="noteTitleChoices"
+      :featured-title-id="featuredProTitle?.id ?? ''"
+      @feature-title="chooseFeaturedTitle"
       :career="ryuoCareer"
       :roster="ryuoRoster"
       :meijin-career="meijinCareer"
@@ -3228,8 +3253,8 @@ import { applyWriteBack, writeBackPlan } from "./core/pro-writeback.mjs";
 import { currentDifficulty, retuneSeasonWorld } from "./core/world-change.mjs";
 import { moneyText } from "./core/pro-life.mjs";
 import { STAGE_CARD_MS, describeMatchStage, skyPhase, stageDayLabel, stageSealPly } from "./core/match-stage.mjs";
-import { currentAffiliation, grantTitle, loadProfile, saveProfile } from "./core/player-profile.mjs";
-import { proYearProfileTitles } from "./core/pro-year-note.mjs";
+import { currentAffiliation, grantTitle, loadProfile, saveProfile, setFeaturedTitle } from "./core/player-profile.mjs";
+import { featuredChoices, featuredTitle, noteTitleBadges, proYearProfileTitles } from "./core/pro-year-note.mjs";
 import { bestTitles, deleteSlot, loadSlotIndex, otherSlotTitles, slotCards, switchSlot } from "./core/pro-year-slots.mjs";
 import { originDebut, shoreikaiOrigin } from "./core/pro-year-origin.mjs";
 import { applyPlacement, hasKikiGlasses, learnedTips, loadTutorialProgress, recordProverb, saveTutorialProgress, tipsTouched, withTutorialCourse } from "./core/tutorial-progress.mjs";
@@ -8865,6 +8890,17 @@ function syncProYearTitles(state: any) {
   saveProfile(browserStorage(), profile);
 }
 watch(proYearState, (state) => syncProYearTitles(state), { immediate: true });
+/*
+ * やこびノートとホームに出す称号は、棋士の1年で得たものだけ(docs/pro-year-design.mdの39章)。
+ * どの記録の枠の称号も合わせ、永世称号の資格を得たタイトルは永世称号だけにする。代表の称号はノートで選ぶ(プロフィールのfeatured)。
+ */
+const noteTitles = computed(() => noteTitleBadges(bestTitles([...proYearProfileTitles(proYearState.value), ...otherSlotTitles(browserStorage())])));
+const noteTitleChoices = computed(() => featuredChoices(noteTitles.value, proYearState.value));
+const featuredProTitle = computed(() => featuredTitle(noteTitleChoices.value, profileState.value.featured ?? ""));
+function chooseFeaturedTitle(id: string) {
+  profileState.value = setFeaturedTitle(profileState.value, id);
+  saveProfile(browserStorage(), profileState.value);
+}
 /** 中断した棋士の1年の対局が、いまの次の対局と同じ相手なら、その手数。 */
 const suspendedProYearMoves = computed(() => {
   const suspended = suspendedMatch.value;
@@ -10492,7 +10528,8 @@ const homeGreeting = computed(() => {
     default: return streakGreeting(homeStreak.value) || "今日はなにをする？";
   }
 });
-const homeAffiliation = computed(() => currentAffiliation(profileState.value)?.label ?? "");
+/** ホームの記録の帯の称号。ノートの代表の称号と同じ(棋士の1年の称号がなければ、前の大会の称号)。 */
+const homeAffiliation = computed(() => featuredProTitle.value?.label ?? currentAffiliation(profileState.value)?.label ?? "");
 
 /*
  * ブラウザの戻るで、手前に重なった画面から1段ずつ閉じる。対局準備はホームへ戻る。

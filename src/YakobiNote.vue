@@ -82,12 +82,17 @@
             </div>
             <p v-else class="shogi-note__goal-text">いちばん上の目安に届いたよ！</p>
 
-            <ul class="shogi-note__badges" aria-label="所属と称号">
-              <li class="shogi-note__badge" :class="{ 'shogi-note__badge--group': affiliation }">
-                <small>所属</small>{{ affiliation ? affiliation.label : "まだ所属なし" }}
+            <!-- 称号は棋士の1年で得たものだけ。代表の称号は選べる(docs/pro-year-design.mdの39章)。ほかは6つまで並べ、残りは数だけ。 -->
+            <ul v-if="featured" class="shogi-note__badges" aria-label="称号">
+              <li class="shogi-note__badge shogi-note__badge--group" :title="featured.detail" data-note-featured>
+                <small>称号</small>{{ featured.label }}
               </li>
-              <li v-for="title in otherTitles" :key="title.id" class="shogi-note__badge" :title="title.detail" data-note-title>
+              <li v-for="title in shownTitles" :key="title.id" class="shogi-note__badge" :title="title.detail" data-note-title>
                 {{ title.label }}
+              </li>
+              <li v-if="hiddenTitleCount" class="shogi-note__badge shogi-note__badge--more">ほか{{ hiddenTitleCount }}</li>
+              <li v-if="titleChoices.length > 1">
+                <button type="button" class="shogi-note__badge-change" data-note-title-change @click="titleSheetOpen = true">代表を選ぶ</button>
               </li>
             </ul>
 
@@ -894,6 +899,30 @@
       </main>
       <SeasonAward v-if="awardShown" :award="awardShown" :asset-base-url="assetBaseUrl" @done="awardShown = null" />
       <TitleDaySheet v-if="kansenkiShown" mode="kansenki" :article="kansenkiShown" @close="kansenkiShown = null" />
+      <!-- 代表の称号を選ぶ(39章)。押したらすぐ決まって閉じる。 -->
+      <div v-if="titleSheetOpen" class="shogi-note__sheet" role="dialog" aria-modal="true" aria-labelledby="shogi-note-title-sheet" data-note-title-sheet @click.self="titleSheetOpen = false" @keydown.esc.stop="titleSheetOpen = false">
+        <div class="shogi-note__sheet-panel shogi-note__title-sheet">
+          <h2 id="shogi-note-title-sheet">代表の称号</h2>
+          <p class="shogi-note__hint">ノートとホームに出す称号を選んでね。</p>
+          <ul class="shogi-note__title-choices">
+            <li v-for="choice in titleChoices" :key="choice.id">
+              <button
+                type="button"
+                class="shogi-note__title-choice"
+                :class="{ 'shogi-note__title-choice--on': choice.id === featured?.id }"
+                :aria-pressed="choice.id === featured?.id"
+                :data-note-title-choice="choice.id"
+                @click="chooseFeatured(choice.id)"
+              >
+                <b>{{ choice.label }}</b><small>{{ choice.detail }}</small>
+              </button>
+            </li>
+          </ul>
+          <div class="shogi-note__study-actions">
+            <button type="button" class="shogi-note__button shogi-note__button--ghost" @click="titleSheetOpen = false">閉じる</button>
+          </div>
+        </div>
+      </div>
       <!-- 研究ノートの局面(24-5)。盤と、中継で開く・消す。 -->
       <div v-if="studyShown" class="shogi-note__sheet" role="dialog" aria-modal="true" aria-label="研究ノートの局面" data-note-study-sheet @click.self="studyShown = null">
         <div class="shogi-note__sheet-panel shogi-note__study">
@@ -953,7 +982,6 @@ import { difficultyName, worldDifficultyText } from "./core/tournament-world.mjs
 import { ABILITIES, abilityRank, abilityValues } from "./core/player-abilities.mjs";
 import { HANANE } from "./core/ryuo-story.mjs";
 import { CPU_STRENGTH_PRESETS } from "./core/strength-settings.mjs";
-import { currentAffiliation } from "./core/player-profile.mjs";
 import { currentStreak, loadPlayStreak, streakLine } from "./core/play-streak.mjs";
 import {
   ALBUM_PAGES,
@@ -1033,9 +1061,7 @@ type HistoryRecord = {
   rating: number; outcome?: string; at?: number; opponentLevel?: number; event?: string; opponent?: string; stage?: string; difficulty?: number;
 };
 
-type ProfileState = {
-  titles: { id: string; label: string; detail: string; rank: number; at: number }[];
-};
+type NoteTitle = { id: string; label: string; detail?: string; rank: number; weight?: number };
 type HistoryEntry = {
   no: number; mode: string; startGroup: number; newGroup: number; outcome: string; wins: number; losses: number; promoted: boolean; relegated: boolean;
 };
@@ -1054,7 +1080,10 @@ const props = defineProps({
   /** 開いたときの項目(大会の結果の画面からは「大会」)。空なら最後に開いた項目。覚えている項目は変えない。 */
   initialTab: { type: String, default: "" },
   state: { type: Object as PropType<RatingState>, required: true },
-  profile: { type: Object as PropType<ProfileState>, default: () => ({ titles: [] }) },
+  /** 並べる称号(棋士の1年のもの。39章)と、代表の候補・選んだ代表のid。 */
+  titles: { type: Array as PropType<NoteTitle[]>, default: () => [] },
+  titleChoices: { type: Array as PropType<NoteTitle[]>, default: () => [] },
+  featuredTitleId: { type: String, default: "" },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   roster: { type: Object as PropType<any>, default: null },
   career: {
@@ -1090,6 +1119,8 @@ const emit = defineEmits<{
   "open-plan": [planId: string];
   /** コレクションのカードから、定跡図鑑・手筋図鑑を開く。 */
   "open-dex": [target: { kind: string; id: string }];
+  /** 代表の称号を選んだ(39章)。 */
+  "feature-title": [id: string];
 }>();
 
 /** ノートの項目。最後に開いた項目を、この端末で覚えておく。 */
@@ -1267,11 +1298,20 @@ const measuredDate = computed(() => {
   const at = props.state.measured?.at;
   return at ? new Date(at).toLocaleDateString("ja-JP") : "";
 });
-const affiliation = computed(() => currentAffiliation(props.profile));
-/** 所属に使った称号のほかの称号を、高いものから並べる。 */
-const otherTitles = computed(() => [...props.profile.titles]
-  .filter((title) => title.id !== affiliation.value?.id)
-  .sort((a, b) => b.rank - a.rank || a.at - b.at));
+/*
+ * 称号(docs/pro-year-design.mdの39章)。棋士の1年で得たものだけを、対局画面が並べて渡す(pro-year-note.mjsのnoteTitleBadges)。
+ * 代表の称号は選んだもの(なければいちばん高いもの)。ほかは6つまで並べ、残りは「ほか○」。
+ */
+const TITLE_SHOWN_MAX = 6;
+const featured = computed(() => props.titleChoices.find((choice) => choice.id === props.featuredTitleId) ?? props.titleChoices[0] ?? null);
+const otherTitles = computed(() => props.titles.filter((title) => title.id !== featured.value?.id));
+const shownTitles = computed(() => otherTitles.value.slice(0, TITLE_SHOWN_MAX));
+const hiddenTitleCount = computed(() => Math.max(0, otherTitles.value.length - TITLE_SHOWN_MAX));
+const titleSheetOpen = ref(false);
+function chooseFeatured(id: string) {
+  emit("feature-title", id);
+  titleSheetOpen.value = false;
+}
 const recentHistory = computed(() => [...props.career.history].reverse().slice(0, 8));
 /** 成績の行の色分け: 竜王・昇級・降級・そのほか。 */
 function historyKind(entry: HistoryEntry) {
@@ -1365,6 +1405,10 @@ function removeStudy(id: string) {
 // ---- 戻る操作(ブラウザの戻る)。重ねて開いたもの(賞状・名鑑のくわしい情報)から閉じる。閉じたら真。
 const bookEl = ref<{ goBack: () => boolean } | null>(null);
 function goBack() {
+  if (titleSheetOpen.value) {
+    titleSheetOpen.value = false;
+    return true;
+  }
   if (studyRelay.value) {
     studyRelay.value = null;
     return true;
@@ -2242,6 +2286,51 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__badge small { margin-right: 0.4rem; color: var(--note-muted); font-weight: 700; }
 .shogi-game .shogi-note__badge--group { color: var(--note-deep); background: var(--note-gold); }
 .shogi-game .shogi-note__badge--group small { color: rgba(23, 38, 50, 0.75); }
+.shogi-game .shogi-note__badge--more { border-style: dashed; color: var(--note-muted); border-color: var(--note-line); }
+.shogi-game .shogi-note__badge-change {
+  min-height: 2rem;
+  padding: 0.2rem 0.8rem;
+  border: 2px solid var(--note-line);
+  border-radius: 999px;
+  color: #fffcf4;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.85em;
+  font-weight: 800;
+}
+.shogi-game .shogi-note__title-sheet {
+  box-sizing: border-box; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; width: min(30rem, 100%); max-height: 100%;
+  padding: 0.9rem; border-radius: 0.8rem; color: #fffcf4; background: #172632;
+}
+.shogi-game .shogi-note__title-sheet h2 { margin: 0; font-size: 1.1rem; }
+.shogi-game .shogi-note__title-sheet .shogi-note__hint { margin: 0.2rem 0 0; }
+.shogi-game .shogi-note__title-sheet .shogi-note__study-actions { grid-template-columns: minmax(0, 1fr); }
+.shogi-game .shogi-note__title-choices {
+  display: grid;
+  gap: 0.45rem;
+  min-height: 0;
+  margin: 0.6rem 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.shogi-game .shogi-note__title-choice {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.8rem;
+  border: 2px solid var(--note-line);
+  border-radius: 0.6rem;
+  color: #fffcf4;
+  background: var(--note-deep);
+  box-shadow: none;
+  text-align: left;
+}
+.shogi-game .shogi-note__title-choice b { font-size: 1.05em; color: #fffcf4; }
+.shogi-game .shogi-note__title-choice small { color: var(--note-muted); font-size: 0.8em; font-weight: 600; }
+.shogi-game .shogi-note__title-choice--on { border-color: var(--note-gold); background: rgba(241, 165, 76, 0.16); }
+.shogi-game .shogi-note__title-choice--on b::after { content: "（いまの代表）"; margin-left: 0.4rem; color: var(--note-gold); font-size: 0.8em; }
 .shogi-game .shogi-note__form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; }
 .shogi-game .shogi-note__form-label { color: var(--note-muted); font-size: 0.85em; font-weight: 700; }
 .shogi-game .shogi-note__form ol { display: flex; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }

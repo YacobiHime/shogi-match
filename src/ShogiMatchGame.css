@@ -4566,8 +4566,8 @@
   gap: 0.5em;
 }
 .shogi-title__tiles--learn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-/* あそぶの行は、自由対局・終盤戦・師匠の1年の3つ(大会と物語は上の主役の2枚。docs/home-roadmap-design.mdの6章)。 */
-.shogi-title__tiles--play { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* あそぶの行は、自由対局・終盤戦・師匠の1年・棋士の1年の4つ(大会と物語は上の主役の2枚。docs/home-roadmap-design.mdの6章、docs/pro-year-design.mdの39章)。 */
+.shogi-title__tiles--play { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 /* 読み込めなかったときの一言を読み上げる欄。見た目はやこび姫の吹き出しが受け持つ。 */
 .shogi-title__live {
   position: absolute;

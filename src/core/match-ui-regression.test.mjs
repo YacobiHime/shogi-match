@@ -971,9 +971,12 @@ describe("match screen regressions", () => {
     expect(presence).toMatch(/if \(event === 'team'\) return teamNews\(season\);/);
   });
 
-  it('棋士の1年は大会の画面から入り、自分の対局を指して記録し、終わったら棋士の1年の画面へ戻る(docs/pro-year-design.md)', () => {
+  it('棋士の1年はホームのあそぶ(師匠の1年の隣)から入り、自分の対局を指して記録し、終わったら棋士の1年の画面へ戻る(docs/pro-year-design.mdの39章)', () => {
     const tournament = readFileSync(new URL("../ShogiTournament.vue", import.meta.url), "utf8");
-    expect(tournament).toMatch(/data-tournament="pro-year" @click="chooseProYear"/);
+    expect(tournament).not.toMatch(/data-tournament="pro-year"/);
+    expect(source).toMatch(/data-disciple-tile @click="openDisciple">[\s\S]{0,1200}?data-pro-year-tile @click="openTournamentAt\('pro-year'\)"/);
+    expect(tournament).toMatch(/const proYearPick = ref\(props\.startAt === "pro-year" && !props\.fromGame\);/);
+    expect(tournament).toMatch(/if \(screen\.value === "pro-year"\) \{\s*emit\("close"\);\s*return;\s*\}/);
     expect(tournament).toMatch(/<ShogiProYear\s+v-if="screen === 'pro-year'"/);
     expect(tournament).toMatch(/else if \(screen\.value === "pro-year" && proYearEl\.value\?\.goBack\(\)\) return;/);
     expect(source).toMatch(/ryuoGame\.value = \{ opponentId: pending\.opponentId, label: pending\.label \?\? "", event: "pro-year", practice: !pending\.gameId \};\s*proYearResultLine\.value = "";\s*startRyuoMatch\(\);/);
@@ -1050,7 +1053,7 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/import\("\.\/core\/story-mode\.mjs"\)/);
     expect(source).toMatch(/unlockStorySceneLater\(format === "school" \? "invite-school" : "invite-pro"\);/);
     expect(source).toMatch(/<p class="shogi-title__live" role="status">\{\{ loadNotice \}\}<\/p>/);
-    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
+    expect(source).toMatch(/\.shogi-title__tiles--play \{ grid-template-columns: repeat\(4, minmax\(0, 1fr\)\); \}/);
   });
 
   it('ホームのあそぶの行の師匠の1年は、押すと弟子を育てる画面を開く(docs/disciple-mode-design.mdの23章)', () => {

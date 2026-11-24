@@ -115,29 +115,6 @@
                 <span class="shogi-title__label">団体戦</span>
                 <small class="shogi-title__desc">{{ teamCardNote }}</small>
               </button>
-              <!-- 棋士の1年(docs/pro-year-design.md)。カレンダーの対局日に、12の棋戦を指す。 -->
-              <button type="button" class="shogi-title__tile" data-tournament="pro-year" @click="chooseProYear">
-                <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
-                  <g fill="#f1a54c">
-                    <rect x="2" y="3" width="12" height="11" />
-                    <rect x="4" y="1" width="2" height="3" />
-                    <rect x="10" y="1" width="2" height="3" />
-                  </g>
-                  <g fill="#172632">
-                    <rect x="3" y="6" width="10" height="7" />
-                  </g>
-                  <g fill="#fffcf4">
-                    <rect x="4" y="7" width="2" height="2" />
-                    <rect x="7" y="7" width="2" height="2" />
-                    <rect x="10" y="7" width="2" height="2" />
-                    <rect x="4" y="10" width="2" height="2" />
-                    <rect x="7" y="10" width="2" height="2" />
-                  </g>
-                  <rect x="10" y="10" width="2" height="2" fill="#f1948a" />
-                </svg>
-                <span class="shogi-title__label">棋士の1年</span>
-                <small class="shogi-title__desc">{{ proYearCardNote }}</small>
-              </button>
             </div>
           </section>
         </div>
@@ -1401,18 +1378,11 @@ function chooseTeam() {
 // ---- 棋士の1年(docs/pro-year-design.md)
 const proYearEl = ref<{ goBack: () => boolean } | null>(null);
 const relayViewerEl = ref<{ goBack: () => boolean } | null>(null);
-const proYearCardNote = computed(() => {
-  const state = props.proYearState;
-  if (!state) return "新四段として12の棋戦へ";
-  const record = state.year?.records?.user ?? { w: 0, l: 0 };
-  return `${state.fy}年度・${record.w}勝${record.l}敗`;
-});
-/** 大会の選択から入った(中身の入った枠があれば、記録の一覧を先に出す。37章)。対局から戻ったときは出さない。 */
-const proYearPick = ref(false);
-function chooseProYear() {
-  proYearPick.value = true;
-  screen.value = "pro-year";
-}
+/*
+ * ホームの「棋士の1年」から入った(中身の入った枠があれば、記録の一覧を先に出す。37章)。対局から戻ったときは出さない。
+ * 棋士の1年は大会の選択から外し、ホームのあそぶに置いた(39章)。戻るとホームへ。
+ */
+const proYearPick = ref(props.startAt === "pro-year" && !props.fromGame);
 // ---- 研修会(docs/kenshukai-design.md)
 const kenshukaiEl = ref<{ goBack: () => boolean } | null>(null);
 /** 対局から研修会へ戻ってきた(判子を1回だけ出す)。 */
@@ -1543,6 +1513,11 @@ function goBack() {
   else backToSelect();
 }
 function backToSelect() {
+  // 棋士の1年は大会の選択にないので、戻るとホームへ(39章)。
+  if (screen.value === "pro-year") {
+    emit("close");
+    return;
+  }
   if (screen.value === "result") emit("result-seen");
   proYearPick.value = false;
   screen.value = "select";
