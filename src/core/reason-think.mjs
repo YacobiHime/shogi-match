@@ -89,7 +89,7 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   if (mateLine?.length) return done(mateLine[0], 'mate', 'mate', { mate: mateLine.length, line: mateLine });
   // うっかり: この手は読みを1手だけにする(相手の返し・駒取りを読まない)。
   // 1手の時間の上限(読みの時間の1.6倍)。定跡・手順表の手の確かめは、残りの時間で行う。
-  const deadline = Date.now() + profile.timeMs * 1.6;
+  const deadline = Date.now() + profile.timeMs * (profile.deadlineScale ?? 1.6);
   const careless = random() < profile.skip;
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
@@ -144,11 +144,27 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   return done(best.move, tactical ? 'read' : 'shape', reason, { score: best.score, line: best.pv });
 }
 
+/** 観戦の1手の時間の上限(ミリ秒。docs/disciple-mode-design.mdの38章)。読みの時間をこれまでにし、締め切りは読みの1.3倍。 */
+export const WATCH_THINK_BUDGET_MS = 700;
+
+/**
+ * 1手の時間を上限までに縮めた考え方(38章)。上限が0なら、そのまま。
+ * @template {{ timeMs: number }} P
+ * @param {P} profile
+ * @param {number} budgetMs
+ * @returns {P & { deadlineScale?: number }}
+ */
+export function budgetProfile(profile, budgetMs) {
+  if (!(budgetMs > 0)) return profile;
+  return { ...profile, timeMs: Math.min(profile.timeMs, budgetMs), deadlineScale: 1.3 };
+}
+
 /**
  * 理由で指す棋士の1手を、種から決まる乱数で考える(本局から呼ぶ。ブラウザはWorkerで同じ関数を動かす)。
- * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number }} request
+ * budgetMsは1手の時間の上限(観戦の本局。38章)。
+ * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number, budgetMs?: number }} request
  */
-export async function thinkHere({ sfen, levels, planMove, seed }) {
+export async function thinkHere({ sfen, levels, planMove, seed, budgetMs = 0 }) {
   const rng = createRng(seed >>> 0);
-  return chooseThinkingMove({ sfen, profile: thinkProfile(levels), planMove, random: () => rng.next() });
+  return chooseThinkingMove({ sfen, profile: budgetProfile(thinkProfile(levels), budgetMs), planMove, random: () => rng.next() });
 }

@@ -24,6 +24,8 @@ import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendi
 import { A2, CLASS_RATINGS, SHIDO_BONUS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
 import { TEAI_RATING } from './teai.mjs';
+import { discipleTimeRule, watchTimeControl } from './time-control.mjs';
+import { WATCH_THINK_BUDGET_MS } from './reason-think.mjs';
 import { LEARNING_HANDICAPS } from './learning-setup.mjs';
 
 export const DISCIPLE_RUN_KEY = 'yacobihime:shogi-match:disciple:v1';
@@ -1017,6 +1019,7 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
       ? { levels: opponentLevels, mastery: rivalBook(next.rival).cards[rivalPick.id]?.mastery ?? 0, notes: researchNotes(rivalBook(next.rival), rivalPick.id) }
       : { levels: opponentLevels, mastery: masteryForLevel(level) },
   };
+  const timeRule = /** @type {NonNullable<ReturnType<typeof discipleTimeRule>>} */ (discipleTimeRule({ event: eventKind, ranks: next.shoreikai ? [next.shoreikai.rank, member.rank] : [] }));
   const spec = {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
     event: eventKind, kind: 'game', label: next.shoreikai ? run.pending?.label ?? '奨励会' : kind === 'exam' ? '入会試験' : `第${run.dayNo}回例会`,
@@ -1024,12 +1027,17 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
     [side]: disciple, [other]: opponent,
     openings: { [side]: null, [other]: opponentStyle?.opening ?? opponentStyle?.id ?? null },
     plans,
+    // 持ち時間(38章)。研修会は30分、奨励会は級位者1時間・段位者1時間30分、切れたら秒読み。
+    control: watchTimeControl(timeRule),
+    timeRule: timeRule.key,
+    // 観戦の1手の時間の上限(38章)。終盤の重い局面でも、序盤と同じ調子で見せる。
+    thinkBudgetMs: WATCH_THINK_BUDGET_MS,
   };
   // 観戦の札の「今日の作戦」(35-7)。
   const today = startSfen
     ? { own: uwate === side ? '上手（駒落ち）' : ownCard?.label ?? '力戦', opponent: uwate === other ? '上手（駒落ち）' : opponentStyle?.label ?? '' }
     : { own: ownCard?.label ?? '力戦', opponent: opponentStyle?.label ?? '' };
-  return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next, card: ownCard?.id ?? null, plans: today };
+  return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next, card: ownCard?.id ?? null, plans: today, timeText: timeRule.text };
 }
 
 /** 師匠の眼の段(見抜いた数で上がる。19-5)。 */

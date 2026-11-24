@@ -357,6 +357,8 @@
             :asset-base-url="assetBaseUrl"
             :black-player-name="watch.side === 'black' ? view?.name ?? '' : watch.opponent.name"
             :white-player-name="watch.side === 'white' ? view?.name ?? '' : watch.opponent.name"
+            :clocks="watchClockView"
+            :fast-clock="watchClockView?.fast ?? ''"
             @resize="onBoardResize"
           />
         </div>
@@ -370,7 +372,7 @@
       </div>
       <div class="disciple__watch-side">
         <!-- 今日の作戦(35-7)。観戦のはじめから最後まで同じ行に出す。 -->
-        <p v-if="watch.plans" class="disciple__today-plan" data-disciple-today-plan>今日の作戦 <b>{{ watch.plans.own }}</b><small v-if="watch.plans.opponent">相手の得意 {{ watch.plans.opponent }}</small></p>
+        <p v-if="watch.plans" class="disciple__today-plan" data-disciple-today-plan>今日の作戦 <b>{{ watch.plans.own }}</b><small v-if="watch.plans.opponent">相手の得意 {{ watch.plans.opponent }}</small><small v-if="watch.timeText" data-disciple-time-rule>{{ watch.timeText }}</small></p>
         <p v-if="watchThought" class="disciple__thought" data-disciple-thought><b>{{ view?.name }}の考え</b>{{ watchThought }}
           <small v-if="watchReading" data-disciple-reading>読み筋 {{ watchReading.text }}<template v-if="watchReading.surprised">　相手は{{ watchReading.actualText }}（読んでいなかった手）</template></small></p>
         <p v-if="watch.error" class="disciple__ask">{{ watch.error }}</p>
@@ -629,6 +631,7 @@ import {
 import { sfenAfter } from "./core/pro-cut.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
+import { paceMs, watchClocks } from "./core/watch-pace.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 
 const props = defineProps({
@@ -909,9 +912,12 @@ type Watch = {
   label: string; side: "black" | "white"; opponent: { name: string; level: number }; plan: { opening: string; ending: string; card?: string } | null; charm: string | null;
   /** 今日の作戦(35-7)。棋譜帳から開いた前の版の局には無い。 */
   plans?: { own: string; opponent: string } | null;
-  entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
+  entries: { move: string; eval: number; loss: number; d?: unknown; time?: number }[]; end: unknown; win: boolean; done: boolean;
   /** 駒落ちの局のはじめの局面(37章)。平手は空。 */
   sfen?: string;
+  /** 持ち時間(38章)。棋譜帳から開いた局には無い。 */
+  control?: { main: number; byoyomi: number } | null;
+  timeText?: string;
   marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
   /** 観戦の段(33-3)。指している→終局の札→その日の結果発表→検討。 */
   phase: "playing" | "end" | "result" | "review";
@@ -945,28 +951,96 @@ function startWatch() {
   }
   const current: Watch = {
     label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, plans: made.plans, entries: [], end: null, win: false, done: false,
-    sfen: made.spec.sfen ?? "",
+    sfen: made.spec.sfen ?? "", control: made.spec.control ?? null, timeText: made.timeText ?? "",
     marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null, mode: "live", upto: 0, endReason: "",
     seek: null, good: [], goodSel: -1, praised: "",
   };
   watch.value = current;
   const ticket = ++watchTicket;
-  engineGame.play(made.spec, (entry, index) => {
+  stopPace();
+  // 保存していた手(画面を離れて戻ったとき)は、playの中で先にまとめて届くので、待たずに並べる。
+  paceInstant = true;
+  const playing = engineGame.play(made.spec, (entry, index) => {
     if (ticket !== watchTicket) return;
-    current.entries[index] = entry as Watch["entries"][number];
-    watch.value = { ...current, entries: [...current.entries] };
-  }).then((game) => {
+    arrived[index] = entry as Watch["entries"][number];
+    if (paceInstant) {
+      current.entries = arrived.slice(0, index + 1);
+      watch.value = { ...current, entries: [...current.entries] };
+      return;
+    }
+    pumpPace(current, ticket);
+  });
+  paceInstant = false;
+  playing.then((game) => {
     if (!game || ticket !== watchTicket) return;
-    finishWatchGame(current, game.end as { winner: string });
+    // 見せる手が追いつくのを待ってから、終局にする(38章)。
+    paceEnd = () => finishWatchGame(current, game.end as { winner: string });
+    pumpPace(current, ticket);
   }).catch((error) => {
     console.warn("師匠の1年の観戦の本局を指せませんでした", error);
     if (ticket !== watchTicket) return;
+    stopPace();
     current.error = "エンジンを起動できなかったので、結果だけ見ます";
     watch.value = { ...current };
     play();
     current.done = true;
   });
 }
+// ---- 手を見せる速さと時計(38章)。エンジンが考え終えた順に受け取り(arrived)、その手で使った持ち時間に合わせた早送りの長さで1手ずつ見せる。
+let arrived: Watch["entries"] = [];
+let paceTimer: ReturnType<typeof setInterval> | null = null;
+let paceInstant = false;
+let paceEnd: (() => void) | null = null;
+/** 見せる前の手を考えている途中の進み(0〜1)。時計の早送りに使う。 */
+const paceProgress = ref(0);
+function stopPace() {
+  if (paceTimer) clearInterval(paceTimer);
+  paceTimer = null;
+  arrived = [];
+  paceEnd = null;
+  paceProgress.value = 0;
+}
+function pumpPace(current: Watch, ticket: number) {
+  if (paceTimer || ticket !== watchTicket) return;
+  const index = current.entries.length;
+  const entry = arrived[index];
+  if (!entry) {
+    // まだ読んでいる手は、届いたときにもう一度呼ばれる。読み終えて見せる手も尽きたら終局。
+    if (paceEnd) {
+      const end = paceEnd;
+      paceEnd = null;
+      end();
+    }
+    return;
+  }
+  const duration = paceMs(entry);
+  const started = Date.now();
+  paceTimer = setInterval(() => {
+    if (ticket !== watchTicket) {
+      stopPace();
+      return;
+    }
+    const progress = Math.min(1, (Date.now() - started) / duration);
+    paceProgress.value = progress;
+    if (progress < 1) return;
+    if (paceTimer) clearInterval(paceTimer);
+    paceTimer = null;
+    paceProgress.value = 0;
+    current.entries = arrived.slice(0, index + 1);
+    watch.value = { ...current, entries: [...current.entries] };
+    pumpPace(current, ticket);
+  }, 100);
+}
+onBeforeUnmount(stopPace);
+/** 盤の名札の横の時計(38章)。観戦は見せた手まで、検討は見ている手まで。 */
+const watchClockView = computed(() => {
+  const current = watch.value;
+  if (!current?.control) return null;
+  const upto = current.phase === "review" ? current.upto : current.entries.length;
+  const whiteFirst = (current.sfen ?? "").split(" ")[1] === "w";
+  const progress = current.phase === "playing" && !current.done ? paceProgress.value : 0;
+  return watchClocks(current.phase === "playing" ? arrived.length > current.entries.length ? arrived : current.entries : current.entries, upto, { control: current.control, whiteFirst, progress });
+});
 function finishWatchGame(current: Watch, end: { winner: string }) {
   current.end = end;
   current.win = end?.winner === current.side;
@@ -1205,6 +1279,7 @@ function closeWatch() {
   if (!current.done) {
     // 観戦の途中でやめた: 本局を止め、まだ何も記録しない(もう一度観戦するか、結果だけ見られる)。
     engineGame.cancel();
+    stopPace();
     watchTicket += 1;
     watch.value = null;
     return;

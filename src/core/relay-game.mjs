@@ -709,7 +709,8 @@ const traitDegree = (character, id) => {
  * @param {ReturnType<typeof relayPlan>} plan
  */
 export function createRelayClock(spec, plan) {
-  const control = relayTimeControl({ event: spec.event, kind: spec.kind });
+  // 師匠の1年の弟子の対局は、研修会・奨励会の決まり(spec.control。docs/disciple-mode-design.mdの38章)。
+  const control = spec.control ?? relayTimeControl({ event: spec.event, kind: spec.kind });
   const remaining = { black: control.main, white: control.main };
   const tempoRng = createRng(spec.seed ^ 0x7feb352d);
   const tempo = {};

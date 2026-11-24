@@ -252,3 +252,28 @@ export function clockText(seconds) {
   const pad = (n) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
+
+// ---- 師匠の1年の弟子の対局の持ち時間(docs/disciple-mode-design.mdの38章)
+
+/** 奨励会の初段(段位者の持ち時間になる段。shoreikai.mjsのSHODANと同じ)。 */
+const DISCIPLE_SHODAN = 6;
+
+/**
+ * 弟子の対局の決まり。奨励会は、級位者(1級以下)が持ち時間1時間・段位者(初段以上。三段リーグも)が1時間30分、
+ * 切れたら1分将棋(日本語版ウィキペディア「新進棋士奨励会」の持ち時間の節)。級位者と段位者が指す局は、下の段級の決まりにする
+ * (実物の決まりは見つけていない。38-2)。研修会は、大会の研修会と同じ30分・秒読み30秒(実物の決まりは見つけていない)。
+ * @param {{ event: 'kenshukai' | 'shoreikai', ranks?: number[] }} input ranksは2人の奨励会の段級(shoreikai.mjsのRANKSの番号)
+ */
+export function discipleTimeRule({ event, ranks = [] }) {
+  if (event !== 'shoreikai') return withName('m30');
+  const low = Math.min(...ranks.map((rank) => Number(rank)).filter(Number.isFinite));
+  return withName(Number.isFinite(low) && low >= DISCIPLE_SHODAN ? 'm90' : 'h1');
+}
+
+/**
+ * 決まりを、中継の時計(relay-game.mjsのcreateRelayClock・relayTimeline)の形にする。1日の対局で、休憩は入れない。
+ * @param {{ main: number, byoyomi: number }} rule
+ */
+export function watchTimeControl(rule) {
+  return { main: rule.main, byoyomi: rule.byoyomi, days: 1, start: 10 * 60, breaks: [], seal: null };
+}

@@ -33,7 +33,7 @@ const { chooseLogicMove } = await import("../src/core/logic-ai.mjs");
 const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 const { chooseReasonMove, reasonProfile } = await import("../src/core/reason-move.mjs");
 const { searchBestMove } = await import("../src/core/logic-search.mjs");
-const { chooseThinkingMove, thinkProfile } = await import("../src/core/reason-think.mjs");
+const { WATCH_THINK_BUDGET_MS, budgetProfile, chooseThinkingMove, thinkProfile } = await import("../src/core/reason-think.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
 import { discipleSelfplaySettings } from "../src/core/disciple-strength.mjs";
@@ -134,10 +134,12 @@ export function strengthForPlayer(spec) {
   // R<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士(34章)。エンジンは使わない。
   // S<深さ>(m)(t<ミリ秒>): 全部の手を読む論理の探索(34-15)。mを付けると駒の損得だけ(形の点なし)。
   // T<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士の考え方(全部の手を読む探索つき。34-16)。
-  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)$/);
+  // 末尾のbを付けると、観戦の1手の時間の上限(WATCH_THINK_BUDGET_MS。38章)で指す(例: T45-45-45-45b)。
+  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?$/);
   if (thinkSpec) {
-    const [reading, plan, steady, mate] = thinkSpec.slice(1).map(Number);
-    return { thinkProfile: thinkProfile({ reading, plan, steady, mate }), nodes: 0 };
+    const [reading, plan, steady, mate] = thinkSpec.slice(1, 5).map(Number);
+    const profile = thinkProfile({ reading, plan, steady, mate });
+    return { thinkProfile: thinkSpec[5] ? budgetProfile(profile, WATCH_THINK_BUDGET_MS) : profile, nodes: 0 };
   }
   // xを付けると形の点の段2(玉のまわりの利き・囲いの位置)。
   const fullSpec = spec.match(/^S(\d+)(m|x)?(?:t(\d+))?$/);

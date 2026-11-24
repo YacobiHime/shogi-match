@@ -309,7 +309,7 @@ export async function playEngineGame({ spec, search: baseSearch, formationMaster
         if (pick) choice = { move: pick.move, reason: { stage: 'follow', reason: 'follow', skipped: [] } };
       }
       if (!choice) {
-        const thought = await think({ sfen, levels: reasoner.levels ?? {}, planMove, seed: (spec.seed ?? 0) ^ Math.imul(ply + 7, 0x85ebca6b) });
+        const thought = await think({ sfen, levels: reasoner.levels ?? {}, planMove, seed: (spec.seed ?? 0) ^ Math.imul(ply + 7, 0x85ebca6b), budgetMs: spec.thinkBudgetMs ?? 0 });
         if (isCancelled()) return null;
         if (thought?.move && allowed.includes(thought.move)) choice = { move: thought.move, reason: thought };
       }

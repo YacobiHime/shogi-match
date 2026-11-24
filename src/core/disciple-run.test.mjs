@@ -206,6 +206,9 @@ describe('奨励会へ続く育成(28章)', () => {
     // CPUの強さの上限はLv49(AGENTS.md)。
     expect(shoreikaiOpponentLevel({ rating: 1600 })).toBe(49);
     expect(watchSpec(s, {}).spec.event).toBe('shoreikai');
+    // 奨励会の級位者の持ち時間は1時間・秒読み1分(38章)。観戦の1手の時間には上限がある。
+    expect(watchSpec(s, {}).spec.control).toMatchObject({ main: 3600, byoyomi: 60, breaks: [] });
+    expect(watchSpec(s, {}).spec.thinkBudgetMs).toBeGreaterThan(0);
     const { state: after, result } = playEvent(s, {});
     expect(result.games.length).toBeGreaterThan(0);
     expect(after.shoreikai.games.length).toBe(s.shoreikai.games.length + result.games.length);
@@ -262,6 +265,9 @@ describe('戦法熟練度(34-17)と作戦帳(35章のO2)', () => {
     expect(Object.keys(s.planBook.cards).sort()).toEqual(['bougin+kanigakoi', 'shiken+mino']);
     for (let i = 0; i < EXAM_TURN; i += 1) s = chooseAction(s, { kind: 'rest' }).state;
     const made = watchSpec(s, {});
+    // 研修会の持ち時間は30分・秒読み30秒(38章)。
+    expect(made.spec.control).toMatchObject({ main: 1800, byoyomi: 30 });
+    expect(made.timeText).toBe('持ち時間30分・秒読み30秒');
     const { state: after, result } = playEvent(s, { forced: [true] });
     const entry = after.planBook.cards[made.card];
     expect(entry.games).toBe(result.games.length);
