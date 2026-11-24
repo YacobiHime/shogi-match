@@ -413,12 +413,31 @@ function clues(move) {
 }
 
 /**
+ * はじめの局面で先に指す側。駒落ちは上手(後手の側)が先に指すので、手番が「w」の局面は後手から(docs/disciple-mode-design.mdの37章)。
+ * @param {string} [sfen] はじめの局面(空なら平手)
+ * @returns {'black' | 'white'}
+ */
+export const firstMover = (sfen) => (String(sfen ?? '').split(' ')[1] === 'w' ? 'white' : 'black');
+
+/**
+ * 何手目(1から)をどちらが指したか。
+ * @param {number} ply
+ * @param {string} [sfen] はじめの局面
+ * @returns {'black' | 'white'}
+ */
+export function moverOfPly(ply, sfen) {
+  const first = firstMover(sfen);
+  return (Number(ply) % 2 === 1) === (first === 'black') ? 'black' : 'white';
+}
+
+/**
  * 本局の棋譜(engine-game.mjsのentries)から、弟子の手を観戦の見立ての形にする。弟子の手には`d`(気づかなかったこと・詰み逃し・時計)がある。
  * @param {readonly { loss?: number, d?: { o?: number, m?: number, c?: string } }[]} entries
  * @param {'black' | 'white'} side 弟子の側
+ * @param {{ start?: string }} [options] startははじめの局面(駒落ち。空なら平手)
  */
-export function discipleWatchMoves(entries, side) {
-  const first = side === 'black' ? 0 : 1;
+export function discipleWatchMoves(entries, side, { start = '' } = {}) {
+  const first = moverOfPly(1, start) === side ? 0 : 1;
   const sign = side === 'black' ? 1 : -1;
   const moves = [];
   for (let index = first; index < entries.length; index += 2) {

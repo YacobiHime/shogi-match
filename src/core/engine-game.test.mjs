@@ -255,3 +255,30 @@ describe('研究メモ(師匠の1年の35-13)', () => {
     expect(seen[2]?.d?.s).toBe('shape');
   });
 });
+
+describe('駒落ちの局(docs/disciple-mode-design.mdの37章)', () => {
+  it('はじめの局面(spec.sfen)から上手が先に指し、読みにははじめの局面を渡す', async () => {
+    const { LEARNING_HANDICAPS } = await import('./learning-setup.mjs');
+    const lance = LEARNING_HANDICAPS.find((item) => item.id === 'lance').sfen;
+    const bases = new Set();
+    const search = async ({ moves, multiPv, searchMoves, base }) => {
+      bases.add(base ?? null);
+      const record = createGameRecord(base ?? undefined);
+      for (const usi of moves) appendUsiMove(record, usi);
+      const legal = enumerateLegalMoves(record.position).map(({ usi }) => usi).sort();
+      const pool = searchMoves?.length ? legal.filter((usi) => searchMoves.includes(usi)) : legal;
+      const whiteToMove = moves.length % 2 === 0;
+      const value = moves.length >= 60 ? (whiteToMove ? 9600 : -9600) : 30;
+      const candidates = pool.slice(0, Math.max(1, multiPv)).map((move, index) => ({ rank: index + 1, move, pv: [move], score: { type: 'cp', value: value - index * 40 } }));
+      return { move: candidates[0]?.move ?? '', candidates, completedCandidates: [] };
+    };
+    const game = await playEngineGame({ spec: { ...spec(20, 20), sfen: lance }, search });
+    expect([...bases]).toEqual([lance]);
+    // 1手目は上手(後手の側)の手。手はどれも、はじめの局面から合法。
+    const record = createGameRecord(lance);
+    expect(record.position.sfen.split(' ')[1]).toBe('w');
+    for (const entry of game.entries) expect(appendUsiMove(record, entry.move)).toBe(true);
+    expect(game.entries.length).toBeGreaterThan(10);
+    expect(['black', 'white']).toContain(game.end.winner);
+  });
+});

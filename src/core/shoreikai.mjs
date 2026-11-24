@@ -819,17 +819,11 @@ function startReikaiDay(run, rng, userLevel) {
   // ほかの三段の三段リーグが終わる月(羽音の四段昇段など)。
   if (world.month >= world.termEndsAt) playNpcTerm(world, scale, rng);
   const opponents = pickReikaiOpponents(run, rng);
-  // 手合い(師匠の1年。36-4)。段級の差で平手・平香交じり・香落ち。観戦するはじめの局は、平手の局を先に並べる。
+  // 手合い(師匠の1年。36-4)。段級の差で平手・平香交じり・香落ち(駒落ちの局も観戦できる。37章)。
   /** @type {any[] | null} */
-  let teai = null;
-  if (run.settings.teai) {
-    const memory = (run.teai ??= {});
-    const decided = opponents.map((id) => nextTeai({ a: { id: USER_ID, rank: run.rank }, b: { id, rank: world.members[id]?.rank ?? run.rank }, memory, rng }));
-    const order = opponents.map((_, index) => index).sort((x, y) => Number(decided[x].teai === 'lance') - Number(decided[y].teai === 'lance') || x - y);
-    const sorted = order.map((index) => opponents[index]);
-    teai = order.map((index) => decided[index]);
-    opponents.splice(0, opponents.length, ...sorted);
-  }
+  const teai = run.settings.teai
+    ? opponents.map((id) => nextTeai({ a: { id: USER_ID, rank: run.rank }, b: { id, rank: world.members[id]?.rank ?? run.rank }, memory: (run.teai ??= {}), rng }))
+    : null;
   const others = playMonth(world, rng, opponents, { teai: Boolean(run.settings.teai) });
   run.dayNo += 1;
   run.day = { no: run.dayNo, opponents, results: [], others, ...(teai ? { teai } : {}) };

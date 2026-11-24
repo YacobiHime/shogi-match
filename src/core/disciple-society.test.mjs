@@ -43,7 +43,7 @@ describe('手合い(36-4)', () => {
     expect(teaiRatingBonus(far, 'c')).toBe(0);
   });
 
-  it('師匠の1年の研修会は、例会に手合いと指導対局が付き、香落ちの局は観戦しない', () => {
+  it('師匠の1年の研修会は、例会に手合いと指導対局が付き、駒落ちの局は駒落ちの局面から観戦する(37章)', () => {
     let s = createDiscipleRun({ seed: 11, discipleId: 'minato' });
     let sawLance = false;
     let sawShido = false;
@@ -52,16 +52,17 @@ describe('手合い(36-4)', () => {
       if (s.end || s.shoreikai) break;
       const run = s.kenshukai;
       expect(run.settings.teai).toBe(true);
-      // 平手の局が先に並ぶ(はじめの局は、平手の局があれば平手)。
       const teai = run.day.teai ?? [];
-      const lanceFirst = teai[0]?.teai === 'lance';
-      if (lanceFirst) expect(teai.every((item) => !item || item.teai === 'lance')).toBe(true);
       for (const [index, kind] of (run.day.kinds ?? []).entries()) {
         if (kind === 'shido') sawShido = true;
         if (teai[index]?.teai === 'lance') sawLance = true;
       }
       if (run.pending?.handicap) {
-        expect(watchSpec(s)).toBeNull();
+        const made = watchSpec(s);
+        // 駒落ちの局面から、上手(後手の側)が先に指す。上手は作戦帳を使わない。
+        expect(made.spec.sfen.split(' ')[1]).toBe('w');
+        expect(made.spec.plans.white).toBeNull();
+        expect(made.side).toBe(run.pending.handicapGiver === 'player' ? 'white' : 'black');
         expect(eventOpponent(s).teai).toMatch(/香落ち|指導対局/);
       }
       if (run.pending?.teai === 'lance') {
@@ -149,5 +150,28 @@ describe('制度を物語で教える(36-6)', () => {
     }
     expect(queued.has('sys-teai')).toBe(true);
     expect(queued.has('sys-shido')).toBe(true);
+  });
+});
+
+describe('駒落ちの局の手番(37章)', async () => {
+  const { moverOfPly, firstMover, discipleWatchMoves } = await import('./disciple-strength.mjs');
+  const { reviewRows } = await import('./disciple-review.mjs');
+  const { goodMoves } = await import('./disciple-causes.mjs');
+  const { LEARNING_HANDICAPS } = await import('./learning-setup.mjs');
+  const lance = LEARNING_HANDICAPS.find((item) => item.id === 'lance').sfen;
+  it('駒落ちは上手(後手の側)が1手目を指す', () => {
+    expect(firstMover('')).toBe('black');
+    expect(firstMover(lance)).toBe('white');
+    expect(moverOfPly(1, lance)).toBe('white');
+    expect(moverOfPly(2, lance)).toBe('black');
+    expect(moverOfPly(1, '')).toBe('black');
+  });
+  it('見立てと棋譜の行は、駒落ちの局でも弟子の手を正しく数える', () => {
+    const entries = [{ move: '5a4b', eval: 0 }, { move: '7g7f', eval: 0 }, { move: '3c3d', eval: 0 }, { move: '2g2f', eval: -600 }];
+    expect(discipleWatchMoves(entries, 'black', { start: lance }).map((move) => move.ply)).toEqual([2, 4]);
+    expect(discipleWatchMoves(entries, 'white', { start: lance }).map((move) => move.ply)).toEqual([1, 3]);
+    const rows = reviewRows(entries, 'black', { sfen: lance });
+    expect(rows.map((row) => row.mine)).toEqual([false, true, false, true]);
+    expect(goodMoves(entries, 'black', { start: lance }).every((move) => move.ply % 2 === 0)).toBe(true);
   });
 });

@@ -262,7 +262,7 @@
           </button>
         </div>
         <p v-if="view.watchable" class="disciple__muted disciple__note">観戦すると、崩れた手の理由を見抜いて、次の稽古を狙い目にできる（師匠の眼 {{ view.eye.dan }}段）。</p>
-        <p v-else class="disciple__muted disciple__note" data-disciple-no-watch>今日の1局目は駒落ちなので、結果だけ見る（駒落ちの局の観戦は、まだできない）。</p>
+        <p v-if="view.handicap" class="disciple__muted disciple__note" data-disciple-handicap-note>今日の1局目は駒落ち。上手が駒を落として、先に指す。</p>
       </section>
 
       <!-- 指導の引き出し(25-1): 3回、手札の3枚から1枚ずつ選ぶ -->
@@ -621,7 +621,7 @@ import { STANDARD_SFEN } from "./game-state";
 import ShoreikaiNameboard from "./ShoreikaiNameboard.vue";
 import { memberAbilities, societyView, systemCardsOf } from "./core/disciple-society.mjs";
 import {
-  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank,
+  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, moverOfPly, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import {
   FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
@@ -910,6 +910,8 @@ type Watch = {
   /** 今日の作戦(35-7)。棋譜帳から開いた前の版の局には無い。 */
   plans?: { own: string; opponent: string } | null;
   entries: { move: string; eval: number; loss: number; d?: unknown }[]; end: unknown; win: boolean; done: boolean;
+  /** 駒落ちの局のはじめの局面(37章)。平手は空。 */
+  sfen?: string;
   marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
   /** 観戦の段(33-3)。指している→終局の札→その日の結果発表→検討。 */
   phase: "playing" | "end" | "result" | "review";
@@ -943,6 +945,7 @@ function startWatch() {
   }
   const current: Watch = {
     label: made.spec.label, side: made.side === "white" ? "white" : "black", opponent: made.opponent, plan: planNow, charm, plans: made.plans, entries: [], end: null, win: false, done: false,
+    sfen: made.spec.sfen ?? "",
     marks: [], guesses: [], selected: -1, error: "", phase: "playing", endCard: null, day: null, mode: "live", upto: 0, endReason: "",
     seek: null, good: [], goodSel: -1, praised: "",
   };
@@ -972,16 +975,17 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   const sign = current.side === "black" ? 1 : -1;
   const watchedMin = Math.min(0, ...current.entries.map((entry) => sign * (Number(entry?.eval) || 0)));
   // 観戦した本局の手は、研究メモ(35-13)に使う。
-  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm, entries: current.entries });
+  // 研究メモは平手の作戦の手なので、駒落ちの局からは書き足さない(37章)。
+  const { state: next, result } = playEvent(state.value, { plan: current.plan, forced: [current.win], watchedMin, charm: current.charm, entries: current.sfen ? [] : current.entries });
   charmPick.value = "";
   // 選んだ作戦は、その日の相手に合わせたものなので持ち越さない。
   plan.card = "";
   commit(next);
   // 崩れ方は盤面で起きたことから決める(33-5)。言えない手は印にしない。大一番は背景の札に。
-  current.marks = reviewMarks(current.entries, current.side, { dan: eyeDan(state.value?.eye), big: Boolean(current.plan) });
+  current.marks = reviewMarks(current.entries, current.side, { dan: eyeDan(state.value?.eye), big: Boolean(current.plan), start: current.sfen ?? "" });
   current.guesses = current.marks.map(() => null);
   current.selected = current.marks.length ? 0 : -1;
-  current.good = goodMoves(current.entries, current.side);
+  current.good = goodMoves(current.entries, current.side, { start: current.sfen ?? "" });
   current.done = true;
   // 終局の札 → その日の結果発表 → 検討の順に見せる(33-3。結果を先に知らせる)。
   current.endCard = endCardText({ win: current.win, reason: (end as { reason?: string })?.reason, plies: current.entries.length });
@@ -1068,7 +1072,7 @@ function praiseGood() {
 const watchTab = ref<"kifu" | "marks" | "good">("kifu");
 const moveListEl = ref<HTMLElement | null>(null);
 /** 手の一覧(終局したら作る)。 */
-const watchRows = computed(() => (watch.value?.done ? reviewRows(watch.value.entries, watch.value.side) : []));
+const watchRows = computed(() => (watch.value?.done ? reviewRows(watch.value.entries, watch.value.side, { sfen: watch.value.sfen || STANDARD_SFEN }) : []));
 const markPlies = computed(() => new Set(seeking.value ? [] : (watch.value?.marks ?? []).map((mark) => mark.ply)));
 const goodPlies = computed(() => new Set(seeking.value ? [] : (watch.value?.good ?? []).map((good) => good.ply)));
 /** その手が、まだ答えていない印か(答える前はAIの検討を見せない)。 */
@@ -1082,8 +1086,9 @@ function unansweredMark(ply: number) {
 const aiShown = computed(() => {
   const current = watch.value;
   if (!current || current.phase !== "review" || seeking.value) return null;
-  const next = unansweredMark(current.upto + 1) ? null : aiHint(current.entries, current.upto + 1);
-  const now = current.upto > 0 && !unansweredMark(current.upto) ? aiHint(current.entries, current.upto) : null;
+  const start = { start: current.sfen ?? "" };
+  const next = unansweredMark(current.upto + 1) ? null : aiHint(current.entries, current.upto + 1, start);
+  const now = current.upto > 0 && !unansweredMark(current.upto) ? aiHint(current.entries, current.upto, start) : null;
   const shown = { nextBest: next?.bestText ?? "", nextUsi: next?.best ?? "", pv: now?.pvText ?? "" };
   return shown.nextBest || shown.pv ? shown : null;
 });
@@ -1141,7 +1146,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onWatchKey));
 function openResearch() {
   const current = watch.value;
   if (!current) return;
-  emit("research", { sfen: STANDARD_SFEN, moves: current.entries.map((entry) => entry.move), ply: current.upto, name: `${view.value?.name ?? ""} 対 ${current.opponent.name}` });
+  emit("research", { sfen: current.sfen || STANDARD_SFEN, moves: current.entries.map((entry) => entry.move), ply: current.upto, name: `${view.value?.name ?? ""} 対 ${current.opponent.name}` });
 }
 /** 棋譜帳に残す(答えを入れたら、答えつきで入れ替える)。 */
 function saveToBook(current: Watch) {
@@ -1157,6 +1162,7 @@ function openBookGame(game: ReturnType<typeof bookList>[number]) {
   watch.value = {
     label: game.label, side: game.side === "white" ? "white" : "black", opponent: { name: game.opponent, level: 0 }, plan: null, charm: null,
     entries: game.entries.map((entry: { move: string; eval: number; best?: string; pv?: string }) => ({ ...entry, loss: 0 })), end: { reason: game.endReason }, win: game.win, done: true,
+    sfen: (game as { sfen?: string }).sfen ?? "",
     marks: game.marks, guesses: game.guesses.length ? game.guesses : game.marks.map(() => null), selected: -1, error: "",
     phase: "review", endCard: null, day: null, mode: "book", upto: game.plies, endReason: game.endReason,
     seek: null, good: game.good ?? [], goodSel: -1, praised: "",
@@ -1220,7 +1226,7 @@ function closeWatch() {
 const watchThought = computed(() => {
   const current = watch.value;
   if (!current || current.error || seeking.value) return "";
-  const mine = (index: number) => (index % 2 === 0 ? "black" : "white") === current.side;
+  const mine = (index: number) => moverOfPly(index + 1, current.sfen) === current.side;
   if (current.phase === "review") {
     const index = current.upto - 1;
     return index >= 0 && mine(index) ? thoughtLine(current.entries[index] as any) : "";
@@ -1234,12 +1240,12 @@ const watchThought = computed(() => {
 const watchReading = computed(() => {
   const current = watch.value;
   if (!current || current.phase !== "review" || seeking.value || current.upto < 1) return null;
-  if (((current.upto - 1) % 2 === 0 ? "black" : "white") !== current.side) return null;
-  return thoughtReading(current.entries as any, current.upto);
+  if (moverOfPly(current.upto, current.sfen) !== current.side) return null;
+  return thoughtReading(current.entries as any, current.upto, { start: current.sfen ?? "" });
 });
 /** 盤の局面(選んだ印の局面。印を選んでいなければ最新の局面)と、直前の手。 */
 const watchUpto = computed(() => (watch.value?.phase === "review" ? watch.value.upto : watch.value?.entries.length ?? 0));
-const watchSfen = computed(() => sfenAfter((watch.value?.entries ?? []).slice(0, watchUpto.value).map((entry) => entry.move)) ?? STANDARD_SFEN);
+const watchSfen = computed(() => sfenAfter((watch.value?.entries ?? []).slice(0, watchUpto.value).map((entry) => entry.move), watch.value?.sfen ?? "") ?? watch.value?.sfen ?? STANDARD_SFEN);
 const watchLastMove = computed(() => (watchUpto.value > 0 ? watch.value?.entries[watchUpto.value - 1]?.move ?? "" : ""));
 // 盤の枠を、描かれる盤と同じ大きさにする(TeamPeekSheet.vueと同じ方法)。
 const watchStageEl = ref<HTMLElement | null>(null);

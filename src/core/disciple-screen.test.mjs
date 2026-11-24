@@ -36,11 +36,11 @@ describe('検討の盤(docs/disciple-mode-design.mdの33-4)', () => {
     expect(source).toMatch(/const watchUpto = computed\(\(\) => \(watch\.value\?\.phase === "review" \? watch\.value\.upto/);
   });
   it('まだ答えていない印の手は、AIの検討を見せない', () => {
-    expect(source).toMatch(/const next = unansweredMark\(current\.upto \+ 1\) \? null : aiHint\(current\.entries, current\.upto \+ 1\);/);
-    expect(source).toMatch(/const now = current\.upto > 0 && !unansweredMark\(current\.upto\) \? aiHint\(current\.entries, current\.upto\) : null;/);
+    expect(source).toMatch(/const next = unansweredMark\(current\.upto \+ 1\) \? null : aiHint\(current\.entries, current\.upto \+ 1, start\);/);
+    expect(source).toMatch(/const now = current\.upto > 0 && !unansweredMark\(current\.upto\) \? aiHint\(current\.entries, current\.upto, start\) : null;/);
   });
   it('研究で開く・棋譜帳(棋譜帳から開いたものは答えを入れない)', () => {
-    expect(source).toMatch(/emit\("research", \{ sfen: STANDARD_SFEN, moves: current\.entries\.map/);
+    expect(source).toMatch(/emit\("research", \{ sfen: current\.sfen \|\| STANDARD_SFEN, moves: current\.entries\.map/);
     expect(source).toMatch(/if \(current\.mode === "book"\) return;/);
     expect(source).toMatch(/commit\(addBookGame\(structuredClone\(state\.value\), entry\)\);/);
   });
@@ -52,7 +52,7 @@ describe('検討の盤(docs/disciple-mode-design.mdの33-4)', () => {
 
 describe('崩れ方の見立て(docs/disciple-mode-design.mdの33-5)', () => {
   it('印は盤面から決めた6つの崩れ方で、主・副・外れで答え、盤に取られた駒の赤い輪と相手の次の手の点線を出す', () => {
-    expect(source).toMatch(/current\.marks = reviewMarks\(current\.entries, current\.side, \{ dan: eyeDan\(state\.value\?\.eye\), big: Boolean\(current\.plan\) \}\);/);
+    expect(source).toMatch(/current\.marks = reviewMarks\(current\.entries, current\.side, \{ dan: eyeDan\(state\.value\?\.eye\), big: Boolean\(current\.plan\), start: current\.sfen \?\? "" \}\);/);
     expect(source).toMatch(/v-for="id in REVIEW_CAUSE_ORDER"/);
     expect(source).toMatch(/selectedJudge\.right \? '見抜いた！' : selectedJudge\.near \? `おしい！/);
     expect(source).toMatch(/:risk-squares="clueRings"\s*:threat-arrows="clueArrows"/);
@@ -70,7 +70,7 @@ describe('見立てを面白くする(docs/disciple-mode-design.mdの33-6)', () 
     expect(source).toMatch(/if \(!current \|\| current\.phase !== "review" \|\| seeking\.value\) return null;/);
   });
   it('好手は金の印で、ほめるのは1局に1回。棋譜帳から開いたものはほめない', () => {
-    expect(source).toMatch(/current\.good = goodMoves\(current\.entries, current\.side\);/);
+    expect(source).toMatch(/current\.good = goodMoves\(current\.entries, current\.side, \{ start: current\.sfen \?\? "" \}\);/);
     expect(source).toMatch(/disciple__dot--gold/);
     expect(source).toMatch(/if \(!current \|\| !good \|\| current\.praised \|\| current\.mode === "book"\) return;/);
     expect(source).toMatch(/applyFindings\(state\.value, current\.marks, current\.guesses, \{ seekHit, praised: current\.praised \}\)/);
@@ -86,7 +86,7 @@ describe('理由で指す棋士の考えの一言と読み筋(34-17・34-18)', (
     expect(source).toMatch(/<p v-else-if="!watch\.end" class="disciple__ask">[^\n]*\n\s*<template v-else-if="watch\.phase === 'review'">/);
   });
   it('検討では、弟子の手の読み筋と、読んでいなかった相手の手を出す', () => {
-    expect(source).toMatch(/return thoughtReading\(current\.entries as any, current\.upto\);/);
+    expect(source).toMatch(/return thoughtReading\(current\.entries as any, current\.upto, \{ start: current\.sfen \?\? "" \}\);/);
     expect(source).toMatch(/data-disciple-reading/);
   });
 });

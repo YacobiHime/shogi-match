@@ -3,6 +3,7 @@
 
 import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
 import { moveLabel } from './research-record.mjs';
+import { moverOfPly } from './disciple-strength.mjs';
 
 /** 弟子の棋譜帳に残す対局の数(古い順に外す)。 */
 export const BOOK_MAX = 20;
@@ -44,7 +45,7 @@ export function reviewRows(entries, side, { sfen = STANDARD_SFEN } = {}) {
     if (!appendUsiMove(record, entry.move)) break;
     previous = entry.move;
     const ply = index + 1;
-    const mine = (side === 'black') === (ply % 2 === 1);
+    const mine = moverOfPly(ply, sfen) === side;
     rows.push({ ply, text, mine, ...evalWord(sign * (Number(entry.eval) || 0)) });
   }
   return rows;
@@ -54,14 +55,15 @@ export function reviewRows(entries, side, { sfen = STANDARD_SFEN } = {}) {
  * その手のAIの検討(33-4)。指した手と違うときのAIの最善手と、指した手のあとのAIの読み筋(本局の記録。新しく読まない)。
  * @param {readonly { move: string, best?: string, pv?: string }[]} entries
  * @param {number} ply その手(1から)
+ * @param {{ start?: string }} [options] startははじめの局面(駒落ち。37章)
  */
-export function aiHint(entries, ply) {
+export function aiHint(entries, ply, { start = '' } = {}) {
   const entry = entries[ply - 1];
   if (!entry) return null;
-  const sfen = sfenAt(entries, ply - 1);
+  const sfen = sfenAt(entries, ply - 1, start);
   const pvMoves = String(entry.pv ?? '').split(/\s+/).filter(Boolean);
   // 読み筋の文字(指した手のあとの局面から)。
-  const record = createGameRecord(sfenAt(entries, ply));
+  const record = createGameRecord(sfenAt(entries, ply, start));
   const pvText = [];
   let previous = entry.move;
   for (const usi of pvMoves.slice(0, 6)) {
@@ -84,7 +86,7 @@ export function aiHint(entries, ply) {
  * @param {number} upto 指した手の数
  */
 export function sfenAt(entries, upto, sfen = STANDARD_SFEN) {
-  const record = createGameRecord(sfen);
+  const record = createGameRecord(sfen || STANDARD_SFEN);
   for (const entry of entries.slice(0, Math.max(0, upto))) {
     if (!appendUsiMove(record, entry.move)) break;
   }
@@ -93,7 +95,7 @@ export function sfenAt(entries, upto, sfen = STANDARD_SFEN) {
 
 /**
  * 棋譜帳の1局(育成の状態に残す形。指し手・形勢・最善手・読み筋と、印と答え)。
- * @param {{ label: string, side: 'black' | 'white', opponent: { name: string }, win: boolean, entries: readonly { move: string, eval?: number, best?: string, pv?: string }[], endReason?: string, marks?: readonly any[], guesses?: readonly (string | null)[] }} game
+ * @param {{ label: string, side: 'black' | 'white', opponent: { name: string }, win: boolean, entries: readonly { move: string, eval?: number, best?: string, pv?: string }[], endReason?: string, sfen?: string, marks?: readonly any[], guesses?: readonly (string | null)[] }} game
  * @param {{ turn?: number, when?: string }} [meta]
  */
 export function bookEntry(game, { turn = 0, when = '' } = {}) {
@@ -104,6 +106,8 @@ export function bookEntry(game, { turn = 0, when = '' } = {}) {
     opponent: game.opponent?.name ?? '',
     win: Boolean(game.win),
     plies: game.entries.length,
+    // 駒落ちの局のはじめの局面(37章)。平手なら持たない。
+    ...(game.sfen && game.sfen !== STANDARD_SFEN ? { sfen: game.sfen } : {}),
     endReason: game.endReason ?? 'resign',
     turn,
     when,
@@ -156,13 +160,14 @@ export function thoughtLine(entry) {
  * 弟子の読み筋(思考の記録の`l`)と、相手の実際の手(34-18)。読み筋の2手目(弟子が読んだ相手の手)と、相手が実際に指した手が違えば「読んでいなかった手」。
  * @param {readonly { move: string, d?: { l?: string } }[]} entries
  * @param {number} ply 弟子の手(1から)
+ * @param {{ start?: string }} [options] startははじめの局面(駒落ち。37章)
  * @returns {{ text: string, expected: string, actual: string, actualText: string, surprised: boolean } | null}
  */
-export function thoughtReading(entries, ply) {
+export function thoughtReading(entries, ply, { start = '' } = {}) {
   const entry = entries[ply - 1];
   const line = String(entry?.d?.l ?? '').split(/\s+/).filter(Boolean);
   if (line.length < 2 || line[0] !== entry.move) return null;
-  const record = createGameRecord(sfenAt(entries, ply - 1));
+  const record = createGameRecord(sfenAt(entries, ply - 1, start));
   const labels = [];
   let previous = entries[ply - 2]?.move ?? '';
   for (const usi of line) {
@@ -172,6 +177,6 @@ export function thoughtReading(entries, ply) {
     previous = usi;
   }
   const actual = entries[ply]?.move ?? '';
-  const actualText = actual ? moveLabel(sfenAt(entries, ply), actual, entry.move) : '';
+  const actualText = actual ? moveLabel(sfenAt(entries, ply, start), actual, entry.move) : '';
   return { text: labels.join(' '), expected: line[1], actual, actualText, surprised: Boolean(actual) && actual !== line[1] };
 }

@@ -37,7 +37,8 @@ export const MARK_LOSS = Object.freeze({ decisive: 600, error: 250, slip: 100 })
 /** 投了は、この手数までは投げない(序盤の大差は、まだ指す)。いつ投げるかは、棋士の投了の早さ(resign-style.mjs。29章)。 */
 const RESIGN_MIN_PLY = 40;
 
-const sideOf = (ply) => (ply % 2 === 0 ? 'black' : 'white');
+/** 平手の、何手目(0から)をどちらが指すか。駒落ちの局はplayEngineGameの中で、はじめの局面から決め直す。 */
+const standardSideOf = (ply) => (ply % 2 === 0 ? 'black' : 'white');
 const other = (side) => (side === 'black' ? 'white' : 'black');
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 /** 盤の局面の鍵(手数を除く)。千日手を避けるのに使う。 */
@@ -178,7 +179,7 @@ export function shouldEngineResign({ ply, best, lastValue, style = resignStyleBy
  * resumeは、途中まで指した手(保存していた棋譜)。onMoveは、新しく指した1手ごとに呼ぶ。
  * @param {{
  *   spec: any,
- *   search: (request: { moves: string[], nodes: number, multiPv: number, searchMoves?: string[], threads?: number }) => Promise<any>,
+ *   search: (request: { moves: string[], nodes: number, multiPv: number, searchMoves?: string[], threads?: number, base?: string | null }) => Promise<any>,
  *   formationMaster?: any,
  *   onMove?: (entry: import('./relay-game.mjs').RelayMoveEntry, index: number) => void,
  *   isCancelled?: () => boolean,
@@ -187,14 +188,21 @@ export function shouldEngineResign({ ply, best, lastValue, style = resignStyleBy
  * }} options
  * @returns {Promise<import('./relay-game.mjs').RelayGame | null>} 止めたらnull
  */
-export async function playEngineGame({ spec, search, formationMaster = null, onMove = () => {}, isCancelled = () => false, resume = [], think = thinkHere }) {
+export async function playEngineGame({ spec, search: baseSearch, formationMaster = null, onMove = () => {}, isCancelled = () => false, resume = [], think = thinkHere }) {
+  // 駒落ちの局(spec.sfen。docs/disciple-mode-design.mdの37章)は、その局面から指す。上手(後手の側)が先に指す。
+  const startSfen = spec.sfen || STANDARD_SFEN;
+  const whiteFirst = startSfen.split(' ')[1] === 'w';
+  const sideOf = (ply) => (whiteFirst ? standardSideOf(ply + 1) : standardSideOf(ply));
+  const base = startSfen === STANDARD_SFEN ? null : startSfen;
+  /** @type {typeof baseSearch} */
+  const search = (request) => baseSearch(base ? { ...request, base } : request);
   const light = Boolean(spec.light);
   const strengths = { black: engineStrength(spec.black, { light }), white: engineStrength(spec.white, { light }) };
   // 持ち時間の時計だけに使う筋書き(勝ち負けは決めない。手数の目安で時間を配る)。
   const clock = createRelayClock(spec, relayPlan({ ...spec, winner: spec.winner ?? 'black' }));
   const plans = { black: openingPlanOf(spec, 'black'), white: openingPlanOf(spec, 'white') };
   const resignStyles = { black: resignStyleOf(spec.black), white: resignStyleOf(spec.white) };
-  const record = createGameRecord(STANDARD_SFEN);
+  const record = createGameRecord(startSfen);
   const moves = [];
   const entries = [];
   const seen = new Map([[positionKey(record.position.sfen), 1]]);
@@ -272,7 +280,7 @@ export async function playEngineGame({ spec, search, formationMaster = null, onM
     const planMove = openingPlanMove({ plans, side, ply, record, moves, legal: allowed, formations, lastCapture });
 
     const reasoner = player?.reason ?? null;
-    const ownMoves = Math.floor((ply + (side === 'black' ? 1 : 0)) / 2);
+    const ownMoves = moves.filter((_, index) => sideOf(index) === side).length;
     if (reasoner) books = noteBook(books, side, { planMove, ownMoves });
     const before = withCharacter();
     const read = reasoner || strength.logicLevel !== null || !(before.nodes > 0)

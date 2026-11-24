@@ -74,8 +74,12 @@ export function pickCutPly(entries, { plies, color }) {
  * 手を指したあとの局面(SFEN)。指せない手があればnull。
  * @param {string[]} moves USIの手
  */
-export function sfenAfter(moves) {
-  const record = createGameRecord(STANDARD_SFEN);
+/**
+ * @param {readonly string[]} moves
+ * @param {string} [start] はじめの局面(駒落ちの観戦。空なら平手)
+ */
+export function sfenAfter(moves, start = '') {
+  const record = createGameRecord(start || STANDARD_SFEN);
   for (const usi of moves) {
     if (!appendUsiMove(record, usi)) return null;
   }

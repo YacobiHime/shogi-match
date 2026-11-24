@@ -21,9 +21,10 @@ import {
   noteResearch, opponentPlanSpec, planCard, planSpec, researchNotes, surpriseToLearn, unlockChain,
 } from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
-import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
+import { A2, CLASS_RATINGS, SHIDO_BONUS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
 import { TEAI_RATING } from './teai.mjs';
+import { LEARNING_HANDICAPS } from './learning-setup.mjs';
 
 export const DISCIPLE_RUN_KEY = 'yacobihime:shogi-match:disciple:v1';
 export const DISCIPLE_RUN_VERSION = 1;
@@ -769,7 +770,7 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
   if (bigLost && !next.skills.includes('unbroken')) next.mood = clamp(next.mood - 1, -2, 2);
   const promoted = startClass !== null && next.kenshukai.cls > startClass;
   const overcome = overcomeSlump(next, { big, wins, losses }, MAX_SKILLS);
-  const label = kind === 'exam' ? '入会試験' : `第${startDay + 1}回例会`;
+  const label = kind === 'exam' ? '入会試験' : `第${startDay}回例会`;
   const text = `${label} ${wins}勝${losses}敗${events.length ? `。${events.join('・')}` : ''}`;
   next.log.push({ turn: next.turn, text });
   next.stamina = clamp(next.stamina - 10, 0, 100);
@@ -977,12 +978,18 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return null;
   const next = prepareDay(state);
-  // 駒落ちの局は、まだ観戦しない(結果だけ。36-4)。
-  if (pendingIsHandicap(next)) return null;
   const { card: ownCard, book, opponentStyle, opponentRook, side, member, run, rivalCard: rivalPick } = dayPlan(next, plan);
   if (!member) return null;
-  const level = next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
+  // 駒落ちの局(37章)は、駒落ちの局面から本当に指すので、相手の強さに手合いのぶんを足さない。指導対局の先生は、
+  // いまのクラスの研修会員の強さに、駒落ちのぶん(大会の指導対局と同じSHIDO_BONUS)を足した強さで指す。
+  const handicap = run.pending?.handicap ?? '';
+  const level = !next.shoreikai && run.pending?.kind === 'shido'
+    ? clamp(opponentLevel(null, run.cls) + (SHIDO_BONUS[/** @type {keyof typeof SHIDO_BONUS} */ (handicap)] ?? 0) / ELO_PER_LEVEL, 12, 49)
+    : next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
   const eventKind = next.shoreikai ? 'shoreikai' : 'kenshukai';
+  const startSfen = handicap ? LEARNING_HANDICAPS.find((item) => item.id === handicap)?.sfen ?? '' : '';
+  // 駒落ちの上手(後手の側)は作戦帳を使わない(駒落ちの上手の指し方。下手は平手と同じ作戦で指せる)。
+  const uwate = startSfen ? 'white' : null;
   const other = side === 'black' ? 'white' : 'black';
   // 相手の作戦は、研修会・奨励会が1局ごとに相手の得意戦法から選んだもの(pending.style)。前は比べ方の誤りで、いつも相掛かり＋舟囲いだった(35-1)。
   // 弟子の作戦は、作戦帳の中から、相手の飛車の向きに合うカードを熟練度で選ぶ(35-5)。力戦なら定跡なし。
@@ -999,8 +1006,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {
-    [side]: ownCard ? planSpec(ownCard, { steps: bookChainSteps(book, ownCard.id, strength.levels?.plan), castles: knownCastles }) : null,
-    [other]: rivalPick ? rivalPlanSpec(next.rival, rivalPick, level) : opponentPlanSpec(opponentStyle, level),
+    [side]: ownCard && uwate !== side ? planSpec(ownCard, { steps: bookChainSteps(book, ownCard.id, strength.levels?.plan), castles: knownCastles }) : null,
+    [other]: uwate === other ? null : rivalPick ? rivalPlanSpec(next.rival, rivalPick, level) : opponentPlanSpec(opponentStyle, level),
   };
   const opponent = {
     id: member.id, name: member.name, level: Math.round(level), kind: eventKind, character: member.character ?? null,
@@ -1013,12 +1020,15 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const spec = {
     key: `disciple:${next.seed}:${next.turn}:${run.dayNo}:${run.games.length}`, seed: (next.seed ^ Math.imul(next.turn + 1, 0x9e3779b1)) >>> 0,
     event: eventKind, kind: 'game', label: next.shoreikai ? run.pending?.label ?? '奨励会' : kind === 'exam' ? '入会試験' : `第${run.dayNo}回例会`,
+    ...(startSfen ? { sfen: startSfen, handicap } : {}),
     [side]: disciple, [other]: opponent,
     openings: { [side]: null, [other]: opponentStyle?.opening ?? opponentStyle?.id ?? null },
     plans,
   };
   // 観戦の札の「今日の作戦」(35-7)。
-  const today = { own: ownCard?.label ?? '力戦', opponent: opponentStyle?.label ?? '' };
+  const today = startSfen
+    ? { own: uwate === side ? '上手（駒落ち）' : ownCard?.label ?? '力戦', opponent: uwate === other ? '上手（駒落ち）' : opponentStyle?.label ?? '' }
+    : { own: ownCard?.label ?? '力戦', opponent: opponentStyle?.label ?? '' };
   return { spec, side, opponent: { name: member.name, level: round1(level) }, state: next, card: ownCard?.id ?? null, plans: today };
 }
 
@@ -1269,8 +1279,10 @@ export function discipleView(state) {
     eventTitle: eventTitle(state),
     big: isBigEvent(state),
     opponent: turnKind(state) === 'exam' || turnKind(state) === 'reikai' ? eventOpponent(state) : null,
-    /** 今日の1局目を観戦できるか(駒落ちの局はまだ観戦しない。36-4)。 */
-    watchable: !pendingIsHandicap(state),
+    /** 今日の1局目を観戦できるか(駒落ちの局も観戦できる。37章)。 */
+    watchable: true,
+    /** 今日の1局目の手合い(観戦の札の言葉)。 */
+    handicap: pendingIsHandicap(state),
     /** 作戦帳(35章のO2)。大一番の作戦の欄は、相手の飛車の向きに合う作戦を3つまで。 */
     book: bookView(state),
     words: state.words,

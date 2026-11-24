@@ -534,21 +534,11 @@ function startDay(run, rng, userLevel) {
     opponents.push(teacherId);
     kinds.push('shido');
   }
-  // 手合い(師匠の1年。36-4)。研修会員との局は、クラスの差で平手・平香交じり・香落ち。観戦するのはその日のはじめの局なので、
-  // 平手の局を先に並べる(駒落ちの局はまだ観戦しない。指導対局はいつも最後)。
+  // 手合い(師匠の1年。36-4)。研修会員との局は、クラスの差で平手・平香交じり・香落ち(駒落ちの局も観戦できる。37章)。
   /** @type {any[] | null} */
-  let teai = null;
-  if (run.settings.teai) {
-    const memory = (run.teai ??= {});
-    const decided = opponents.map((id, index) => (kinds[index] === 'shido' ? null : nextTeai({ a: { id: USER_ID, rank: run.cls }, b: { id, rank: world.members[id]?.cls ?? run.cls }, memory, rng })));
-    const order = opponents.map((_, index) => index).sort((x, y) => Number(kinds[x] === 'shido') - Number(kinds[y] === 'shido')
-      || Number(decided[x]?.teai === 'lance') - Number(decided[y]?.teai === 'lance') || x - y);
-    const sorted = order.map((index) => opponents[index]);
-    const sortedKinds = order.map((index) => kinds[index]);
-    teai = order.map((index) => decided[index]);
-    opponents.splice(0, opponents.length, ...sorted);
-    kinds.splice(0, kinds.length, ...sortedKinds);
-  }
+  const teai = run.settings.teai
+    ? opponents.map((id, index) => (kinds[index] === 'shido' ? null : nextTeai({ a: { id: USER_ID, rank: run.cls }, b: { id, rank: world.members[id]?.cls ?? run.cls }, memory: (run.teai ??= {}), rng })))
+    : null;
   const others = playDay(world, rng, opponents, { teai: Boolean(run.settings.teai) });
   run.day = { no: run.dayNo, opponents, kinds, results: [], others, ...(teai ? { teai } : {}) };
   link(run);

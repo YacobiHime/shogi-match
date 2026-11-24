@@ -12,7 +12,7 @@ type EngineGameDeps = {
   storage: () => Storage | null;
 };
 
-type SearchRequest = { moves: string[]; nodes: number; multiPv: number; searchMoves?: string[]; threads?: number };
+type SearchRequest = { moves: string[]; nodes: number; multiPv: number; searchMoves?: string[]; threads?: number; base?: string | null };
 type Waiting = {
   key: string;
   generation: number;
@@ -95,10 +95,11 @@ export function useEngineGame({ engineFactory, storage }: EngineGameDeps) {
       busy.add(worker);
       void (async () => {
         try {
-          const { moves, nodes, multiPv, searchMoves, threads } = item.request;
+          const { moves, nodes, multiPv, searchMoves, threads, base } = item.request;
           worker.applyStrengthOptions({ multiPv: Math.max(1, multiPv) });
           await worker.setSearchThreads(threads ?? 1);
-          worker.setPosition(`startpos${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
+          // 駒落ちの局は、はじめの局面から(docs/disciple-mode-design.mdの37章)。
+          worker.setPosition(`${base || "startpos"}${moves.length ? ` moves ${moves.join(" ")}` : ""}`);
           item.resolve(await worker.go({ nodes, maxTimeMs: MAX_TIME_MS, searchMoves }));
         } catch (error) {
           item.reject(error);

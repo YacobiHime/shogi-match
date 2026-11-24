@@ -7,7 +7,7 @@ import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
 import { captureOf, materialSwing } from './piece-points.mjs';
 import { detectTesujiShape, TESUJI_SHAPES } from './tesuji-shape.mjs';
 import { isSideToMoveInCheck } from './coach-advice.mjs';
-import { discipleWatchMoves, MARK_COUNT, MARK_MIN_LOSS } from './disciple-strength.mjs';
+import { discipleWatchMoves, moverOfPly, MARK_COUNT, MARK_MIN_LOSS } from './disciple-strength.mjs';
 import { THOUGHT_LINES, evalWord } from './disciple-review.mjs';
 import { detectWazaTesuji } from './move-waza.mjs';
 
@@ -54,7 +54,7 @@ export const REVIEW_AIM = Object.freeze({ right: 1.5, near: 1.35, wrong: 1.25, t
 
 /** 局面の列(はじめから何手指した局面か。0〜手数)。 */
 function sfenList(entries, sfen = STANDARD_SFEN) {
-  const record = createGameRecord(sfen);
+  const record = createGameRecord(sfen || STANDARD_SFEN);
   const list = [record.position.sfen];
   for (const entry of entries) {
     if (!appendUsiMove(record, entry.move)) break;
@@ -168,13 +168,13 @@ export function classifyMove(entries, side, ply, { sfen = STANDARD_SFEN, sfens =
  * @param {readonly { move: string, eval?: number }[]} entries
  * @param {'black' | 'white'} side
  */
-export function planSection(entries, side, { sfens = sfenList(entries), openingPly = openingEnd(entries, sfens) } = {}) {
+export function planSection(entries, side, { start = '', sfens = sfenList(entries, start), openingPly = openingEnd(entries, sfens) } = {}) {
   const sign = side === 'black' ? 1 : -1;
   const pov = (index) => sign * (Number(entries[index]?.eval) || 0);
   if (openingPly < 10) return null;
   const end = pov(openingPly - 1);
   if (end > CAUSE_RULES.planBehind) return null;
-  const big = discipleWatchMoves(entries.slice(0, openingPly), side).some((move) => move.loss >= MARK_MIN_LOSS);
+  const big = discipleWatchMoves(entries.slice(0, openingPly), side, { start }).some((move) => move.loss >= MARK_MIN_LOSS);
   if (big) return null;
   return { from: 1, to: openingPly, loss: Math.round(-end), startWord: evalWord(0).word, endWord: evalWord(end).word };
 }
@@ -189,17 +189,17 @@ function phaseText(ply, openingPly) {
  * 検討の印(33-5)。崩れた手のうち、崩れ方を言える手を落ち幅の大きい順に(師匠の眼の段で数が増える)。作戦負けの区間は別に1つ。
  * @param {readonly any[]} entries
  * @param {'black' | 'white'} side
- * @param {{ dan?: number, big?: boolean }} [options]
+ * @param {{ dan?: number, big?: boolean, start?: string }} [options] startははじめの局面(駒落ち。37章)
  */
-export function reviewMarks(entries, side, { dan = 1, big = false } = {}) {
-  const sfens = sfenList(entries);
+export function reviewMarks(entries, side, { dan = 1, big = false, start = '' } = {}) {
+  const sfens = sfenList(entries, start);
   const openingPly = openingEnd(entries, sfens);
   const count = Math.min(MARK_COUNT.max, MARK_COUNT.base + Math.floor((Math.max(1, dan) - 1) / MARK_COUNT.perDan));
   const sign = side === 'black' ? 1 : -1;
   const pov = (index) => (index >= 0 ? sign * (Number(entries[index]?.eval) || 0) : 0);
   // 勝つ見込みの落ち幅で並べる(勝勢から優勢のような、勝ち負けの変わらない落ち方は印にしない)。
   const drop = (ply) => winChanceOf(pov(ply - 2)) - winChanceOf(pov(ply - 1));
-  const marks = discipleWatchMoves(entries, side)
+  const marks = discipleWatchMoves(entries, side, { start })
     .filter((move) => move.loss >= MARK_MIN_LOSS && drop(move.ply) >= CAUSE_RULES.winDrop)
     .sort((a, b) => drop(b.ply) - drop(a.ply) || a.ply - b.ply)
     .map((move) => {
@@ -213,7 +213,7 @@ export function reviewMarks(entries, side, { dan = 1, big = false } = {}) {
     })
     .filter(Boolean)
     .slice(0, count);
-  const section = planSection(entries, side, { sfens, openingPly });
+  const section = planSection(entries, side, { start, sfens, openingPly });
   if (section && !marks.some((mark) => mark.ply <= section.to)) {
     marks.push({
       ply: section.to, loss: section.loss, cause: 'plan', alt: 'policy', sub: 'section', tesuji: '', tags: big ? ['big'] : [], rings: [], threat: '',
@@ -313,15 +313,14 @@ const GOOD_ORDER = Object.freeze({ only: 0, mate: 1, tesuji: 2 });
  * 悪い手を探すだけのふり返りにしないため、いちばん大事な順に3つまで。
  * @param {readonly { move: string, eval?: number, loss?: number, mark?: string }[]} entries
  * @param {'black' | 'white'} side
- * @param {{ sfens?: string[] }} [cache]
+ * @param {{ start?: string, sfens?: string[] }} [cache] startははじめの局面(駒落ち。37章)
  * @returns {{ ply: number, kind: 'only' | 'mate' | 'tesuji', name: string }[]}
  */
-export function goodMoves(entries, side, { sfens = sfenList(entries) } = {}) {
+export function goodMoves(entries, side, { start = '', sfens = sfenList(entries, start) } = {}) {
   const found = [];
-  const parity = side === 'black' ? 1 : 0;
   let mateSeen = false;
   for (let ply = 1; ply <= entries.length && ply < sfens.length; ply += 1) {
-    if (ply % 2 !== parity) continue;
+    if (moverOfPly(ply, start) !== side) continue;
     const entry = entries[ply - 1];
     if ((Number(entry.loss) || 0) > GOOD_RULES.maxLoss) continue;
     if (entry.mark === 'mate') {
