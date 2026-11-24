@@ -89,6 +89,8 @@
           <div><small>次の目標</small><b>{{ view.goal.text }}</b></div>
           <div v-if="view.goal.left" class="disciple__left">あと<b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
         </div>
+        <!-- 会の画面(36-5)。はじめての例会の朝の場面を見るまでは出さない(36-6)。 -->
+        <button v-if="society && societyShown" type="button" class="disciple__menu-btn disciple__menu-btn--text disciple__menu-btn--society" data-disciple-society-open @click="openSociety()">{{ society.title }}</button>
         <button v-if="bookGames.length" type="button" class="disciple__menu-btn disciple__menu-btn--text" data-disciple-book-open @click="bookOpen = true">棋譜帳</button>
         <button type="button" class="disciple__menu-btn disciple__menu-btn--text" data-disciple-slots-open @click="showSlots">記録</button>
         <button type="button" class="disciple__menu-btn" aria-label="戻る" data-disciple-back @click="emit('close')">←</button>
@@ -201,6 +203,7 @@
           </li>
         </ul>
         <p v-if="view.lastEvent?.events.length" class="disciple__events">{{ view.lastEvent.events.join('・') }}</p>
+        <button v-if="society && societyShown && state?.lastDay" type="button" class="disciple__link" data-disciple-society-last @click="openSociety('day')">ほかの局の結果と名札掛けを見る</button>
         <h4>なんて声をかける？</h4>
         <div class="disciple__choice">
           <button v-for="word in WORDS" :key="word.id" type="button" class="disciple__opt" :data-disciple-word="word.id" @click="words(word.id)">
@@ -213,6 +216,17 @@
       <section v-else-if="view.kind === 'exam' || view.kind === 'reikai'" class="disciple__panel disciple__sheet" data-disciple-event>
         <h3>{{ view.eventTitle }}<small v-if="view.big" class="disciple__bigtag">大一番</small></h3>
         <p v-if="view.opponent" class="disciple__muted">相手：{{ view.opponent.name }}（{{ view.opponent.label }}）<template v-if="view.book.opponentStyle">　得意 {{ view.book.opponentStyle }}</template></p>
+        <!-- 手合いと、相手の4つの能力(弟子と並べる。36-5) -->
+        <p v-if="view.opponent?.teai" class="disciple__teai" data-disciple-teai>手合い　<b>{{ view.opponent.teai }}</b></p>
+        <div v-if="opponentStats.length" class="disciple__versus" data-disciple-versus>
+          <div v-for="(stat, index) in opponentStats" :key="stat.key" class="disciple__versus-row">
+            <span class="disciple__versus-me"><b :class="`disciple__rank--${view.stats[index].rank}`">{{ view.stats[index].rank }}</b>{{ view.stats[index].value }}</span>
+            <span class="disciple__versus-name">{{ stat.label }}</span>
+            <span class="disciple__versus-them">{{ stat.value }}<b :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</b></span>
+          </div>
+          <small class="disciple__muted">左が{{ view.name }}、右が{{ view.opponent?.name }}</small>
+        </div>
+        <button v-if="society && societyShown && view.kind === 'reikai'" type="button" class="disciple__link" data-disciple-society-day @click="openSociety('day')">今日の対戦表を見る</button>
         <p v-if="view.stakes" class="disciple__stakes" data-disciple-stakes>{{ view.stakes }}</p>
         <template v-if="view.big">
           <h4>序盤の方針</h4>
@@ -243,11 +257,12 @@
         </template>
         <div class="disciple__row">
           <button type="button" class="disciple__btn" data-disciple-play @click="play">結果だけ見る</button>
-          <button v-if="engineFactory" type="button" class="disciple__btn disciple__btn--main" data-disciple-watch @click="startWatch">
+          <button v-if="engineFactory && view.watchable" type="button" class="disciple__btn disciple__btn--main" data-disciple-watch @click="startWatch">
             {{ view.big ? '作戦を授けて観戦する' : '1局目を観戦する' }}
           </button>
         </div>
-        <p class="disciple__muted disciple__note">観戦すると、崩れた手の理由を見抜いて、次の稽古を狙い目にできる（師匠の眼 {{ view.eye.dan }}段）。</p>
+        <p v-if="view.watchable" class="disciple__muted disciple__note">観戦すると、崩れた手の理由を見抜いて、次の稽古を狙い目にできる（師匠の眼 {{ view.eye.dan }}段）。</p>
+        <p v-else class="disciple__muted disciple__note" data-disciple-no-watch>今日の1局目は駒落ちなので、結果だけ見る（駒落ちの局の観戦は、まだできない）。</p>
       </section>
 
       <!-- 指導の引き出し(25-1): 3回、手札の3枚から1枚ずつ選ぶ -->
@@ -485,6 +500,87 @@
       </ul>
     </section>
 
+    <!-- 会の画面(36-5)。名札掛け・対戦表・会員・規定。 -->
+    <section v-if="societyOpen && society" class="disciple__panel disciple__society" role="dialog" :aria-label="society.title" data-disciple-society>
+      <h4>{{ society.title }}<button type="button" class="disciple__x" aria-label="閉じる" @click="closeSociety">×</button></h4>
+      <div class="disciple__society-tabs" role="tablist">
+        <button v-for="tab in SOCIETY_TABS" :key="tab.id" type="button" role="tab" class="disciple__society-tab" :aria-selected="societyTab === tab.id"
+          :data-disciple-society-tab="tab.id" @click="societyTab = tab.id; memberSel = ''">{{ tab.label }}</button>
+      </div>
+      <div class="disciple__society-body">
+        <template v-if="societyTab === 'board'">
+          <ShoreikaiNameboard :columns="society.board" :top-rank="society.topRank" :direction="society.kind === 'kenshukai' ? '右ほど上のクラス' : '右ほど上の段級'"
+            :you-label="view?.name ?? ''" rival-label="羽音の弟子" />
+          <p class="disciple__muted">名札は昇級すると右の列へ掛け替わる。{{ society.kind === 'kenshukai' ? 'A2クラスまで上がると、奨励会へ編入できる' : '三段になると三段リーグ' }}。</p>
+        </template>
+        <template v-else-if="societyTab === 'day'">
+          <div v-for="day in [society.upcoming, society.last].filter(Boolean)" :key="day.title" class="disciple__day" :data-disciple-day="day === society.upcoming ? 'next' : 'last'">
+            <h5>{{ day === society.upcoming ? '次：' : '前回：' }}{{ day.title }}</h5>
+            <ol class="disciple__day-mine">
+              <li v-for="(game, index) in day.mine" :key="`m${index}`" :class="{ 'disciple__day--rival': game.rival }">
+                <span class="disciple__star" :class="game.result === 'win' ? 'disciple__star--win' : game.result === 'loss' ? 'disciple__star--loss' : ''">{{ game.result === 'win' ? '○' : game.result === 'loss' ? '●' : Number(index) + 1 }}</span>
+                <span><b>{{ view?.name }}</b> − {{ game.name }}<small>（{{ game.place }}）</small></span>
+                <small class="disciple__teai-chip">{{ game.teai || '平手' }}</small>
+              </li>
+            </ol>
+            <p v-if="day.others.length" class="disciple__muted">近いクラスのほかの局</p>
+            <ul class="disciple__day-others">
+              <li v-for="(game, index) in day.others" :key="`o${index}`">
+                <small>{{ game.round != null ? `${game.round + 1}局目` : '' }}</small>
+                <span :class="{ 'disciple__won': game.winner === 'a' }">{{ game.a.name }}<small>（{{ game.a.place }}）</small></span>
+                <span class="disciple__muted">−</span>
+                <span :class="{ 'disciple__won': game.winner === 'b' }">{{ game.b.name }}<small>（{{ game.b.place }}）</small></span>
+                <small class="disciple__teai-chip">{{ game.teai || '平手' }}{{ game.winner ? '' : '・対局前' }}</small>
+              </li>
+            </ul>
+          </div>
+          <p v-if="!society.upcoming && !society.last" class="disciple__muted">例会が始まると、ここに組み合わせが出る。</p>
+        </template>
+        <template v-else-if="societyTab === 'members'">
+          <ul v-if="!memberSel" class="disciple__members">
+            <li v-for="member in society.members" :key="member.id">
+              <button type="button" class="disciple__member" :class="{ 'disciple__member--rival': member.rival, 'disciple__member--peer': member.peer }" :data-disciple-member="member.id" @click="memberSel = member.id">
+                <span><b>{{ member.name }}</b><small>{{ member.place }}・{{ member.age }}歳{{ member.rival ? '・羽音の弟子' : member.peer ? '・同期' : '' }}</small></span>
+                <span class="disciple__member-ranks"><i v-for="stat in member.abilities" :key="stat.key" :class="`disciple__rank--${stat.rank}`" :title="stat.label">{{ stat.rank }}</i></span>
+              </button>
+            </li>
+          </ul>
+          <div v-else-if="selectedMember" class="disciple__member-card" data-disciple-member-card>
+            <button type="button" class="disciple__link" @click="memberSel = ''">← 会員の一覧</button>
+            <h5>{{ selectedMember.name }}<small>{{ selectedMember.place }}・{{ selectedMember.age }}歳</small></h5>
+            <div v-for="stat in selectedMember.abilities" :key="stat.key" class="disciple__stat">
+              <span class="disciple__stat-name">{{ stat.label }}</span>
+              <span class="disciple__rank" :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</span>
+              <span class="disciple__bar"><i :style="{ width: `${Math.min(100, stat.value / 12)}%` }"></i></span>
+              <span class="disciple__num">{{ stat.value }}</span>
+            </div>
+            <p class="disciple__muted">得意 {{ selectedMember.style || '—' }}　この会での成績 {{ selectedMember.record.w }}勝{{ selectedMember.record.l }}敗　{{ view?.name }}と {{ selectedMember.vs.w }}勝{{ selectedMember.vs.l }}敗（{{ view?.name }}から見て）</p>
+          </div>
+        </template>
+        <template v-else>
+          <dl class="disciple__rules">
+            <div><dt>いま</dt><dd>{{ society.rules.place }}<template v-if="society.rules.progress">　{{ society.rules.progress.record }}<template v-if="society.rules.progress.streak >= 2">・{{ society.rules.progress.streak }}連勝中</template></template></dd></div>
+            <div v-if="society.rules.rule"><dt>{{ society.rules.next }}へ</dt><dd>{{ society.rules.rule }}<template v-if="society.rules.progress">（あと{{ society.rules.progress.winsLeft }}勝）</template></dd></div>
+            <div><dt>降級点</dt><dd>{{ society.rules.point ? '付いている（もう一度負けが込むと降級）' : society.rules.slump ? 'あと1つ負けると付く' : 'なし' }}</dd></div>
+            <div><dt>手合い</dt><dd><span v-for="row in society.rules.teai" :key="row.gap" class="disciple__rules-teai">{{ row.gap }}：{{ row.teai }}</span><span v-if="society.rules.shido" class="disciple__rules-teai">2回に1回の例会の4局目：幹事の先生との指導対局（駒落ち）</span></dd></div>
+            <div v-if="society.rules.age"><dt>年齢制限</dt><dd>{{ society.rules.age.shodan }}歳までに初段、{{ society.rules.age.pro }}歳までに四段（いま{{ society.rules.age.now }}歳）</dd></div>
+            <div><dt>この先</dt><dd>{{ society.rules.exit }}</dd></div>
+          </dl>
+          <table v-if="society.rules.league" class="disciple__league" data-disciple-league>
+            <caption>第{{ society.rules.league.term }}期 三段リーグ（{{ society.rules.league.round }}/{{ society.rules.league.rounds }}回戦）</caption>
+            <tr v-for="row in society.rules.league.rows" :key="row.place + row.name" :class="[`disciple__league--${row.zone}`, { 'disciple__league--you': row.you }]">
+              <td>{{ row.place }}</td><td>{{ row.name }}</td><td>{{ row.wins }}勝{{ row.losses }}敗</td>
+              <td class="disciple__league-marks">{{ row.marks.map((mark) => mark === 'win' ? '○' : mark === 'loss' ? '●' : '・').join('') }}</td>
+            </tr>
+          </table>
+          <div v-if="systemCards.length" class="disciple__cards" data-disciple-system-cards>
+            <h5>制度の札</h5>
+            <details v-for="card in systemCards" :key="card.id" :data-disciple-system-card="card.id"><summary>{{ card.title }}</summary><p>{{ card.text }}</p></details>
+          </div>
+        </template>
+      </div>
+    </section>
+
     <!-- 一門の名簿(29章) -->
     <section v-if="ichimonOpen" class="disciple__panel disciple__skills disciple__ichimon" data-disciple-ichimon>
       <h4>一門<button type="button" class="disciple__x" aria-label="閉じる" @click="ichimonOpen = false">×</button></h4>
@@ -522,6 +618,8 @@ import { charmById, resolveScene } from "./core/disciple-events.mjs";
 import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam, saveIchimon } from "./core/disciple-ichimon.mjs";
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
 import { STANDARD_SFEN } from "./game-state";
+import ShoreikaiNameboard from "./ShoreikaiNameboard.vue";
+import { memberAbilities, societyView, systemCardsOf } from "./core/disciple-society.mjs";
 import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, skillById, statRank,
 } from "./core/disciple-strength.mjs";
@@ -705,6 +803,40 @@ function growthLine(result: { newSkills?: string[]; newCards?: string[]; newChar
   return charms ? `お守り${charms}を手に入れた。大一番に持たせられる` : "";
 }
 const skillsOpen = ref(false);
+// ---- 会の画面(36-5)。名札掛け・対戦表・会員・規定。
+const SOCIETY_TABS = [
+  { id: "board", label: "名札掛け" },
+  { id: "day", label: "対戦表" },
+  { id: "members", label: "会員" },
+  { id: "rules", label: "規定" },
+] as const;
+type SocietyTab = (typeof SOCIETY_TABS)[number]["id"];
+const societyOpen = ref(false);
+const societyTab = ref<SocietyTab>("board");
+const memberSel = ref("");
+const society = computed(() => (state.value ? societyView(state.value) : null));
+/** 会のボタンは、はじめての例会の朝の場面(制度の札「名札掛けと例会」)を見てから出す(36-6)。前の版の保存や奨励会では、すぐ出す。 */
+const societyShown = computed(() => {
+  const s = state.value;
+  if (!s) return false;
+  return Boolean(s.shoreikai) || (s.systemCards ?? []).includes("reikai") || (s.kenshukai?.dayNo ?? 0) > 1;
+});
+const systemCards = computed(() => systemCardsOf(state.value));
+const selectedMember = computed(() => society.value?.members.find((member) => member.id === memberSel.value) ?? null);
+/** 例会の札の、相手の4つの能力(弟子と並べる)。 */
+const opponentStats = computed(() => {
+  const opponent = view.value?.opponent;
+  return opponent?.id && Number.isFinite(opponent.level) ? memberAbilities(opponent.id, opponent.level) : [];
+});
+function openSociety(tab: SocietyTab = "board") {
+  societyTab.value = tab;
+  memberSel.value = "";
+  societyOpen.value = true;
+}
+function closeSociety() {
+  societyOpen.value = false;
+  memberSel.value = "";
+}
 /** 作戦帳のシート(35-12)。覚えられる作戦が出たら開く。 */
 const plansOpen = ref(false);
 const PLAN_TIER_TEXT: Record<string, string> = { start: "はじめ", basic: "基本", advanced: "応用", special: "特殊な囲い", surprise: "奇襲" };
@@ -1176,6 +1308,11 @@ function goBack() {
     lesson.value = null;
     return true;
   }
+  if (societyOpen.value) {
+    if (memberSel.value) memberSel.value = "";
+    else closeSociety();
+    return true;
+  }
   if (plansOpen.value) {
     plansOpen.value = false;
     return true;
@@ -1360,6 +1497,74 @@ defineExpose({ goBack });
 .shogi-game .disciple__card .disciple__fit { position: absolute; top: -0.5rem; left: 50%; transform: translateX(-50%); white-space: nowrap; }
 .shogi-game .disciple .disciple__card small.disciple__card-cost { color: #4f86c6; }
 .shogi-game .disciple .disciple__chip--btn, .shogi-game .disciple .disciple__chip--btn:not(:disabled):hover { min-width: 0; min-height: 0; height: auto; margin: 0; padding: 0.08rem 0.45rem; border: 0; border-radius: 999px; background: #fff; color: var(--accent-ink); box-shadow: inset 0 0 0 1.5px var(--accent); font-size: 0.66rem; font-weight: 900; line-height: 1.5; cursor: pointer; }
+/* 会の画面(36-5)。ほかのシートより広く、画面の上下いっぱいまで。中身は枠の中で動く。 */
+.shogi-game .disciple__society {
+  position: absolute; left: 50%; top: 4.4rem; bottom: 0.8rem; z-index: 8; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 0.5rem; width: min(46rem, calc(100% - 1.2rem)); overflow: hidden;
+  background: #fffcf4; box-shadow: 0 0.6rem 1.6rem rgba(29, 42, 54, 0.28);
+}
+.shogi-game .disciple__society h4 { display: flex; align-items: center; justify-content: space-between; margin: 0; font-size: 1rem; }
+.shogi-game .disciple__society-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.3rem; flex: none; }
+.shogi-game .disciple .disciple__society-tab {
+  min-height: 2.6rem; padding: 0 0.3rem; border: 1px solid var(--line); border-radius: 0.6rem; background: #fff; color: var(--ink); font-size: 0.85rem; font-weight: 800;
+}
+.shogi-game .disciple .disciple__society-tab[aria-selected="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.shogi-game .disciple__society-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; font-size: 0.85rem; }
+.shogi-game .disciple__society-body h5 { margin: 0.4rem 0 0.3rem; font-size: 0.9rem; }
+.shogi-game .disciple__society-body h5 small { margin-left: 0.5rem; color: var(--muted); font-weight: 600; }
+.shogi-game .disciple__day + .disciple__day { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px dashed var(--line); }
+.shogi-game .disciple__day ol, .shogi-game .disciple__day ul { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .disciple__day-mine li { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto; align-items: center; gap: 0.4rem; padding: 0.3rem 0.4rem; border-radius: 0.5rem; background: rgba(241, 165, 76, 0.12); }
+.shogi-game .disciple__day--rival { box-shadow: inset 3px 0 0 #8e6ad8; }
+.shogi-game .disciple__day-others li { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 0.3rem; padding: 0.15rem 0.4rem; }
+.shogi-game .disciple__day small { color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple__won { font-weight: 800; }
+.shogi-game .disciple__won::after { content: "○"; margin-left: 0.2rem; color: #c0392b; }
+.shogi-game .disciple__teai-chip { padding: 0.05rem 0.45rem; border-radius: 999px; background: rgba(29, 42, 54, 0.07); white-space: nowrap; }
+/* スマホ: 手合いの札は名前の下の行へ(名前を折り返さない)。 */
+@media (max-width: 560px) {
+  .shogi-game .disciple__day-others li { grid-template-columns: 2.4rem minmax(0, 1fr) auto minmax(0, 1fr); row-gap: 0.1rem; padding-block: 0.25rem; border-bottom: 1px solid var(--line); }
+  .shogi-game .disciple__day-others li > .disciple__teai-chip { grid-column: 2 / -1; justify-self: start; }
+  .shogi-game .disciple__day-mine li { grid-template-columns: 1.6rem minmax(0, 1fr); row-gap: 0.1rem; }
+  .shogi-game .disciple__day-mine li > .disciple__teai-chip { grid-column: 2; justify-self: start; }
+  .shogi-game .disciple__day-others li small { font-size: 0.66rem; }
+}
+.shogi-game .disciple__members { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .disciple .disciple__member {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; min-height: 2.8rem; padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line); border-radius: 0.6rem; background: #fff; color: var(--ink); text-align: left;
+}
+.shogi-game .disciple__member small { display: block; color: var(--muted); font-size: 0.72rem; }
+.shogi-game .disciple .disciple__member--rival { border-color: #8e6ad8; }
+.shogi-game .disciple .disciple__member--peer { border-color: #4f9a72; }
+.shogi-game .disciple__member-ranks { display: flex; gap: 0.2rem; }
+.shogi-game .disciple__member-ranks i { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 0.35rem; color: #fff; font-style: normal; font-weight: 800; font-size: 0.75rem; }
+.shogi-game .disciple__member-card { display: grid; gap: 0.35rem; }
+.shogi-game .disciple__rules { display: grid; gap: 0.35rem; margin: 0; }
+.shogi-game .disciple__rules > div { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.5rem; }
+.shogi-game .disciple__rules dt { color: var(--muted); font-weight: 800; }
+.shogi-game .disciple__rules dd { margin: 0; }
+.shogi-game .disciple__rules-teai { display: block; }
+.shogi-game .disciple__league { width: 100%; margin-top: 0.6rem; border-collapse: collapse; font-size: 0.8rem; }
+.shogi-game .disciple__league caption { text-align: left; font-weight: 800; }
+.shogi-game .disciple__league td { padding: 0.2rem 0.3rem; border-bottom: 1px solid var(--line); }
+.shogi-game .disciple__league--promote td { background: rgba(241, 165, 76, 0.18); }
+.shogi-game .disciple__league--you td { font-weight: 800; }
+.shogi-game .disciple__league-marks { letter-spacing: 0.1em; }
+.shogi-game .disciple__cards { margin-top: 0.6rem; }
+.shogi-game .disciple__cards details { padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 0.5rem; background: #fff; }
+.shogi-game .disciple__cards details + details { margin-top: 0.25rem; }
+.shogi-game .disciple__cards summary { min-height: 1.8rem; font-weight: 800; cursor: pointer; }
+.shogi-game .disciple__cards p { margin: 0.2rem 0 0.2rem; }
+/* 例会の札の手合いと、相手の4つの能力(弟子と並べる)。 */
+.shogi-game .disciple__teai { margin: 0.2rem 0; font-size: 0.85rem; }
+.shogi-game .disciple__teai b { color: #a3522a; }
+.shogi-game .disciple__versus { display: grid; gap: 0.15rem; margin: 0.3rem 0; font-size: 0.78rem; }
+.shogi-game .disciple__versus-row { display: grid; grid-template-columns: 1fr 3rem 1fr; align-items: center; gap: 0.4rem; }
+.shogi-game .disciple__versus-me { display: flex; justify-content: flex-end; align-items: center; gap: 0.3rem; }
+.shogi-game .disciple__versus-them { display: flex; align-items: center; gap: 0.3rem; }
+.shogi-game .disciple__versus-name { text-align: center; color: var(--muted); font-weight: 800; }
+.shogi-game .disciple__versus b { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 0.3rem; color: #fff; font-size: 0.7rem; }
 .shogi-game .disciple__skills { left: 50%; top: 4.4rem; z-index: 7; transform: translateX(-50%); width: min(24rem, calc(100% - 1.2rem)); max-height: calc(100% - 12rem); overflow-y: auto; }
 .shogi-game .disciple__skills h4 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.3rem; font-size: 0.9rem; }
 .shogi-game .disciple .disciple__x { width: 2rem; height: 2rem; border: 0; border-radius: 50%; background: #e9e2d2; color: var(--ink); font-weight: 900; }

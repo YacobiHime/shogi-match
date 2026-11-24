@@ -5,7 +5,7 @@
 
 import { createRng } from './ryuo-random.mjs';
 import {
-  APTITUDE_KEYS, DISCIPLES, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
+  APTITUDE_KEYS, DISCIPLES, ELO_PER_LEVEL, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
   failChance, judgeGuess, raiseAptitude, skillById, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
@@ -23,6 +23,7 @@ import {
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
 import { RANK_RATINGS, SANDAN, SHODAN, createShoreikaiRun, describeShoreikai, rankLabel, recordShoreikaiGame } from './shoreikai.mjs';
+import { TEAI_RATING } from './teai.mjs';
 
 export const DISCIPLE_RUN_KEY = 'yacobihime:shogi-match:disciple:v1';
 export const DISCIPLE_RUN_VERSION = 1;
@@ -37,7 +38,11 @@ export const HARD_TURNS = 24 * 16;
 export const SHOREIKAI_BASE_LEVEL = 39;
 export const SHOREIKAI_LEVEL_PER_RATING = 11.5 / (1490 - 1150);
 /** 奨励会の規定(みじかい規模・年齢制限あり。21歳で初段・26歳で四段)。 */
-export const SHOREIKAI_SETTINGS = Object.freeze({ scale: 'mini', ageLimit: true });
+export const SHOREIKAI_SETTINGS = Object.freeze({ scale: 'mini', ageLimit: true, teai: true });
+/** 研修会の設定(36-4)。手合いと指導対局(名簿がないので架空の幹事の先生)。 */
+export const KENSHUKAI_SETTINGS = Object.freeze({ shido: true, teai: true, fallbackTeachers: true });
+/** 指導対局の先生の強さ(いまのクラスの研修会員のLvに足す。指導なので本当の強さでは指さない。36-4)。 */
+export const SHIDO_LEVEL_PLUS = 0.25;
 /** 研修会の世界の物差し(F2の相手のLv)と、1クラスで上がるLv(23-3)。 */
 export const OPPONENT_BASE_LEVEL = 17;
 export const OPPONENT_CLASS_STEP = 2.2;
@@ -245,7 +250,43 @@ function advanceTurn(state, rng) {
   checkScenes(state, { calendar: turnCalendar(state.turn, state.startGrade) });
   // 次のターンが弟子の大一番なら、師匠の大一番と重なる場面(32章)。
   checkClash(state, isBigEvent(state));
+  checkSystemScenes(state);
 }
+
+/** 三段リーグの最終日の前夜の場面を出す見込み(自力・他力のとき。36-6)。 */
+const FINAL_OUTLOOKS = Object.freeze(['self', 'others']);
+/** 年齢制限の延長の場面を出す歳(26歳の前の年。36-6)。 */
+const EXTEND_SCENE_AGE = 25;
+
+/**
+ * 制度を教える場面を積む(36-6)。その制度が初めて効く瞬間に、1つずつ(1回のターンに1つまで)。
+ * 入会試験の前・はじめての例会の朝・はじめての香落ちと指導対局・降級点・B1(研修会の出口)、奨励会のはじめての平香交じり・
+ * 三段リーグの最終日の前夜・延長。
+ * @param {any} state 書き換えてよい写し
+ */
+function checkSystemScenes(state) {
+  if (state.end) return;
+  const seen = (key) => (state.scenesSeen?.[key]?.count ?? 0) > 0 || (state.sceneQueue ?? []).includes(key);
+  const due = [];
+  if (!state.kenshukai && !state.shoreikai && state.turn >= EXAM_TURN) due.push('sys-kenshukai');
+  const ken = state.kenshukai && !state.kenshukai.done ? state.kenshukai : null;
+  if (ken?.phase === 'reikai') {
+    due.push('sys-reikai');
+    if (ken.day?.teai?.some((item) => item?.teai === 'lance')) due.push('sys-teai');
+    if (ken.day?.kinds?.includes('shido')) due.push('sys-shido');
+    if (ken.point) due.push('sys-point');
+    if (ken.cls >= EXIT_SCENE_CLASS) due.push('sys-exit');
+  }
+  const sho = state.shoreikai;
+  if (sho?.phase === 'reikai' && sho.day?.teai?.some((item) => item && item.rule !== 'hirate')) due.push('sys-hanko');
+  if (sho?.point) due.push('sys-point');
+  if (sho?.phase === 'league' && sho.league && sho.league.round === sho.league.rounds - 1 && FINAL_OUTLOOKS.includes(sho.pending?.stakes?.outlook)) due.push('sys-final');
+  if (sho && sho.rank >= SANDAN && discipleAgeMonths(state) >= EXTEND_SCENE_AGE * 12) due.push('sys-extend');
+  const key = due.find((item) => !seen(item));
+  if (key) queueScene(state, key);
+}
+/** 研修会の出口の場面を出すクラス(B1。A2のすぐ下)。 */
+const EXIT_SCENE_CLASS = 9;
 
 /**
  * 予定を1つ選んでターンを進める(このターンが予定を選ぶターンのときだけ)。
@@ -421,7 +462,7 @@ export function eventOpponent(state) {
     const run = state.shoreikai;
     const member = run.world.members[run.pending?.opponentId ?? ''];
     if (!member) return null;
-    return { name: member.name, cls: run.rank, label: `奨励会 ${member.dan ?? ''}${member.rival ? '・羽音の弟子' : ''}`, level: round1(shoreikaiOpponentLevel(member)), rival: Boolean(member.rival) };
+    return { name: member.name, cls: run.rank, label: `奨励会 ${member.dan ?? ''}${member.rival ? '・羽音の弟子' : ''}`, level: round1(pendingOpponentLevel(state, member)), rival: Boolean(member.rival), id: member.id, teai: pendingTeaiText(state) };
   }
   if (turnKind(state) === 'exam') {
     const level = effectiveLevel(discipleStrength({ stats: state.stats, aptitudes: aptitudeRanks(state), style: state.style, skills: state.skills }));
@@ -431,13 +472,49 @@ export function eventOpponent(state) {
   const pending = describeKenshukai(state.kenshukai)?.pending;
   if (!pending?.opponent) return null;
   const member = state.kenshukai.world.members[pending.opponent.id];
-  return { name: pending.opponent.name, cls: state.kenshukai.cls, label: `${classLabel(member?.cls ?? state.kenshukai.cls)}クラス${member?.rival ? '・羽音の弟子' : ''}`, level: round1(opponentLevel(member, state.kenshukai.cls)), rival: Boolean(member?.rival) };
+  const teacher = pending.kind === 'shido';
+  const label = teacher ? `${pending.opponent.dan ?? ''}・研修会の幹事` : `${classLabel(member?.cls ?? state.kenshukai.cls)}クラス${member?.rival ? '・羽音の弟子' : ''}`;
+  return { name: pending.opponent.name, cls: state.kenshukai.cls, label, level: round1(pendingOpponentLevel(state, member)), rival: Boolean(member?.rival), id: pending.opponent.id, teai: pendingTeaiText(state) };
 }
 const round1 = (value) => Math.round(value * 10) / 10;
 
 /** 奨励会の相手のLv(28章)。相手のレーティングから(伸びる相手は強くなる)。 */
 export function shoreikaiOpponentLevel(member) {
   return clamp(SHOREIKAI_BASE_LEVEL + ((Number(member?.rating) || RANK_RATINGS[0]) - RANK_RATINGS[0]) * SHOREIKAI_LEVEL_PER_RATING, 12, 49);
+}
+
+/**
+ * 例会のいまの局の、結果だけの勝ち負けに使う相手のLv(36-4)。指導対局は、いまのクラスの研修会員に少し足した強さ。
+ * 香落ちは、相手が上手なら相手を弱く、弟子が上手なら相手を強く(香のぶん。TEAI_RATING)。
+ * @param {any} state
+ * @param {any} member
+ */
+export function pendingOpponentLevel(state, member) {
+  const run = state.shoreikai ?? state.kenshukai;
+  const pending = run?.pending;
+  if (!state.shoreikai && pending?.kind === 'shido') return clamp(opponentLevel(null, run.cls) + SHIDO_LEVEL_PLUS, 12, 49);
+  const base = state.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
+  const shift = pending?.handicap === 'lance' ? TEAI_RATING / ELO_PER_LEVEL : 0;
+  if (pending?.handicapGiver === 'opponent') return clamp(base - shift, 12, 49);
+  if (pending?.handicapGiver === 'player') return clamp(base + shift, 12, 49);
+  return base;
+}
+
+/** いまの局が駒落ちか(駒落ちの局はまだ観戦しない。36-4)。 */
+export function pendingIsHandicap(state) {
+  const run = state.shoreikai ?? state.kenshukai;
+  return Boolean(run?.pending?.handicap);
+}
+
+/** いまの局の手合いの言葉(「香落ち（相沢 湊が下手）」「平手」「指導対局 飛車落ち」)。手合いのない局は空。 */
+export function pendingTeaiText(state) {
+  const run = state.shoreikai ?? state.kenshukai;
+  const pending = run?.pending;
+  if (!pending) return '';
+  if (pending.kind === 'shido') return `指導対局 ${pending.handicapLabel || '平手'}`;
+  if (!pending.teai) return '';
+  if (pending.teai === 'lance') return `香落ち（${pending.handicapGiver === 'player' ? `${state.name}が上手` : `${state.name}が下手`}）`;
+  return `平手（${state.name}の${pending.color === 'black' ? '先手' : '後手'}）`;
 }
 
 /** 弟子の年齢(か月)。半月で1ターン。 */
@@ -474,7 +551,7 @@ function ensureKenshukai(state) {
   // 試験のクラスは、やる気を入れない弟子の強さで決める(調子のよい日に高いクラスを受けすぎない)。
   const level = effectiveLevel(discipleStrength({ stats: state.stats, aptitudes: aptitudeRanks(state), style: state.style, skills: state.skills }));
   state.kenshukai = createKenshukaiRun({
-    seed: (state.seed ^ 0x5bd1e995) >>> 0, settings: { shido: false, world: OPPONENT_BASE_LEVEL }, entryClass: examClassFor(level),
+    seed: (state.seed ^ 0x5bd1e995) >>> 0, settings: { ...KENSHUKAI_SETTINGS, world: OPPONENT_BASE_LEVEL }, entryClass: examClassFor(level),
     userName: state.name, userLevel: level,
   });
   return state;
@@ -646,6 +723,9 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
   const startDay = next.kenshukai.dayNo;
   const startClass = state.kenshukai ? state.kenshukai.cls : null;
   const startPhase = next.kenshukai.phase;
+  // 前回の例会の対戦表(会の画面。36-5)のため、この日の組み合わせを覚えておく。
+  const dayBefore = startPhase === 'reikai' && next.kenshukai.day ? structuredClone(next.kenshukai.day) : null;
+  const worldBefore = { ...next.kenshukai.world.members, ...(next.kenshukai.guests ?? {}) };
   const rivalNews = rivalBeforeDay(next, 'kenshukai', rng);
   if (rivalNews) events.push(rivalNews);
   const rivalMet = next.rival?.met ?? 0;
@@ -655,7 +735,7 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
     if (startPhase === 'reikai' && run.dayNo !== startDay) break;
     if (startPhase === 'exam' && run.phase !== 'exam') break;
     const member = run.world.members[run.pending.opponentId] ?? run.guests?.[run.pending.opponentId];
-    const level = opponentLevel(member, run.cls);
+    const level = pendingOpponentLevel(next, member);
     // 相手の飛車の向きは、その局に選んだ得意戦法で見る(前は比べ方の誤りで、いつも対居飛車だった。35-1)。
     const battle = (run.pending?.style ?? member?.style)?.rook === 'ranging' ? 'ranging' : 'static';
     const charmed = withCharm(next, charmUsed);
@@ -681,6 +761,7 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
     placeRivalInKenshukai(next.rival, next.kenshukai, { level: effectiveLevel(currentStrength(next)), ageYears: discipleAgeMonths(next) / 12 });
   }
   if (big) next.bigWins = (next.bigWins ?? 0) + wins;
+  if (dayBefore) next.lastDay = dayRecord(dayBefore, worldBefore, games, { kind: 'kenshukai', rank: startClass ?? next.kenshukai.cls });
   if (games[0]?.watched && games[0].win && Number(watchedMin) <= COMEBACK_EVAL) next.comebacks = (next.comebacks ?? 0) + 1;
   if (charmUsed) useCharm(next, charmUsed);
   // 大一番で負け越すとやる気が1段下がる(不屈を覚えていれば下がらない。19-4の15)。
@@ -743,6 +824,46 @@ function rivalScene(state, games, metBefore, queuedBefore) {
   queueScene(state, game.win ? 'rival-win' : 'rival-lose');
 }
 
+/** 対戦表の1人(名前と、そのときのクラス・段級)。 */
+function seatOf(all, id, kind) {
+  const member = all[id];
+  if (!member) return { id, name: '', place: '' };
+  const place = kind === 'kenshukai'
+    ? (member.kind === 'teacher' ? member.dan ?? '' : `${classLabel(member.cls ?? 0)}`)
+    : member.dan ?? '';
+  return { id, name: member.name ?? '', place, rival: Boolean(member.rival), peer: Boolean(member.peer) };
+}
+
+/** 前回の例会の対戦表に出す、ほかの局の数の上限(弟子の段級に近い局から)。 */
+const LAST_DAY_OTHERS = 12;
+
+/**
+ * 終えた例会の対戦表(会の画面の「前回の例会」。36-5)。名前とクラスは、そのときのものを残す。
+ * @param {any} day 研修会・奨励会のその日の形(opponents・kinds・teai・others)
+ * @param {Record<string, any>} all その日の会員と先生
+ * @param {{ win: boolean, name?: string }[]} games 弟子の局の結果(その日の順)
+ * @param {{ kind: 'kenshukai' | 'shoreikai' | 'league', rank: number, league?: { term: number, round: number } | null }} info
+ */
+function dayRecord(day, all, games, { kind, rank, league = null }) {
+  const placeKind = kind === 'kenshukai' ? 'kenshukai' : 'shoreikai';
+  const rankOf = (id) => (kind === 'kenshukai' ? all[id]?.cls : all[id]?.rank);
+  // 三段リーグの日は組み合わせが表にないので、局の相手の名前から。
+  const mine = games.map((game, index) => ({
+    opponent: day.opponents?.[index] ? seatOf(all, day.opponents[index], placeKind) : { id: '', name: game.name ?? '', place: '三段' },
+    kind: day.kinds?.[index] ?? 'game',
+    teai: day.teai?.[index] ?? null,
+    win: Boolean(games[index]?.win),
+  }));
+  const others = (day.others ?? [])
+    .filter((game) => all[game.a] && all[game.b])
+    .map((game) => ({ ...game, near: Math.min(Math.abs((rankOf(game.a) ?? rank) - rank), Math.abs((rankOf(game.b) ?? rank) - rank)) }))
+    .sort((a, b) => a.near - b.near || (a.round ?? 0) - (b.round ?? 0))
+    .slice(0, LAST_DAY_OTHERS)
+    .sort((a, b) => (a.round ?? 0) - (b.round ?? 0) || a.near - b.near)
+    .map((game) => ({ round: game.round ?? null, a: seatOf(all, game.a, placeKind), b: seatOf(all, game.b, placeKind), winner: game.winner, teai: game.teai ?? null, giver: game.giver ?? null, black: game.black ?? null }));
+  return { kind, no: day.no, league, mine, others };
+}
+
 /** 奨励会の知らせのうち、年齢制限で去った人の行(shoreikai.mjsのcloseLeagueの言葉)。 */
 const AGE_LIMIT_FEED = /^(.+?)さんが、年齢制限で奨励会を去った$/;
 
@@ -764,6 +885,9 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
   const startDay = next.shoreikai.dayNo;
   const startRank = next.shoreikai.rank;
   const label = next.shoreikai.pending?.eventText ?? '奨励会';
+  const dayBefore = next.shoreikai.day ? structuredClone(next.shoreikai.day) : null;
+  const leagueBefore = next.shoreikai.phase === 'league' && next.shoreikai.league ? { term: next.shoreikai.league.term, round: next.shoreikai.league.round } : null;
+  const worldBefore = { ...next.shoreikai.world.members };
   const rivalNews = rivalBeforeDay(next, 'shoreikai', rng);
   if (rivalNews) events.push(rivalNews);
   const rivalMet = next.rival?.met ?? 0;
@@ -773,7 +897,7 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
     const run = next.shoreikai;
     if (run.dayNo !== startDay) break;
     const member = run.world.members[run.pending.opponentId];
-    const level = shoreikaiOpponentLevel(member);
+    const level = pendingOpponentLevel(next, member);
     // 相手の飛車の向きは、その局に選んだ得意戦法で見る(前は比べ方の誤りで、いつも対居飛車だった。35-1)。
     const battle = (run.pending?.style ?? member?.style)?.rook === 'ranging' ? 'ranging' : 'static';
     const charmed = withCharm(next, charmUsed);
@@ -795,6 +919,7 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
   const wins = games.filter((game) => game.win).length;
   const losses = games.length - wins;
   if (big) next.bigWins = (next.bigWins ?? 0) + wins;
+  if (dayBefore) next.lastDay = dayRecord(dayBefore, worldBefore, games, { kind: leagueBefore ? 'league' : 'shoreikai', rank: startRank, league: leagueBefore });
   if (games[0]?.watched && games[0].win && Number(watchedMin) <= COMEBACK_EVAL) next.comebacks = (next.comebacks ?? 0) + 1;
   if (charmUsed) useCharm(next, charmUsed);
   const bigLost = big && wins < losses;
@@ -852,6 +977,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return null;
   const next = prepareDay(state);
+  // 駒落ちの局は、まだ観戦しない(結果だけ。36-4)。
+  if (pendingIsHandicap(next)) return null;
   const { card: ownCard, book, opponentStyle, opponentRook, side, member, run, rivalCard: rivalPick } = dayPlan(next, plan);
   if (!member) return null;
   const level = next.shoreikai ? shoreikaiOpponentLevel(member) : opponentLevel(member, run.cls);
@@ -1142,6 +1269,8 @@ export function discipleView(state) {
     eventTitle: eventTitle(state),
     big: isBigEvent(state),
     opponent: turnKind(state) === 'exam' || turnKind(state) === 'reikai' ? eventOpponent(state) : null,
+    /** 今日の1局目を観戦できるか(駒落ちの局はまだ観戦しない。36-4)。 */
+    watchable: !pendingIsHandicap(state),
     /** 作戦帳(35章のO2)。大一番の作戦の欄は、相手の飛車の向きに合う作戦を3つまで。 */
     book: bookView(state),
     words: state.words,
@@ -1163,6 +1292,9 @@ export function loadDiscipleRun(storage) {
     if (!parsed || parsed.version !== DISCIPLE_RUN_VERSION || !parsed.stats) return null;
     if (parsed.kenshukai?.world?.members) parsed.kenshukai.players = { ...parsed.kenshukai.world.members, ...(parsed.kenshukai.guests ?? {}) };
     if (parsed.shoreikai?.world?.members) parsed.shoreikai.players = { ...parsed.shoreikai.world.members };
+    // 前の版の保存にも、次の例会から手合いを付ける(36-4)。指導対局は、先生のいない前の挑戦では付かない。
+    if (parsed.kenshukai?.settings && !parsed.kenshukai.done) parsed.kenshukai.settings.teai ??= true;
+    if (parsed.shoreikai?.settings) parsed.shoreikai.settings.teai ??= true;
     return parsed;
   } catch {
     return null;

@@ -141,7 +141,7 @@ export const DISCIPLE_SCENES = Object.freeze({
     fits: Object.freeze({ outing: ['minato'], together: ['tsumugi'], wait: ['ao'] }),
   }),
   promote: Object.freeze({
-    label: 'はじめての昇級', script: 'disciple-promote',
+    label: 'はじめての昇級', script: 'disciple-promote', cards: Object.freeze(['promote']),
     effects: Object.freeze({
       celebrate: { mood: 1, stamina: 10, text: 'お祝いをした' },
       next: { aim: 1.25, text: '次の目標を話した' },
@@ -151,7 +151,7 @@ export const DISCIPLE_SCENES = Object.freeze({
   }),
   // 奨励会の節目(28章)。四段と退会は答えのない場面(育成の終わり)。
   shoreikai: Object.freeze({
-    label: '奨励会へ', script: 'disciple-shoreikai',
+    label: '奨励会へ', script: 'disciple-shoreikai', cards: Object.freeze(['shoreikai', 'agelimit']),
     effects: Object.freeze({
       serious: { stats: { steady: 15 }, text: '気を引き締めるよう話した' },
       enjoy: { mood: 1, text: '楽しもうと話した' },
@@ -160,7 +160,7 @@ export const DISCIPLE_SCENES = Object.freeze({
     fits: Object.freeze({ serious: ['tsumugi'], enjoy: ['minato'], peers: ['ao'] }),
   }),
   shodan: Object.freeze({
-    label: '初段の日', script: 'disciple-shodan',
+    label: '初段の日', script: 'disciple-shodan', cards: Object.freeze(['dan']),
     effects: Object.freeze({
       celebrate: { mood: 1, stamina: 10, text: 'お祝いをした' },
       next: { aim: 1.25, text: '三段リーグまでの目標を決めた' },
@@ -169,7 +169,7 @@ export const DISCIPLE_SCENES = Object.freeze({
     fits: Object.freeze({ celebrate: ['minato'], next: ['tsumugi'], charm: ['ao'] }),
   }),
   sandan: Object.freeze({
-    label: '三段リーグ', script: 'disciple-sandan',
+    label: '三段リーグ', script: 'disciple-sandan', cards: Object.freeze(['league', 'jiten']),
     effects: Object.freeze({
       calm: { mood: 1, stamina: 10, text: '一期ずつでいいと話した' },
       push: { stats: { reading: 15 }, mood: -1, text: '一期で抜けようと話した' },
@@ -226,6 +226,88 @@ export const DISCIPLE_SCENES = Object.freeze({
       rest: { stamina: 30, text: '今日は将棋を休ませた' },
     }),
     fits: Object.freeze({ talk: ['minato'], resolve: ['ao'], rest: ['tsumugi'] }),
+  }),
+  // 制度を教える場面(docs/disciple-mode-design.mdの36-6)。制度が初めて効く瞬間に1回だけ。見ると(飛ばしても)制度の札(cards)が入る。
+  'sys-kenshukai': Object.freeze({
+    label: '研修会の面談', script: 'disciple-sys-kenshukai', max: 1, cards: Object.freeze(['kenshukai', 'exam']),
+    effects: Object.freeze({
+      calm: { mood: 1, text: '試験はいつもどおりでいいと話した' },
+      push: { stats: { reading: 10 }, text: '1つでも上のクラスをと励ました' },
+      momoka: { bonds: { momoka: 1 }, text: '百花に研修会の話を頼んだ' },
+    }),
+    fits: Object.freeze({ calm: ['minato'], push: ['ao'], momoka: ['tsumugi'] }),
+  }),
+  'sys-reikai': Object.freeze({
+    label: '名札掛けの前で', script: 'disciple-sys-reikai', max: 1, cards: Object.freeze(['reikai', 'promote']),
+    effects: Object.freeze({
+      count: { aim: 1.25, text: '昇級まで1つずつ数えようと話した' },
+      scout: { stats: { plan: 10 }, text: '相手の札を見ておくよう話した' },
+      care: { stamina: 10, mood: 1, text: '休み時間の甘いものを持たせた' },
+    }),
+    fits: Object.freeze({ count: ['tsumugi'], scout: ['ao'], care: ['minato'] }),
+  }),
+  'sys-teai': Object.freeze({
+    label: '香一本の差', script: 'disciple-sys-teai', max: 1, cards: Object.freeze(['teai']),
+    effects: Object.freeze({
+      use: { stats: { plan: 10 }, text: '香一本の差を活かそうと話した' },
+      guard: { stats: { steady: 10 }, text: '上手の攻めを受けようと話した' },
+      same: { mood: 1, text: '平手も香落ちも同じ一局だと話した' },
+    }),
+    fits: Object.freeze({ use: ['ao'], guard: ['tsumugi'], same: ['minato'] }),
+  }),
+  'sys-shido': Object.freeze({
+    label: '先生との駒落ち', script: 'disciple-sys-shido', max: 1, cards: Object.freeze(['shido']),
+    effects: Object.freeze({
+      borrow: { mood: 1, text: '胸を借りるつもりでと送り出した' },
+      study: { stats: { plan: 12 }, text: '駒落ちの定跡をおさらいした' },
+      steal: { stats: { reading: 10 }, text: '先生の手を盗んでおいでと言った' },
+    }),
+    fits: Object.freeze({ borrow: ['minato'], study: ['tsumugi'], steal: ['ao'] }),
+  }),
+  'sys-point': Object.freeze({
+    label: '降級点', script: 'disciple-sys-point', max: 1, cards: Object.freeze(['point']),
+    effects: Object.freeze({
+      one: { stats: { steady: 12 }, text: '次の1局目だけに集中しようと話した' },
+      rest: { stamina: 25, mood: 1, text: '将棋を休ませた' },
+      review: { aim: 1.5, text: '負けた将棋を一緒に並べた' },
+    }),
+    fits: Object.freeze({ one: ['ao'], rest: ['minato'], review: ['tsumugi'] }),
+  }),
+  'sys-exit': Object.freeze({
+    label: '研修会の出口', script: 'disciple-sys-exit', max: 1, cards: Object.freeze(['exit']),
+    effects: Object.freeze({
+      go: { mood: 1, text: 'A2まで行こうと話した' },
+      wait: { stats: { steady: 12 }, text: '研修会で力をつけてからと話した' },
+      rival: { stats: { reading: 10 }, text: '羽音の弟子と同じ道を行くと話した' },
+    }),
+    fits: Object.freeze({ go: ['minato'], wait: ['tsumugi'], rival: ['ao'] }),
+  }),
+  'sys-hanko': Object.freeze({
+    label: '半香', script: 'disciple-sys-hanko', max: 1, cards: Object.freeze(['shoreikai-teai']),
+    effects: Object.freeze({
+      next: { mood: 1, text: '悔しさを次の平手にと話した' },
+      study: { stats: { plan: 12 }, text: '香落ちの下手の指し方を調べた' },
+      both: { stats: { steady: 10 }, text: '上手も下手も経験だと話した' },
+    }),
+    fits: Object.freeze({ next: ['ao'], study: ['tsumugi'], both: ['minato'] }),
+  }),
+  'sys-final': Object.freeze({
+    label: '最終日の前夜', script: 'disciple-sys-final', max: 1, cards: Object.freeze(['jiten']),
+    effects: Object.freeze({
+      own: { stats: { steady: 12 }, text: '自分の盤だけを見ればいいと話した' },
+      next: { mood: 1, text: '次点でも来期につながると話した' },
+      sleep: { stamina: 20, text: '早く寝るよう言った' },
+    }),
+    fits: Object.freeze({ own: ['ao'], next: ['minato'], sleep: ['tsumugi'] }),
+  }),
+  'sys-extend': Object.freeze({
+    label: '延長', script: 'disciple-sys-extend', max: 1, cards: Object.freeze(['agelimit']),
+    effects: Object.freeze({
+      calm: { mood: 1, text: 'まだ時間はあると話した' },
+      push: { stats: { reading: 12 }, mood: -1, text: 'この期で決めようと話した' },
+      stay: { stamina: 20, mood: 1, text: 'どんな結果でも将棋は残ると話した' },
+    }),
+    fits: Object.freeze({ calm: ['minato'], push: ['ao'], stay: ['tsumugi'] }),
   }),
   pro: Object.freeze({ label: '四段昇段', script: 'disciple-pro', effects: Object.freeze({}), fits: Object.freeze({}) }),
   retired: Object.freeze({ label: '退会の日', script: 'disciple-retired', effects: Object.freeze({}), fits: Object.freeze({}) }),
@@ -377,6 +459,9 @@ export function resolveScene(state, value) {
   next.scenesSeen ??= {};
   const seen = seenOf(next, key);
   next.scenesSeen[key] = { count: seen.count + 1, turn: next.turn };
+  // 制度の札(36-6)。飛ばしても入る(あとで会の画面の規定のタブで読める)。
+  const cards = /** @type {readonly string[] | undefined} */ (/** @type {any} */ (def).cards);
+  if (cards?.length) next.systemCards = [...new Set([...(next.systemCards ?? []), ...cards])];
   const effect = value ? def.effects[value] : null;
   if (!effect) {
     next.log.push({ turn: next.turn, text: `場面「${def.label}」` });

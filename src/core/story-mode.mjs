@@ -109,6 +109,15 @@ const discipleSubs = () => [
     ['disciple-jealous', '師匠の1年で、連れてきた一門の先輩と弟子が親しくなると読めます。'],
     ['disciple-clash', '師匠の1年で、2年目からの弟子の大一番の前の晩に読めます。'],
     ['disciple-agelimit', '師匠の1年で、奨励会の先輩が年齢制限で去ると読めます。'],
+    ['disciple-sys-kenshukai', '師匠の1年で、研修会の入会試験の前に読めます。'],
+    ['disciple-sys-reikai', '師匠の1年で、研修会のはじめての例会の朝に読めます。'],
+    ['disciple-sys-teai', '師匠の1年で、研修会ではじめて香落ちの局がある日に読めます。'],
+    ['disciple-sys-shido', '師匠の1年で、研修会のはじめての指導対局の日に読めます。'],
+    ['disciple-sys-point', '師匠の1年で、弟子にはじめて降級点が付くと読めます。'],
+    ['disciple-sys-exit', '師匠の1年で、弟子が研修会のB1クラスに上がると読めます。'],
+    ['disciple-sys-hanko', '師匠の1年で、奨励会ではじめて段級の違う相手と当たる日に読めます。'],
+    ['disciple-sys-final', '師匠の1年で、三段リーグの最終日の前夜に読めます。'],
+    ['disciple-sys-extend', '師匠の1年で、弟子が三段のまま25歳になると読めます。'],
   ].map(([scene, unlock]) => fileSub(scene, '師匠の1年', unlock, { disciple: '弟子', rival: '羽音の弟子', result: '', senpai: '先輩', ageSenpai: '先輩' }, 'disciple')),
 ];
 

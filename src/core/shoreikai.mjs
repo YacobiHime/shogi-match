@@ -14,6 +14,7 @@ import { createCharacter } from './player-character.mjs';
 import { tournamentLevel, worldCpuLevel } from './ryuo-strength.mjs';
 import { LADDER_VERSION, ladderLevelIndexFromV2 } from './level-ladder.mjs';
 import { simulateMemberGame } from './ryuo-simulation.mjs';
+import { nextTeai, teaiRatingBonus } from './teai.mjs';
 import { HANANE, STORY_PEOPLE, storyCharacter } from './ryuo-story.mjs';
 
 export { USER_ID };
@@ -315,7 +316,7 @@ function memberGame(rng, a, b) {
  * busyは、この例会でプレイヤーと当たる人(プレイヤーとの1局のぶん、1局少なく指す)。
  * @returns {{ a: string, b: string, winner: string }[]}
  */
-function playMonth(world, rng, busy = []) {
+function playMonth(world, rng, busy = [], { teai = false } = {}) {
   const games = [];
   const pool = membersOf(world).filter((member) => member.kind === 'shoreikai' && member.rank < SANDAN);
   for (let round = 0; round < GAMES_PER_DAY; round += 1) {
@@ -325,10 +326,27 @@ function playMonth(world, rng, busy = []) {
     for (let index = 0; index + 1 < order.length; index += 2) {
       const a = order[index];
       const b = order[index + 1];
-      games.push({ a: a.id, b: b.id, winner: memberGame(rng, a, b) ? a.id : b.id });
+      // 手合い(師匠の1年。docs/disciple-mode-design.mdの36-4)。香落ちの下手は、そのぶん強く指す。
+      const decided = teai ? nextTeai({ a: { id: a.id, rank: a.rank }, b: { id: b.id, rank: b.rank }, memory: (world.teai ??= {}), rng }) : null;
+      const aWins = decided
+        ? memberGame(rng, { ...a, rating: a.rating + teaiRatingBonus(decided, a.id) }, { ...b, rating: b.rating + teaiRatingBonus(decided, b.id) })
+        : memberGame(rng, a, b);
+      tally(a, aWins);
+      tally(b, !aWins);
+      games.push({ round, a: a.id, b: b.id, winner: aWins ? a.id : b.id, ...(decided ? { teai: decided.teai, black: decided.black, giver: decided.giver } : {}) });
     }
   }
   return games;
+}
+
+/**
+ * 奨励会員の通算の勝ち負け(会の画面の会員の欄。36-5)。
+ * @param {any} member
+ * @param {boolean} win
+ */
+function tally(member, win) {
+  if (win) member.w = (member.w ?? 0) + 1;
+  else member.l = (member.l ?? 0) + 1;
 }
 
 /** ほかの奨励会員の1か月(伸び・昇級・降級・退会)。 */
@@ -521,6 +539,8 @@ function playLeagueRound(world, rng, league, round) {
     const mb = world.members[b];
     if (!ma || !mb) continue;
     const aWins = memberGame(rng, ma, mb);
+    tally(ma, aWins);
+    tally(mb, !aWins);
     games.push({ a, b, winner: aWins ? a : b });
   }
   return games;
@@ -691,15 +711,20 @@ export function retuneShoreikaiWorld(run, { difficulty, world, userLevel = 20 })
 }
 
 /** プレイヤーの1局の相手を決め、Lvと戦法と先後を付ける。 */
-function setPending(run, rng, { opponentId, kind, label, eventText, stakes, others = [], userLevel }) {
+function setPending(run, rng, { opponentId, kind, label, eventText, stakes, others = [], userLevel, teai = null }) {
   const all = players(run);
   const opponent = all[opponentId];
   opponent.level = shoreikaiLevel(run, opponent, userLevel);
-  const color = rng.next() < 0.5 ? 'black' : 'white';
-  const style = opponent.repertoire
+  // 手合いのある局(師匠の1年。36-4)は手合いで決めた先後。香落ちは下手が先手の側(上手が先に指す)。駒落ちの戦法はCPUにまかせる。
+  const lance = teai?.teai === 'lance';
+  const color = teai ? (teai.black === USER_ID ? 'black' : 'white') : rng.next() < 0.5 ? 'black' : 'white';
+  const style = lance ? null : opponent.repertoire
     ? pickGameStyle(rng, opponent.repertoire, { color: color === 'black' ? 'white' : 'black' })
     : opponent.style ?? null;
-  run.pending = { kind, opponentId, color, style, label, eventText, stakes, others: { games: others } };
+  run.pending = {
+    kind, opponentId, color, style, label, eventText, stakes, others: { games: others },
+    ...(teai ? { teai: teai.teai, teaiRule: teai.rule, handicap: lance ? 'lance' : '', handicapLabel: lance ? '香落ち' : '平手', handicapGiver: lance ? (teai.giver === USER_ID ? 'player' : 'opponent') : '' } : {}),
+  };
 }
 
 function startExamPending(run, rng, userLevel) {
@@ -794,9 +819,20 @@ function startReikaiDay(run, rng, userLevel) {
   // ほかの三段の三段リーグが終わる月(羽音の四段昇段など)。
   if (world.month >= world.termEndsAt) playNpcTerm(world, scale, rng);
   const opponents = pickReikaiOpponents(run, rng);
-  const others = playMonth(world, rng, opponents);
+  // 手合い(師匠の1年。36-4)。段級の差で平手・平香交じり・香落ち。観戦するはじめの局は、平手の局を先に並べる。
+  /** @type {any[] | null} */
+  let teai = null;
+  if (run.settings.teai) {
+    const memory = (run.teai ??= {});
+    const decided = opponents.map((id) => nextTeai({ a: { id: USER_ID, rank: run.rank }, b: { id, rank: world.members[id]?.rank ?? run.rank }, memory, rng }));
+    const order = opponents.map((_, index) => index).sort((x, y) => Number(decided[x].teai === 'lance') - Number(decided[y].teai === 'lance') || x - y);
+    const sorted = order.map((index) => opponents[index]);
+    teai = order.map((index) => decided[index]);
+    opponents.splice(0, opponents.length, ...sorted);
+  }
+  const others = playMonth(world, rng, opponents, { teai: Boolean(run.settings.teai) });
   run.dayNo += 1;
-  run.day = { no: run.dayNo, opponents, results: [], others };
+  run.day = { no: run.dayNo, opponents, results: [], others, ...(teai ? { teai } : {}) };
   setReikaiPending(run, rng, userLevel);
 }
 
@@ -805,7 +841,7 @@ function setReikaiPending(run, rng, userLevel) {
   const index = day.results.length;
   const opponentId = day.opponents[index] ?? day.opponents[0];
   setPending(run, rng, {
-    opponentId, kind: 'reikai', userLevel,
+    opponentId, kind: 'reikai', userLevel, teai: day.teai?.[index] ?? null,
     label: `第${day.no}回例会 ${index + 1}局目`,
     eventText: `奨励会 ${rankLabel(run.rank)}`,
     stakes: reikaiStakes(run),
@@ -839,7 +875,7 @@ function startLeagueDay(run, rng, userLevel) {
   run.age += MONTHS_PER_TERM / days;
   // ほかの段級の例会も進む(三段の人以外)。
   run.dayNo += 1;
-  run.day = { no: run.dayNo, opponents: [], results: [], others: playMonth(run.world, rng) };
+  run.day = { no: run.dayNo, opponents: [], results: [], others: playMonth(run.world, rng, [], { teai: Boolean(run.settings.teai) }) };
   setLeaguePending(run, rng, userLevel);
 }
 
@@ -1041,7 +1077,7 @@ export function recordShoreikaiGame(run, outcome, { userLevel }) {
   const pending = next.pending;
   const opponent = players(next)[pending.opponentId];
   next.events = [];
-  next.games.push({ day: next.dayNo, kind: pending.kind, opponentId: pending.opponentId, name: opponent?.name ?? '', dan: opponent?.dan ?? '', rank: next.rank, win });
+  next.games.push({ day: next.dayNo, kind: pending.kind, opponentId: pending.opponentId, name: opponent?.name ?? '', dan: opponent?.dan ?? '', rank: next.rank, handicap: pending.handicap ?? '', giver: pending.handicapGiver ?? '', win });
   next.pending = null;
   if (pending.kind === 'exam1' || pending.kind === 'exam2') recordExam(next, rng, pending, win, userLevel);
   else if (pending.kind === 'reikai') recordReikai(next, rng, win, opponent, userLevel);
@@ -1094,6 +1130,7 @@ function recordReikai(run, rng, win, opponent, userLevel) {
   run.recent = [opponent?.id, ...run.recent].filter(Boolean).slice(0, RECENT_OPPONENTS);
   // プレイヤーに勝った相手は、少し自信をつける(強さが少し伸びる)。
   if (opponent && world.members[opponent.id] && !win) world.members[opponent.id].rating += 2;
+  if (opponent && world.members[opponent.id]) tally(world.members[opponent.id], !win);
   const rule = promotionRule(scale, run.rank);
   run.record = addToRecord(rule, run.record, win);
   const slump = addToSlump(scale, run.slump, win, run.point);

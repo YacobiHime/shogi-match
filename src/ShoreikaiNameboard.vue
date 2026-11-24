@@ -27,9 +27,9 @@
       </div>
     </div>
     <figcaption v-if="!preview" class="nameboard__legend">
-      <span v-if="youRank >= 0"><i class="nameboard__tag nameboard__tag--you" aria-hidden="true"></i>あなた</span>
+      <span v-if="youRank >= 0"><i class="nameboard__tag nameboard__tag--you" aria-hidden="true"></i>{{ youLabel }}</span>
       <span v-if="hasPeer"><i class="nameboard__tag nameboard__tag--peer" aria-hidden="true"></i>同期</span>
-      <span v-if="hasRival"><i class="nameboard__tag nameboard__tag--rival" aria-hidden="true"></i>羽音</span>
+      <span v-if="hasRival"><i class="nameboard__tag nameboard__tag--rival" aria-hidden="true"></i>{{ rivalLabel }}</span>
       <span class="nameboard__legend-right">{{ direction }}</span>
     </figcaption>
   </figure>
@@ -53,6 +53,9 @@ const props = defineProps({
   topRank: { type: Number, default: 8 },
   /** 凡例の右の言葉。 */
   direction: { type: String, default: "右ほど上の段級" },
+  /** 凡例の自分と羽音の名前(師匠の1年では弟子の名前と羽音の弟子。docs/disciple-mode-design.mdの36-5)。 */
+  youLabel: { type: String, default: "あなた" },
+  rivalLabel: { type: String, default: "羽音" },
 });
 
 const youRank = computed(() => props.columns.find((column) => column.tags.some((tag) => tag.you))?.rank ?? -1);
@@ -61,7 +64,7 @@ const hasRival = computed(() => props.columns.some((column) => column.tags.some(
 const summary = computed(() => {
   const you = props.columns.find((column) => column.rank === youRank.value);
   const counts = props.columns.map((column) => `${column.label}${column.tags.length}名`).join("、");
-  return `名札掛け。${you ? `あなたは${you.label}。` : ""}${counts}`;
+  return `名札掛け。${you ? `${props.youLabel}は${you.label}。` : ""}${counts}`;
 });
 </script>
 
