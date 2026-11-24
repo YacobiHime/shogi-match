@@ -4,13 +4,13 @@
 // 当たりになっている駒を逃がす手も読む。末端は取る手と成る手だけの静止探索。
 // 「何もしなければ取られる駒がある」局面では、その損を差し引いて数える(当たり・両取りの得を、取る前から見えるようにする)。
 
-import { AI_PIECE_POINTS } from "./piece-points.mjs";
+import { LOGIC_VALUES } from "./logic-values.mjs";
 import { attackedSquares, attackersOf, findKing, isKingAttacked, opponentOf, relativeRank } from "./piece-movement.mjs";
 import { HAND_KINDS, playLight } from "./logic-position.mjs";
 import { legalMoves, pseudoMoves } from "./light-moves.mjs";
 
-/** 駒の価値(将棋AIで使われる値。piece-points.mjsのAI_PIECE_POINTS)。玉は0、取ると勝ち。 */
-export const REASON_VALUES = Object.freeze({ ...AI_PIECE_POINTS, K: 0 });
+/** 駒の価値(将棋AI(論理)の値。logic-values.mjsのLOGIC_VALUES。成り駒は元の駒＋成った分。39章)。玉は0、取ると勝ち。 */
+export const REASON_VALUES = LOGIC_VALUES;
 /** 詰みの値(手数で少しずつ小さくする)。 */
 export const MATE_SCORE = 30000;
 const PROMOTABLE = new Set(["P", "L", "N", "S", "B", "R"]);

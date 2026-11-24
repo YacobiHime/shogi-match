@@ -81,3 +81,17 @@ export function resignsBy(style, { best, lastValue = null }) {
   if (style.cp === null) return false;
   return best.value <= style.cp && lastValue !== null && lastValue <= style.cp;
 }
+
+/** 師匠の1年の観戦の局で、投げてよい詰みの手数(docs/disciple-mode-design.mdの39章)。 */
+export const CONFIRMED_MATE_PLIES = 3;
+
+/**
+ * 理由で指す棋士(師匠の1年の観戦の局)の投了の早さ。点では投げず、相手の3手詰め以内が読めてから投げる
+ * (棋士の1年の観戦と同じく、詰みが確かになってから。前は観戦の局の浅い読みの点で投げ、早すぎることがあった)。
+ * 詰みまで指す棋士は、そのまま。
+ * @param {ReturnType<typeof resignStyleById>} style
+ */
+export function confirmedMateStyle(style) {
+  if (!style || style.mate === 0) return style;
+  return { ...style, mate: Math.min(style.mate, CONFIRMED_MATE_PLIES), cp: null };
+}

@@ -4,12 +4,21 @@
 // 形の点は1つずつ名前を持ち、思考の記録で「玉の守りが2枚減る」のように言えるようにする(evaluateTerms)。
 
 import { AI_PIECE_POINTS } from './piece-points.mjs';
+import { LOGIC_VALUES } from './logic-values.mjs';
 import { FastBoard, BISHOP, GOLD, KING, PAWN, ROOK, SILVER, fileOf, rankOf, slidesOf, stepsOf } from './fast-board.mjs';
 
 const KIND_NAMES = [null, 'P', 'L', 'N', 'S', 'G', 'B', 'R', 'K', '+P', '+L', '+N', '+S', null, '+B', '+R'];
-/** 駒の種類ごとの価値(盤上)。 */
-const VALUE = KIND_NAMES.map((name) => (name ? (AI_PIECE_POINTS[name] ?? 0) : 0));
-VALUE[KING] = 0;
+const tableOf = (values) => {
+  const table = KIND_NAMES.map((name) => (name ? (values[name] ?? 0) : 0));
+  table[KING] = 0;
+  return table;
+};
+/** 駒の種類ごとの価値(盤上)。成り駒は元の駒＋成った分(logic-values.mjs。39章)。 */
+const VALUE = tableOf(LOGIC_VALUES);
+/** 前の版の価値(成り駒は金と同じ。自己対局で比べる用)。 */
+const CLASSIC_VALUE = tableOf(AI_PIECE_POINTS);
+/** 持ち駒の価値は、元の駒の価値(どちらの表でも同じ)。 */
+const valuesOf = (classic) => (classic ? CLASSIC_VALUE : VALUE);
 export const MATE = 30000;
 const INF = 100000;
 
@@ -29,20 +38,29 @@ export const SHAPE_WEIGHTS = Object.freeze({
   kingZone: -16,
   /** 玉が囲いの位置(自陣の下2段で、端から3筋以内)にいる(形の点の段2)。 */
   castle: 50,
+  /** 相手の陣地(3段)の升のうち、自分の駒が利いている升1つ(形の点の段3。39章)。成り込み・攻めの足場。 */
+  camp: 6,
+  /** 自分の駒(玉・歩以外)で、どの駒も利いていない浮き駒1枚(形の点の段3)。 */
+  loose: -15,
+  /** 浮き駒が、相手の駒に当たっている(形の点の段3。読みの末端で、取られそうな形を嫌う)。 */
+  hanging: -30,
 });
 
 const isGuard = (abs) => abs === GOLD || abs === SILVER || (abs >= 9 && abs <= 12);
 
 /**
  * 局面の点を、名前ごとに分けて出す(先手から見た値)。
+ * shapeの段3は、駒の利きの地図から、相手の陣地の利き・浮き駒も数え、玉のまわりの利きと囲いの位置(段2)も入れる(39章)。
  * @param {FastBoard} board
- * @param {{ shape?: boolean }} [options] shapeが偽なら駒の損得だけ
+ * @param {{ shape?: boolean | number, classic?: boolean }} [options] shapeが偽なら駒の損得だけ。classicは前の版の駒の価値
  */
-export function evaluateTerms(board, { shape = true } = {}) {
+export function evaluateTerms(board, { shape = true, classic = false } = {}) {
   const level = shape === true ? 1 : Number(shape) || 0;
   shape = level > 0;
-  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0, kingZone: 0, castle: 0 };
+  const VALUE = valuesOf(classic);
+  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0, kingZone: 0, castle: 0, camp: 0, loose: 0, hanging: 0 };
   const kings = board.king;
+  const att = level >= 3 ? attackMap(board) : null;
   for (let s = 0; s < 81; s += 1) {
     const p = board.sq[s];
     if (!p) continue;
@@ -68,6 +86,17 @@ export function evaluateTerms(board, { shape = true } = {}) {
       }
       terms.mobility += sign * SHAPE_WEIGHTS.mobility * reach;
     }
+    if (att && abs !== PAWN && !att[own * 81 + s]) {
+      terms.loose += sign * SHAPE_WEIGHTS.loose;
+      if (att[(own ^ 1) * 81 + s]) terms.hanging += sign * SHAPE_WEIGHTS.hanging;
+    }
+  }
+  if (att) {
+    for (let s = 0; s < 81; s += 1) {
+      const y = rankOf(s);
+      if (y <= 2 && att[s]) terms.camp += SHAPE_WEIGHTS.camp;
+      if (y >= 6 && att[81 + s]) terms.camp -= SHAPE_WEIGHTS.camp;
+    }
   }
   for (let color = 0; color < 2; color += 1) {
     const sign = color === 0 ? 1 : -1;
@@ -81,7 +110,7 @@ export function evaluateTerms(board, { shape = true } = {}) {
     if (level >= 2 && kings[color] >= 0) {
       const k = kings[color];
       let hit = 0;
-      for (const t of stepsOf(color, KING, k)) if (board.attacked(t, color ^ 1)) hit += 1;
+      for (const t of stepsOf(color, KING, k)) if (att ? att[(color ^ 1) * 81 + t] : board.attacked(t, color ^ 1)) hit += 1;
       terms.kingZone += sign * SHAPE_WEIGHTS.kingZone * hit;
       const relRank = color === 0 ? rankOf(k) : 8 - rankOf(k);
       const relFile = color === 0 ? fileOf(k) : 10 - fileOf(k);
@@ -91,10 +120,33 @@ export function evaluateTerms(board, { shape = true } = {}) {
   return terms;
 }
 
+/**
+ * 駒の利きの地図。att[color * 81 + 升]は、colorの駒がその升に利いている数(玉の利きも数える)。
+ * @param {FastBoard} board
+ */
+export function attackMap(board) {
+  const att = new Uint8Array(162);
+  for (let s = 0; s < 81; s += 1) {
+    const p = board.sq[s];
+    if (!p) continue;
+    const abs = p > 0 ? p : -p;
+    const own = p > 0 ? 0 : 1;
+    const base = own * 81;
+    for (const t of stepsOf(own, abs, s)) att[base + t] += 1;
+    for (const ray of slidesOf(own, abs, s)) {
+      for (const t of ray) {
+        att[base + t] += 1;
+        if (board.sq[t]) break;
+      }
+    }
+  }
+  return att;
+}
+
 /** 局面の点(手番の側から見た値)。 */
-function evaluate(board, shape, scale = 1) {
-  const t = evaluateTerms(board, { shape });
-  const total = t.material + scale * (t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle);
+function evaluate(board, shape, scale = 1, classic = false) {
+  const t = evaluateTerms(board, { shape, classic });
+  const total = t.material + scale * (t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle + t.camp + t.loose + t.hanging);
   return board.turn === 0 ? total : -total;
 }
 
@@ -128,13 +180,13 @@ function tryMake(board, move) {
 /**
  * 1手を読んで選ぶ。
  * @param {string} sfen
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number }} [options] shapeScaleは形の点に掛ける重み(大局観)。shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean }} [options] shapeScaleは形の点に掛ける重み(大局観)。shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
  * @returns {{ move: string, score: number, depth: number, nodes: number, pv: string[] } | null}
  */
-export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6, shapeScale = 1 } = {}) {
+export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6, shapeScale = 1, classic = false } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, shapeScale, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, classic, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
   const rootMoves = board.legal();
@@ -270,7 +322,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
   if (timeUp(ctx)) return 0;
   if (board.inCheck()) {
     // 王手されたら、逃げ方をすべて読む(詰みを見落とさない)。深さは静止探索の残りで止める。
-    if (qdepth <= 0) return evaluate(board, ctx.shape, ctx.shapeScale);
+    if (qdepth <= 0) return evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic);
     let best = -INF;
     let legal = 0;
     for (const move of board.pseudo([])) {
@@ -284,7 +336,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
     }
     return legal ? best : -MATE + ply;
   }
-  const stand = evaluate(board, ctx.shape, ctx.shapeScale);
+  const stand = evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic);
   if (qdepth <= 0 || stand >= beta) return stand;
   if (stand > alpha) alpha = stand;
   const moves = board.pseudo([], { captures: true })
@@ -306,13 +358,13 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
  * 決めた根の手だけを読み、それぞれの点(手番の側から見た値)と読み筋を出す。定跡の手や手順表の手が、最善より大きく劣らないかを確かめるのに使う。
  * @param {string} sfen
  * @param {string[]} usiMoves
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number }} [options]
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean }} [options]
  * @returns {Map<string, { score: number, pv: string[] }>}
  */
-export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6, shapeScale = 1 } = {}) {
+export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6, shapeScale = 1, classic = false } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, shapeScale, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, classic, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
   const result = new Map();

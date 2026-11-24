@@ -49,3 +49,19 @@ describe('投了の早さ(docs/tournament-relay-design.mdの29章)', () => {
     expect(resignStyleOf(null).id).toBe('normal');
   });
 });
+
+describe('師匠の1年の観戦の局の投了(39章)', () => {
+  it('点では投げず、相手の3手詰め以内が読めてから投げる', async () => {
+    const { confirmedMateStyle, resignStyleById: byId, resignsBy: by } = await import('./resign-style.mjs');
+    const clean = confirmedMateStyle(byId('clean'));
+    expect(clean.mate).toBe(3);
+    expect(clean.cp).toBeNull();
+    // 大差の点でも投げない。
+    expect(by(clean, { best: { value: -20000, score: { type: 'cp', value: -9000 } }, lastValue: -20000 })).toBe(false);
+    // 相手の5手詰めでは投げず、3手詰めで投げる(mate -6は自分の手のあとに相手の5手詰め)。
+    expect(by(clean, { best: { value: -30000, score: { type: 'mate', value: -6 } } })).toBe(false);
+    expect(by(clean, { best: { value: -30000, score: { type: 'mate', value: -4 } } })).toBe(true);
+    // 詰みまで指す棋士は、そのまま。
+    expect(confirmedMateStyle(byId('full')).mate).toBe(0);
+  });
+});

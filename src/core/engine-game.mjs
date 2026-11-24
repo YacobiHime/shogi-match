@@ -26,7 +26,7 @@ import { createFormationState, detectFormationSnapshot, formationMove, updateFor
 import { packRelayGame, unpackRelayGame } from './relay-store.mjs';
 import { HANANE, YOSHIHIKO } from './ryuo-story.mjs';
 import { MAX_CPU_LEVEL, REAL_WORLD, WORLD_BASE_RATING, isRealWorld, worldCpuLevel } from './ryuo-strength.mjs';
-import { resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
+import { confirmedMateStyle, resignStyleById, resignStyleOf, resignsBy } from './resign-style.mjs';
 
 /** ロジックAIで指すLvの手の、形勢を見るための読み(画面のバーと解説に使う)。 */
 export const EVAL_NODES = 3000;
@@ -201,7 +201,9 @@ export async function playEngineGame({ spec, search: baseSearch, formationMaster
   // 持ち時間の時計だけに使う筋書き(勝ち負けは決めない。手数の目安で時間を配る)。
   const clock = createRelayClock(spec, relayPlan({ ...spec, winner: spec.winner ?? 'black' }));
   const plans = { black: openingPlanOf(spec, 'black'), white: openingPlanOf(spec, 'white') };
-  const resignStyles = { black: resignStyleOf(spec.black), white: resignStyleOf(spec.white) };
+  // 理由で指す棋士(師匠の1年の観戦の局)は、3手詰め以内が読めてから投げる(docs/disciple-mode-design.mdの39章)。
+  const resignStyleFor = (player) => (player?.reason ? confirmedMateStyle(resignStyleOf(player)) : resignStyleOf(player));
+  const resignStyles = { black: resignStyleFor(spec.black), white: resignStyleFor(spec.white) };
   const record = createGameRecord(startSfen);
   const moves = [];
   const entries = [];

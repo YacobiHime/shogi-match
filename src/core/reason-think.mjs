@@ -94,12 +94,15 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
   const qdepth = careless ? 0 : profile.qdepth ?? 6;
-  const options = { depth, qdepth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6 };
+  // 形の点は段3(敵陣の利き・浮き駒・玉のまわりの利き。39章)。classicは前の版(段1と、成り駒を金と同じに数える価値)。
+  const shape = profile.classic ? 1 : profile.shape ?? 3;
+  const classic = Boolean(profile.classic);
+  const options = { depth, qdepth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6, shape, classic };
   const best = searchBestMove(sfen, options);
   if (!best) return null;
   // 3. 定跡: 最善より大きく劣らなければ定跡の手。
   const checkDepth = Math.max(1, depth - 1);
-  const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale });
+  const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale, shape, classic });
   if (planMove && planMove !== best.move) {
     // 定跡の手は、駒の損得と詰みだけで比べる(形の点では外さない。docs/disciple-mode-design.mdの35-6)。
     // 前は形の点も入れて比べ、強い棋士ほど5手目あたりで定跡を外れていた。

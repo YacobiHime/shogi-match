@@ -135,11 +135,13 @@ export function strengthForPlayer(spec) {
   // S<深さ>(m)(t<ミリ秒>): 全部の手を読む論理の探索(34-15)。mを付けると駒の損得だけ(形の点なし)。
   // T<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士の考え方(全部の手を読む探索つき。34-16)。
   // 末尾のbを付けると、観戦の1手の時間の上限(WATCH_THINK_BUDGET_MS。38章)で指す(例: T45-45-45-45b)。
-  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?$/);
+  // 末尾のcを付けると、前の版の駒の価値と形の点(成り駒を金と同じに数え、形の点は段1。39章)で指す(例: T45-45-45-45bc)。
+  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?$/);
   if (thinkSpec) {
     const [reading, plan, steady, mate] = thinkSpec.slice(1, 5).map(Number);
     const profile = thinkProfile({ reading, plan, steady, mate });
-    return { thinkProfile: thinkSpec[5] ? budgetProfile(profile, WATCH_THINK_BUDGET_MS) : profile, nodes: 0 };
+    const budgeted = thinkSpec[5] ? budgetProfile(profile, WATCH_THINK_BUDGET_MS) : profile;
+    return { thinkProfile: thinkSpec[6] ? { ...budgeted, classic: true } : budgeted, nodes: 0 };
   }
   // xを付けると形の点の段2(玉のまわりの利き・囲いの位置)。
   const fullSpec = spec.match(/^S(\d+)(m|x)?(?:t(\d+))?$/);
