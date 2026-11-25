@@ -6,6 +6,8 @@
 import { AI_PIECE_POINTS } from './piece-points.mjs';
 import { LOGIC_VALUES } from './logic-values.mjs';
 import { FastBoard, BISHOP, GOLD, KING, PAWN, ROOK, SILVER, fileOf, rankOf, slidesOf, stepsOf } from './fast-board.mjs';
+import { PRO_SHAPE_WEIGHTS } from '../data/pro-shape-weights.mjs';
+import { quietPrior } from './move-prior.mjs';
 
 const KIND_NAMES = [null, 'P', 'L', 'N', 'S', 'G', 'B', 'R', 'K', '+P', '+L', '+N', '+S', null, '+B', '+R'];
 const tableOf = (values) => {
@@ -21,9 +23,11 @@ const CLASSIC_VALUE = tableOf(AI_PIECE_POINTS);
 const valuesOf = (classic) => (classic ? CLASSIC_VALUE : VALUE);
 export const MATE = 30000;
 const INF = 100000;
+/** 読む順番で、手の好みの点1つをhistoryのいくつに数えるか。 */
+const PRIOR_ORDER = 40;
 
-/** 名前のある形の点の重み(初期値。測って合わせる)。 */
-export const SHAPE_WEIGHTS = Object.freeze({
+/** 名前のある形の点の重み(手で決めた初期値。39章)。前の版(classic)と、棋譜で学んだ重みがないときに使う。 */
+export const HAND_SHAPE_WEIGHTS = Object.freeze({
   /** 持ち駒は盤上より少し働く(打てる)。価値に掛ける割合。 */
   hand: 0.08,
   /** 玉のまわり8升の金銀(成り駒を含む)1枚。 */
@@ -44,7 +48,20 @@ export const SHAPE_WEIGHTS = Object.freeze({
   loose: -15,
   /** 浮き駒が、相手の駒に当たっている(形の点の段3。読みの末端で、取られそうな形を嫌う)。 */
   hanging: -30,
+  /** 持ち駒に歩がない(歩切れ。40章のL2で足した。手で決めた重みでは数えない)。 */
+  pawnless: 0,
+  /** 自分の歩が、相手の陣地のすぐ手前(4段目)より先にいる(位・垂れ歩。40章のL2で足した)。 */
+  pawnFront: 0,
 });
+
+/** 形の点の名前(evaluateTermsの項目のうち、駒の損得以外)。 */
+export const SHAPE_TERMS = Object.freeze(Object.keys(HAND_SHAPE_WEIGHTS));
+
+/**
+ * いま使う形の点の重み。プロの棋譜に合わせた重み(src/data/pro-shape-weights.mjs。40章のL2)があればそれ、なければ手で決めた重み。
+ * 学んだ重みにない名前は、手で決めた重みで埋める。
+ */
+export const SHAPE_WEIGHTS = Object.freeze({ ...HAND_SHAPE_WEIGHTS, ...(PRO_SHAPE_WEIGHTS ?? {}) });
 
 const isGuard = (abs) => abs === GOLD || abs === SILVER || (abs >= 9 && abs <= 12);
 
@@ -52,13 +69,14 @@ const isGuard = (abs) => abs === GOLD || abs === SILVER || (abs >= 9 && abs <= 1
  * 局面の点を、名前ごとに分けて出す(先手から見た値)。
  * shapeの段3は、駒の利きの地図から、相手の陣地の利き・浮き駒も数え、玉のまわりの利きと囲いの位置(段2)も入れる(39章)。
  * @param {FastBoard} board
- * @param {{ shape?: boolean | number, classic?: boolean }} [options] shapeが偽なら駒の損得だけ。classicは前の版の駒の価値
+ * @param {{ shape?: boolean | number, classic?: boolean, weights?: Record<string, number> | null }} [options] shapeが偽なら駒の損得だけ。classicは前の版の駒の価値と手で決めた重み。weightsは形の点の重み(省くといま使う重み)
  */
-export function evaluateTerms(board, { shape = true, classic = false } = {}) {
+export function evaluateTerms(board, { shape = true, classic = false, weights = null } = {}) {
   const level = shape === true ? 1 : Number(shape) || 0;
   shape = level > 0;
   const VALUE = valuesOf(classic);
-  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0, kingZone: 0, castle: 0, camp: 0, loose: 0, hanging: 0 };
+  const W = weights ?? (classic ? HAND_SHAPE_WEIGHTS : SHAPE_WEIGHTS);
+  const terms = { material: 0, hand: 0, guard: 0, kingCenter: 0, attacker: 0, mobility: 0, kingZone: 0, castle: 0, camp: 0, loose: 0, hanging: 0, pawnless: 0, pawnFront: 0 };
   const kings = board.king;
   const att = level >= 3 ? attackMap(board) : null;
   for (let s = 0; s < 81; s += 1) {
@@ -68,13 +86,14 @@ export function evaluateTerms(board, { shape = true, classic = false } = {}) {
     const sign = p > 0 ? 1 : -1;
     terms.material += sign * VALUE[abs];
     if (!shape || abs === KING) continue;
+    if (level >= 3 && abs === PAWN && (p > 0 ? rankOf(s) <= 3 : rankOf(s) >= 5)) terms.pawnFront += sign * W.pawnFront;
     const own = p > 0 ? 0 : 1;
     const ownKing = kings[own];
     const enemyKing = kings[own ^ 1];
-    if (ownKing >= 0 && isGuard(abs) && Math.max(Math.abs(fileOf(s) - fileOf(ownKing)), Math.abs(rankOf(s) - rankOf(ownKing))) === 1) terms.guard += sign * SHAPE_WEIGHTS.guard;
+    if (ownKing >= 0 && isGuard(abs) && Math.max(Math.abs(fileOf(s) - fileOf(ownKing)), Math.abs(rankOf(s) - rankOf(ownKing))) === 1) terms.guard += sign * W.guard;
     if (enemyKing >= 0 && abs !== PAWN && Math.max(Math.abs(fileOf(s) - fileOf(enemyKing)), Math.abs(rankOf(s) - rankOf(enemyKing))) <= 2) {
       const big = abs === ROOK || abs === BISHOP || abs === ROOK + 8 || abs === BISHOP + 8;
-      terms.attacker += sign * SHAPE_WEIGHTS.attacker * (big ? 2 : 1);
+      terms.attacker += sign * W.attacker * (big ? 2 : 1);
     }
     if (abs === ROOK || abs === BISHOP || abs === ROOK + 8 || abs === BISHOP + 8) {
       let reach = 0;
@@ -84,18 +103,18 @@ export function evaluateTerms(board, { shape = true, classic = false } = {}) {
           if (board.sq[t]) break;
         }
       }
-      terms.mobility += sign * SHAPE_WEIGHTS.mobility * reach;
+      terms.mobility += sign * W.mobility * reach;
     }
     if (att && abs !== PAWN && !att[own * 81 + s]) {
-      terms.loose += sign * SHAPE_WEIGHTS.loose;
-      if (att[(own ^ 1) * 81 + s]) terms.hanging += sign * SHAPE_WEIGHTS.hanging;
+      terms.loose += sign * W.loose;
+      if (att[(own ^ 1) * 81 + s]) terms.hanging += sign * W.hanging;
     }
   }
   if (att) {
     for (let s = 0; s < 81; s += 1) {
       const y = rankOf(s);
-      if (y <= 2 && att[s]) terms.camp += SHAPE_WEIGHTS.camp;
-      if (y >= 6 && att[81 + s]) terms.camp -= SHAPE_WEIGHTS.camp;
+      if (y <= 2 && att[s]) terms.camp += W.camp;
+      if (y >= 6 && att[81 + s]) terms.camp -= W.camp;
     }
   }
   for (let color = 0; color < 2; color += 1) {
@@ -104,17 +123,18 @@ export function evaluateTerms(board, { shape = true, classic = false } = {}) {
       const n = board.hand[color * 8 + kind];
       if (!n) continue;
       terms.material += sign * n * VALUE[kind];
-      if (shape) terms.hand += sign * n * VALUE[kind] * SHAPE_WEIGHTS.hand;
+      if (shape) terms.hand += sign * n * VALUE[kind] * W.hand;
     }
-    if (shape && kings[color] >= 0 && [4, 5, 6].includes(fileOf(kings[color]))) terms.kingCenter += sign * SHAPE_WEIGHTS.kingCenter;
+    if (level >= 3 && !board.hand[color * 8 + PAWN]) terms.pawnless += sign * W.pawnless;
+    if (shape && kings[color] >= 0 && [4, 5, 6].includes(fileOf(kings[color]))) terms.kingCenter += sign * W.kingCenter;
     if (level >= 2 && kings[color] >= 0) {
       const k = kings[color];
       let hit = 0;
       for (const t of stepsOf(color, KING, k)) if (att ? att[(color ^ 1) * 81 + t] : board.attacked(t, color ^ 1)) hit += 1;
-      terms.kingZone += sign * SHAPE_WEIGHTS.kingZone * hit;
+      terms.kingZone += sign * W.kingZone * hit;
       const relRank = color === 0 ? rankOf(k) : 8 - rankOf(k);
       const relFile = color === 0 ? fileOf(k) : 10 - fileOf(k);
-      if (relRank >= 7 && (relFile <= 3 || relFile >= 7)) terms.castle += sign * SHAPE_WEIGHTS.castle;
+      if (relRank >= 7 && (relFile <= 3 || relFile >= 7)) terms.castle += sign * W.castle;
     }
   }
   return terms;
@@ -144,9 +164,11 @@ export function attackMap(board) {
 }
 
 /** 局面の点(手番の側から見た値)。 */
-function evaluate(board, shape, scale = 1, classic = false) {
-  const t = evaluateTerms(board, { shape, classic });
-  const total = t.material + scale * (t.hand + t.guard + t.kingCenter + t.attacker + t.mobility + t.kingZone + t.castle + t.camp + t.loose + t.hanging);
+function evaluate(board, shape, scale = 1, classic = false, weights = null) {
+  const t = evaluateTerms(board, { shape, classic, weights });
+  let sum = 0;
+  for (const name of SHAPE_TERMS) sum += t[name];
+  const total = t.material + scale * sum;
   return board.turn === 0 ? total : -total;
 }
 
@@ -180,17 +202,19 @@ function tryMake(board, move) {
 /**
  * 1手を読んで選ぶ。
  * @param {string} sfen
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean }} [options] shapeScaleは形の点に掛ける重み(大局観)。shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean, weights?: Record<string, number> | null, prior?: Record<string, number> | null }} [options] priorは手の好みの1つの段(静かな手を読む順番に使う) shapeScaleは形の点に掛ける重み(大局観)。shapeは形の点の段(偽=駒の損得だけ・1=基本・2=玉のまわりの利きと囲いの位置も)
  * @returns {{ move: string, score: number, depth: number, nodes: number, pv: string[] } | null}
  */
-export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6, shapeScale = 1, classic = false } = {}) {
+export function searchBestMove(sfen, { depth = 4, maxNodes = 400000, maxTimeMs = 1000, shape = true, qdepth = 6, shapeScale = 1, classic = false, weights = null, prior = null } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, shapeScale, classic, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, classic, weights, prior, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
-  const rootMoves = board.legal();
+  let rootMoves = board.legal();
   if (!rootMoves.length) return null;
+  // 手の好みがあれば、根の手も、取る手・成る手のあとに人がよく指す形の手から読む(1手目の深さを読み終える前に時間が来ても、よい手が残る)。
+  if (prior) rootMoves = orderMoves(ctx, rootMoves, 0, 0);
   let best = { move: rootMoves[0], score: -INF, depth: 0, pv: [rootMoves[0]] };
   for (let d = 1; d <= depth; d += 1) {
     const result = rootSearch(ctx, rootMoves, d, best.move);
@@ -238,7 +262,8 @@ function orderMoves(ctx, moves, ttMove, ply) {
       if (v) s = 1e6 + v * 16 - moverValue(board, m);
       else if ((m >> 14) & 1) s = 9e5;
       else if (killers.includes(m)) s = 8e5;
-      else s = ctx.history[m & 0x7fff];
+      // 静かな手は、よく効いた手(history)の順。同じくらいなら、人がよく指す形の手(手の好み。40章)から読む。
+      else s = ctx.history[m & 0x7fff] + (ctx.prior ? Math.round(quietPrior(board, m, ctx.prior) * PRIOR_ORDER) : 0);
     }
     return { m, s };
   });
@@ -322,7 +347,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
   if (timeUp(ctx)) return 0;
   if (board.inCheck()) {
     // 王手されたら、逃げ方をすべて読む(詰みを見落とさない)。深さは静止探索の残りで止める。
-    if (qdepth <= 0) return evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic);
+    if (qdepth <= 0) return evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic, ctx.weights);
     let best = -INF;
     let legal = 0;
     for (const move of board.pseudo([])) {
@@ -336,7 +361,7 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
     }
     return legal ? best : -MATE + ply;
   }
-  const stand = evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic);
+  const stand = evaluate(board, ctx.shape, ctx.shapeScale, ctx.classic, ctx.weights);
   if (qdepth <= 0 || stand >= beta) return stand;
   if (stand > alpha) alpha = stand;
   const moves = board.pseudo([], { captures: true })
@@ -358,13 +383,13 @@ function quiesce(ctx, alpha, beta, qdepth, ply) {
  * 決めた根の手だけを読み、それぞれの点(手番の側から見た値)と読み筋を出す。定跡の手や手順表の手が、最善より大きく劣らないかを確かめるのに使う。
  * @param {string} sfen
  * @param {string[]} usiMoves
- * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean }} [options]
+ * @param {{ depth?: number, maxNodes?: number, maxTimeMs?: number, shape?: boolean | number, qdepth?: number, shapeScale?: number, classic?: boolean, weights?: Record<string, number> | null, prior?: Record<string, number> | null }} [options] priorは手の好みの1つの段(静かな手を読む順番に使う)
  * @returns {Map<string, { score: number, pv: string[] }>}
  */
-export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6, shapeScale = 1, classic = false } = {}) {
+export function scoreMoves(sfen, usiMoves, { depth = 3, maxNodes = 200000, maxTimeMs = 600, shape = true, qdepth = 6, shapeScale = 1, classic = false, weights = null, prior = null } = {}) {
   const board = FastBoard.fromSfen(sfen);
   const ctx = {
-    board, shape, qdepth, shapeScale, classic, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
+    board, shape, qdepth, shapeScale, classic, weights, prior, nodes: 0, maxNodes, deadline: Date.now() + maxTimeMs, stopped: false,
     tt: new Map(), killers: [], history: new Int32Array(1 << 15),
   };
   const result = new Map();

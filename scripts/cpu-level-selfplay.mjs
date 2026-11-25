@@ -136,14 +136,16 @@ export function strengthForPlayer(spec) {
   // T<読み>-<作戦>-<安定>-<詰み>: 理由で指す棋士の考え方(全部の手を読む探索つき。34-16)。
   // 末尾のbを付けると、観戦の1手の時間の上限(WATCH_THINK_BUDGET_MS。38章)で指す(例: T45-45-45-45b)。
   // 末尾のcを付けると、前の版の駒の価値と形の点(成り駒を金と同じに数え、形の点は段1。39章)で指す(例: T45-45-45-45bc)。
+  // 末尾のwを付けると、形の点を手で決めた重み(40章のL2の前)で読む(例: T45-45-45-45bw)。
   // 末尾のhを付けると、プロの棋譜から数えた手の好み(40章のL3)を使わずに指す(例: T45-45-45-45bh)。
-  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?$/);
+  const thinkSpec = spec.match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?(w)?$/);
   if (thinkSpec) {
     const [reading, plan, steady, mate] = thinkSpec.slice(1, 5).map(Number);
     const profile = thinkProfile({ reading, plan, steady, mate });
     const budgeted = thinkSpec[5] ? budgetProfile(profile, WATCH_THINK_BUDGET_MS) : profile;
     const shaped = thinkSpec[6] ? { ...budgeted, classic: true } : budgeted;
-    return { thinkProfile: thinkSpec[7] ? { ...shaped, humanMargin: 0 } : shaped, nodes: 0 };
+    const preferred = thinkSpec[7] ? { ...shaped, humanMargin: 0 } : shaped;
+    return { thinkProfile: thinkSpec[8] ? { ...preferred, handWeights: true } : preferred, nodes: 0 };
   }
   // xを付けると形の点の段2(玉のまわりの利き・囲いの位置)。
   const fullSpec = spec.match(/^S(\d+)(m|x)?(?:t(\d+))?$/);

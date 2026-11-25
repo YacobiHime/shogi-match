@@ -8,12 +8,13 @@
 
 import { findMateLine } from './problem-solver';
 import { FastBoard } from './fast-board.mjs';
-import { MATE, evaluateTerms, scoreMoves, searchBestMove } from './logic-search.mjs';
+import { HAND_SHAPE_WEIGHTS, MATE, evaluateTerms, scoreMoves, searchBestMove } from './logic-search.mjs';
 import { playLight, stateFromSfen } from './logic-position.mjs';
 import { QUIET_ORDER, quietKind, situationalOrder } from './reason-move.mjs';
 import { legalMoves } from './light-moves.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { moveFeatures, priorPhase, priorScore } from './move-prior.mjs';
+import { PRO_MOVE_PRIOR } from '../data/pro-move-prior.mjs';
 
 const LV_MIN = 12;
 const LV_MAX = 49;
@@ -107,7 +108,7 @@ function bestReason(sfen, usi, score) {
 /**
  * 考えて1手を選ぶ。
  * lastMoveは直前の相手の手(人の好みの「取り返し」を見る。なくてもよい)。
- * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile> & { classic?: boolean }, planMove?: string | null, random?: () => number, lastMove?: string | null }} options
+ * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile> & { classic?: boolean, handWeights?: boolean }, planMove?: string | null, random?: () => number, lastMove?: string | null }} options
  * @returns {{ move: string, stage: string, reason: string, score: number, line: string[], skipped: string[], mate?: number } | null}
  */
 export function chooseThinkingMove({ sfen, profile, planMove = null, random = Math.random, lastMove = null }) {
@@ -126,12 +127,16 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   // 形の点は段3(敵陣の利き・浮き駒・玉のまわりの利き。39章)。classicは前の版(段1と、成り駒を金と同じに数える価値)。
   const shape = profile.classic ? 1 : profile.shape ?? 3;
   const classic = Boolean(profile.classic);
-  const options = { depth, qdepth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6, shape, classic };
+  // 形の点の重みは、プロの棋譜に合わせた重み(40章のL2)。handWeightsは手で決めた重み(比べる用)。
+  const weights = profile.handWeights ? HAND_SHAPE_WEIGHTS : null;
+  // 読む順番に手の好みを使う(静かな手を、人がよく指す形から読む。40章)。前の版とhumanMargin=0の比べ用の選手では使わない。
+  const prior = !profile.classic && (profile.humanMargin ?? 0) > 0 ? PRO_MOVE_PRIOR[priorPhase(Math.max(1, Number(String(sfen).trim().split(/\s+/)[3]) || 1))] ?? null : null;
+  const options = { depth, qdepth, maxTimeMs: profile.timeMs, shapeScale: profile.shapeScale, maxNodes: 3e6, shape, classic, weights, prior };
   const best = searchBestMove(sfen, options);
   if (!best) return null;
   // 3. 定跡: 最善より大きく劣らなければ定跡の手。
   const checkDepth = Math.max(1, depth - 1);
-  const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale, shape, classic });
+  const scoreOpts = () => ({ depth: checkDepth, qdepth, maxTimeMs: Math.max(30, Math.min(Math.round(profile.timeMs / 3), deadline - Date.now())), shapeScale: profile.shapeScale, shape, classic, weights, prior });
   if (planMove && planMove !== best.move) {
     // 定跡の手は、駒の損得と詰みだけで比べる(形の点では外さない。docs/disciple-mode-design.mdの35-6)。
     // 前は形の点も入れて比べ、強い棋士ほど5手目あたりで定跡を外れていた。

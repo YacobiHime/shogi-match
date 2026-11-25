@@ -76,3 +76,32 @@ export function priorScore(features, phase, table = PRO_MOVE_PRIOR) {
   for (const feature of features) total += weights[feature] ?? 0;
   return total;
 }
+
+/**
+ * 静かな手(取らない・成らない手)の好みの点を、局面を動かさずに軽く数える(読む順番に使う。40章)。
+ * 王手・取られる升へ行く・取り返しは数えない(指して戻す手間を省く)。weightsはPRO_MOVE_PRIORの1つの段。
+ * @param {import('./fast-board.mjs').FastBoard} board
+ * @param {number} move
+ * @param {Record<string, number>} weights
+ */
+export function quietPrior(board, move, weights) {
+  const color = board.turn;
+  const from = move & 127;
+  const to = (move >> 7) & 127;
+  let total = weights.quiet ?? 0;
+  let kind;
+  if (from >= 81) {
+    kind = from - 81;
+    total += weights[`drop:${KIND_LETTERS[kind]}`] ?? 0;
+  } else {
+    const p = board.sq[from];
+    kind = p > 0 ? p : -p;
+    total += weights[`piece:${KIND_LETTERS[kind]}`] ?? 0;
+    const dy = (rankOf(to) - rankOf(from)) * (color === 0 ? 1 : -1);
+    total += weights[dy < 0 ? 'dir:forward' : dy > 0 ? 'dir:back' : 'dir:side'] ?? 0;
+    if (board.attacked(from, color ^ 1)) total += weights.escape ?? 0;
+  }
+  if (kind !== KING && near(to, board.king[color])) total += weights['near:own-king'] ?? 0;
+  if (near(to, board.king[color ^ 1])) total += weights['near:enemy-king'] ?? 0;
+  return total;
+}
