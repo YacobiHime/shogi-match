@@ -4,3 +4,4 @@ dist/
 firebase-public/
 firebase-debug.log
 /exhibit/
+.kifu-cache/

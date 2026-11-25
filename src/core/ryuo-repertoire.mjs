@@ -4,6 +4,7 @@
 
 import { OPPONENT_STYLES } from './ryuo-data.mjs';
 import { createUsage, pickOpening } from './opening-usage.mjs';
+import { eraOpeningShares } from './pro-eras.mjs';
 
 /** 居飛車の戦法の選ばれやすさ。 */
 export const STATIC_STYLE_WEIGHTS = Object.freeze({
@@ -47,12 +48,38 @@ function weightedId(rng, weights, exclude = []) {
   return entries.at(-1)[0];
 }
 
+/** 時代の重みに混ぜる、今までの仮の重みの割合(時代の棋譜に出てこない戦法も、ときどき選ばれるように)。 */
+export const ERA_BASE_MIX = 0.1;
+
+/** 時代の重みと仮の重みを混ぜる(どちらも合計を1にしてから)。 */
+function mixWeights(eraWeights, baseWeights) {
+  const sum = (weights) => Object.values(weights).reduce((total, w) => total + w, 0) || 1;
+  const eraTotal = sum(eraWeights);
+  const baseTotal = sum(baseWeights);
+  const out = {};
+  for (const id of Object.keys(baseWeights)) {
+    out[id] = (1 - ERA_BASE_MIX) * ((eraWeights[id] ?? 0) / eraTotal) + ERA_BASE_MIX * (baseWeights[id] / baseTotal);
+  }
+  return out;
+}
+
 /**
  * 得意戦法を作る。styles[0]が、いちばんの得意戦法。
+ * eraを渡すと、その時代のプロの棋譜の割合(pro-eras.mjs。docs/disciple-mode-design.mdの40章)で、振り飛車党の割合と戦法の重みを決める。
+ * 組の差(上位ほど振り飛車党が少ない)は、今までの割合の比で掛ける。乱数を使う回数は、eraがあってもなくても同じ。
+ * @param {{ next(): number }} rng
+ * @param {number} group
+ * @param {{ era?: string | null }} [options]
  * @returns {{ party: 'static' | 'ranging' | 'both', styles: string[] }}
  */
-export function createRepertoire(rng, group) {
-  const share = PARTY_SHARES[group] ?? PARTY_SHARES[6];
+export function createRepertoire(rng, group, { era = null } = {}) {
+  const base = PARTY_SHARES[group] ?? PARTY_SHARES[6];
+  const shares = era ? eraOpeningShares(era) : null;
+  const share = shares
+    ? { ranging: Math.min(0.8, Math.max(0.02, shares.ranging * (base.ranging / PARTY_SHARES[4].ranging) - base.both / 2)), both: base.both }
+    : base;
+  const staticWeights = shares ? mixWeights(shares.staticWeights, STATIC_STYLE_WEIGHTS) : STATIC_STYLE_WEIGHTS;
+  const rangingWeights = shares ? mixWeights(shares.rangingWeights, RANGING_STYLE_WEIGHTS) : RANGING_STYLE_WEIGHTS;
   const roll = rng.next();
   const party = roll < share.ranging ? 'ranging' : roll < share.ranging + share.both ? 'both' : 'static';
   const count = 2 + (rng.next() < 0.4 ? 1 : 0);
@@ -60,9 +87,9 @@ export function createRepertoire(rng, group) {
   for (let index = 0; index < count; index += 1) {
     // 両方指す棋士は、居飛車と振り飛車を交互に足す。
     const side = party === 'both' ? (index % 2 === 0 ? (rng.next() < 0.5 ? 'static' : 'ranging') : (STYLE_BY_ID.get(styles[0]).rook === 'static' ? 'ranging' : 'static')) : party;
-    styles.push(weightedId(rng, side === 'ranging' ? RANGING_STYLE_WEIGHTS : STATIC_STYLE_WEIGHTS, styles));
+    styles.push(weightedId(rng, side === 'ranging' ? rangingWeights : staticWeights, styles));
   }
-  return withUsage(rng, { party, styles });
+  return withUsage(rng, era ? { party, styles, era } : { party, styles });
 }
 
 /** 使用率を足す(保存してあった、使用率のない得意戦法のため)。党は、得意戦法の党のまま。 */

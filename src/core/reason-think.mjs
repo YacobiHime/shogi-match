@@ -13,6 +13,7 @@ import { playLight, stateFromSfen } from './logic-position.mjs';
 import { QUIET_ORDER, quietKind, situationalOrder } from './reason-move.mjs';
 import { legalMoves } from './light-moves.mjs';
 import { createRng } from './ryuo-random.mjs';
+import { moveFeatures, priorPhase, priorScore } from './move-prior.mjs';
 
 const LV_MIN = 12;
 const LV_MAX = 49;
@@ -48,7 +49,34 @@ export function thinkProfile(levels = {}) {
     skip: Math.round(lerp(0.35, 0.02, s) * 1000) / 1000,
     /** 自分の詰みを探す手数(1〜9)。 */
     mateDepth: 1 + 2 * Math.round(m * 4),
+    /** 人が指しそうな手の好み(40章のL3)を使って、最善との差がこれ以内の手から選ぶ(点。作戦が高いほど小さい)。0なら使わない。 */
+    humanMargin: Math.round(lerp(70, 25, p)),
   };
+}
+
+/** 人の好みで選び直すときに、点を確かめる手の数(好みの上位から)。 */
+const HUMAN_CANDIDATES = 4;
+
+/**
+ * 局面の手数と、直前の相手の手の行き先(取り返しを見る)。
+ * @param {string} sfen
+ * @param {import('./fast-board.mjs').FastBoard} board
+ * @param {string | null} lastMove
+ */
+function priorContext(sfen, board, lastMove) {
+  const ply = Math.max(1, Number(String(sfen).trim().split(/\s+/)[3]) || 1);
+  const lastTo = lastMove && /^[1-9][a-i]/.test(lastMove.slice(2, 4)) ? (lastMove.charCodeAt(3) - 97) * 9 + (Number(lastMove[2]) - 1) : -1;
+  return { phase: priorPhase(ply), lastTo, board };
+}
+
+/** 手(USI)ごとの好みの点。 */
+function priorsOf(context, usiList) {
+  const out = new Map();
+  for (const usi of usiList) {
+    const move = context.board.fromUsi(usi);
+    out.set(usi, move ? priorScore(moveFeatures(context.board, move, { lastTo: context.lastTo }), context.phase) : -Infinity);
+  }
+  return out;
 }
 
 /** 定跡の手を外れる、最善との差。 */
@@ -78,10 +106,11 @@ function bestReason(sfen, usi, score) {
 
 /**
  * 考えて1手を選ぶ。
- * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile>, planMove?: string | null, random?: () => number }} options
+ * lastMoveは直前の相手の手(人の好みの「取り返し」を見る。なくてもよい)。
+ * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile> & { classic?: boolean }, planMove?: string | null, random?: () => number, lastMove?: string | null }} options
  * @returns {{ move: string, stage: string, reason: string, score: number, line: string[], skipped: string[], mate?: number } | null}
  */
-export function chooseThinkingMove({ sfen, profile, planMove = null, random = Math.random }) {
+export function chooseThinkingMove({ sfen, profile, planMove = null, random = Math.random, lastMove = null }) {
   const skipped = [];
   const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, depth: skipped.includes('hanging') ? 1 : profile.depth, ...extra });
   // 1. 自分の詰み。
@@ -118,6 +147,10 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
     return done(planMove, 'book', 'book', { score: best.score, line: best.pv });
   }
   const reason = bestReason(sfen, best.move, best.score);
+  // 人が指しそうな手の好み(40章のL3)。前の版(classic)と、うっかりの手では使わない。
+  const useHuman = !profile.classic && !careless && (profile.humanMargin ?? 0) > 0;
+  let humanContext = null;
+  const human = () => (humanContext ??= priorContext(sfen, FastBoard.fromSfen(sfen), lastMove));
   // 4. 読みの最善が駒得・成る・詰み・王手の手なら、その手。
   const tactical = ['material', 'promote', 'mate-threat', 'check'].includes(reason);
   // 5. 手順表の手のうち、最善との差が小さいものを、決まった順(作戦が高いほど局面に合わせた順)で選ぶ。
@@ -139,12 +172,45 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
       const scores = scoreMoves(sfen, list, scoreOpts());
       const good = list.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= best.score - profile.quietMargin);
       if (good.length) {
-        const usi = good[Math.floor(random() * good.length)];
+        // 差の小さい手の中からは、人が指しそうな手を選びやすくする(40章のL3。好みの点の大きい手ほど選ばれやすい)。
+        const usi = useHuman ? weightedPick(good, priorsOf(human(), good), random) : good[Math.floor(random() * good.length)];
         return done(usi, 'quiet', kind, { score: scores.get(usi).score, line: scores.get(usi).pv });
       }
     }
   }
+  // 人が指しそうな手(40章のL3): 好みの上位の手のうち、最善との差がhumanMargin以内なら、好みのいちばん大きい手を指す。
+  // 詰み・詰めろの手と、取り合いで点が大きく動く局面では最善のまま(読みの結果を優先する)。
+  if (useHuman && best.score < MATE - 100 && Date.now() < deadline - 30) {
+    const context = human();
+    const legal = legalMoves(state);
+    const priors = priorsOf(context, legal);
+    const top = legal.filter((usi) => usi !== best.move).sort((a, b) => priors.get(b) - priors.get(a)).slice(0, HUMAN_CANDIDATES);
+    const bestPrior = priors.get(best.move) ?? -Infinity;
+    const tried = top.filter((usi) => priors.get(usi) > bestPrior);
+    if (tried.length) {
+      const scores = scoreMoves(sfen, tried, scoreOpts());
+      const near = tried.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= best.score - profile.humanMargin);
+      if (near.length) {
+        const usi = near.sort((a, b) => priors.get(b) - priors.get(a))[0];
+        const scored = scores.get(usi);
+        return done(usi, tactical ? 'read' : 'shape', bestReason(sfen, usi, scored.score), { score: scored.score, line: scored.pv });
+      }
+    }
+  }
   return done(best.move, tactical ? 'read' : 'shape', reason, { score: best.score, line: best.pv });
+}
+
+/** 好みの点で重みを付けて1つ選ぶ(点の差が1なら、選ばれやすさはe倍)。 */
+function weightedPick(list, priors, random) {
+  const top = Math.max(...list.map((usi) => priors.get(usi) ?? 0));
+  const weights = list.map((usi) => Math.exp((priors.get(usi) ?? top) - top));
+  const total = weights.reduce((sum, w) => sum + w, 0);
+  let roll = random() * total;
+  for (let i = 0; i < list.length; i += 1) {
+    roll -= weights[i];
+    if (roll <= 0) return list[i];
+  }
+  return list.at(-1);
 }
 
 /** 観戦の1手の時間の上限(ミリ秒。docs/disciple-mode-design.mdの38章)。読みの時間をこれまでにし、締め切りは読みの1.3倍。 */
@@ -165,9 +231,9 @@ export function budgetProfile(profile, budgetMs) {
 /**
  * 理由で指す棋士の1手を、種から決まる乱数で考える(本局から呼ぶ。ブラウザはWorkerで同じ関数を動かす)。
  * budgetMsは1手の時間の上限(観戦の本局。38章)。
- * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number, budgetMs?: number }} request
+ * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number, budgetMs?: number, lastMove?: string | null }} request
  */
-export async function thinkHere({ sfen, levels, planMove, seed, budgetMs = 0 }) {
+export async function thinkHere({ sfen, levels, planMove, seed, budgetMs = 0, lastMove = null }) {
   const rng = createRng(seed >>> 0);
-  return chooseThinkingMove({ sfen, profile: budgetProfile(thinkProfile(levels), budgetMs), planMove, random: () => rng.next() });
+  return chooseThinkingMove({ sfen, profile: budgetProfile(thinkProfile(levels), budgetMs), planMove, random: () => rng.next(), lastMove });
 }

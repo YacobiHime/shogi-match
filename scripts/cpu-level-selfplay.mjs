@@ -232,7 +232,7 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
     let choice = strength.thinkProfile ? (() => {
-      const found = chooseThinkingMove({ sfen, profile: strength.thinkProfile, random });
+      const found = chooseThinkingMove({ sfen, profile: strength.thinkProfile, random, lastMove: history.at(-1) ?? null });
       return found && moves.includes(found.move) ? { move: found.move } : { move: moves[0] };
     })() : strength.fullSearch ? (() => {
       const found = searchBestMove(sfen, { ...strength.fullSearch, maxNodes: 2e6 });

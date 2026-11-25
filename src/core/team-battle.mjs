@@ -140,7 +140,7 @@ function createStudent(run, rng, used, rating) {
   run.nextId += 1;
   const grade = 1 + Math.floor(rng.next() * 3);
   const age = 15 + grade;
-  const repertoire = createRepertoire(rng, 6);
+  const repertoire = createRepertoire(rng, 6, { era: 'reiwa' });
   const style = styleEntry(repertoire.styles[0]);
   const woman = rng.next() < 0.25;
   const member = {

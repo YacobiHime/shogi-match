@@ -3,7 +3,7 @@
 import ThinkWorker from "../../core/reason-think-worker.mjs?worker&inline";
 import { thinkHere } from "../../core/reason-think.mjs";
 
-type ThinkRequest = { sfen: string; levels: Record<string, number>; planMove: string | null; seed: number; budgetMs?: number };
+type ThinkRequest = { sfen: string; levels: Record<string, number>; planMove: string | null; seed: number; budgetMs?: number; lastMove?: string | null };
 
 export function createThinker() {
   let worker: Worker | null = null;

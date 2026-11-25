@@ -11,6 +11,7 @@ import { USER_ID } from './ryuo.mjs';
 import { createRng, gauss } from './ryuo-random.mjs';
 import { newName } from './ryuo-names.mjs';
 import { createRepertoire, pickGameStyle, styleEntry } from './ryuo-repertoire.mjs';
+import { eraForAge } from './pro-eras.mjs';
 import { createCharacter } from './player-character.mjs';
 import { GROUP_MEAN_RATING, tournamentLevel, worldCpuLevel } from './ryuo-strength.mjs';
 import { LADDER_VERSION } from './level-ladder.mjs';
@@ -183,7 +184,8 @@ function createMember(world, rng, used, { cls, age, talent = gauss(rng) * 35 }) 
   const id = `k${world.nextId}`;
   world.nextId += 1;
   const rating = Math.round(CLASS_RATINGS[cls] + gauss(rng) * 12);
-  const repertoire = createRepertoire(rng, 6);
+  // 研修会員は今の子どもたちなので、令和のプロの棋譜の作戦の割合(docs/disciple-mode-design.mdの40章)。
+  const repertoire = createRepertoire(rng, 6, { era: 'reiwa' });
   const style = styleEntry(repertoire.styles[0]);
   const woman = rng.next() < 0.3;
   const member = {
@@ -368,7 +370,7 @@ function fallbackTeachers(seed) {
     const name = newName(rng, used, { women: false, age });
     used.add(name);
     const rating = 1900 + Math.round(rng.next() * 120);
-    const repertoire = createRepertoire(rng, 6);
+    const repertoire = createRepertoire(rng, 6, { era: eraForAge(age) });
     const style = styleEntry(repertoire.styles[0]);
     return { id: `t-kanji-${index + 1}`, name, kind: 'teacher', dan, age, rating, style, repertoire, character: createCharacter(rng, { rating, age, style }) };
   });

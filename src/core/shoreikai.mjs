@@ -201,7 +201,8 @@ function createMember(world, rng, used, { rank, age, talent = gauss(rng) * 35, k
   world.nextId += 1;
   // 強さはいまの段級の目安のまわり。才能は、これからの伸び(1か月の伸び)に効く。
   const rating = Math.round(RANK_RATINGS[Math.min(rank, SANDAN)] + gauss(rng) * 18 + (kind === 'examinee' ? -30 : 0));
-  const repertoire = createRepertoire(rng, 6);
+  // 奨励会員は、奨励会の棋譜の作戦の割合(docs/disciple-mode-design.mdの40章)。
+  const repertoire = createRepertoire(rng, 6, { era: 'shoreikai' });
   const style = styleEntry(repertoire.styles[0]);
   const member = {
     id,

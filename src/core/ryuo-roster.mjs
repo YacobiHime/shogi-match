@@ -13,6 +13,7 @@ import { isLegacyAbilities, migrateAbilityDevs } from './player-abilities.mjs';
 import { newName } from './ryuo-names.mjs';
 import { HANANE, STORY_PEOPLE, YOSHIHIKO, YOSHIHIKO_RATING, addStoryMembers, storyCharacter, storyMemberId } from './ryuo-story.mjs';
 import { createRepertoire, styleEntry, withUsage } from './ryuo-repertoire.mjs';
+import { eraForAge } from './pro-eras.mjs';
 import { driftUsage } from './opening-usage.mjs';
 import {
   DAN_ORDER,
@@ -113,7 +114,8 @@ function createMember(roster, rng, used, { group, kind = 'pro', rating, age, dan
     junni: null,
   };
   // 得意戦法(居飛車党・振り飛車党・両方)。styleは、いちばんの得意戦法。
-  member.repertoire = createRepertoire(rng, group);
+  // 育った時代(年齢から)のプロの棋譜の作戦の割合で選ぶ(docs/disciple-mode-design.mdの40章)。ベテランは昭和の振り飛車、若手は令和の角換わり・相掛かりが多い。
+  member.repertoire = createRepertoire(rng, group, { era: eraForAge(memberAge) });
   member.style = styleEntry(member.repertoire.styles[0]);
   // 棋風と特徴。強さ・年齢・得意戦法に合わせて決める。
   member.character = createCharacter(rng, member);
