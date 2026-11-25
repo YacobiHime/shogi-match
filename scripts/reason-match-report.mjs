@@ -27,13 +27,15 @@ function parseArgs(argv) {
 
 /** 選手の書き方から、考え方の形。 */
 export function playerProfile(spec) {
-  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?$/);
+  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?(?:m(\d+))?$/);
   if (!match) throw new Error(`選手の書き方が違います: ${spec}`);
   const [reading, plan, steady, mate] = match.slice(1, 5).map(Number);
   let profile = thinkProfile({ reading, plan, steady, mate });
   if (match[5]) profile = budgetProfile(profile, WATCH_THINK_BUDGET_MS);
   if (match[6]) profile = { ...profile, classic: true };
   if (match[7]) profile = { ...profile, humanMargin: 0 };
+  // 末尾m<数>: 手の好みで選ぶ幅(humanMargin)をその値にする(合わせるための試し)。
+  if (match[8]) profile = { ...profile, humanMargin: Number(match[8]) };
   return profile;
 }
 
