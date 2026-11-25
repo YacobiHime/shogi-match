@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MATE, evaluateTerms, searchBestMove } from './logic-search.mjs';
+import { HAND_SHAPE_WEIGHTS, MATE, SHAPE_TERMS, SHAPE_WEIGHTS, evaluateTerms, searchBestMove } from './logic-search.mjs';
 import { FastBoard } from './fast-board.mjs';
 
 const START = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
@@ -61,5 +61,24 @@ describe('将棋AI(論理)の駒の価値と形の点(39章)', () => {
     // 浮いた金は形の点が下がる。
     const loose = FastBoard.fromSfen('4k4/9/9/9/4G4/9/9/9/4K4 b - 1');
     expect(evaluateTerms(loose, { shape: 3 }).loose).toBeLessThan(0);
+  });
+});
+
+describe('形の点の重みを棋譜の勝ち負けに合わせる(40章のL2)', () => {
+  it('いま使う重みは、どの名前も数で、玉を守る・囲う・攻める向きは手で決めた重みと同じ', () => {
+    for (const name of SHAPE_TERMS) expect(Number.isFinite(SHAPE_WEIGHTS[name])).toBe(true);
+    for (const name of ['guard', 'castle', 'attacker', 'camp']) expect(Math.sign(SHAPE_WEIGHTS[name])).toBe(Math.sign(HAND_SHAPE_WEIGHTS[name]));
+    for (const name of ['kingCenter', 'kingZone', 'loose', 'hanging']) expect(Math.sign(SHAPE_WEIGHTS[name])).toBe(Math.sign(HAND_SHAPE_WEIGHTS[name]));
+  });
+  it('重みを渡すと、その重みで数え、手で決めた重みでは歩切れ・位の歩を数えない', () => {
+    // 先手の歩が5四(位)、先手は持ち歩なし。
+    const board = FastBoard.fromSfen('4k4/9/9/4P4/9/9/9/9/4K4 b p 1');
+    const hand = evaluateTerms(board, { shape: 3, weights: HAND_SHAPE_WEIGHTS });
+    expect(hand.pawnFront).toBe(0);
+    expect(hand.pawnless).toBe(0);
+    const unit = evaluateTerms(board, { shape: 3, weights: Object.fromEntries(SHAPE_TERMS.map((n) => [n, 1])) });
+    expect(unit.pawnFront).toBe(1);
+    // 先手は歩切れ(+1)、後手は歩を持つ(0)。
+    expect(unit.pawnless).toBe(1);
   });
 });
