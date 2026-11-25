@@ -2,7 +2,7 @@
 // 手元に集めた棋譜(scripts/fetch-pro-kifu.mjsの.kifu-cache/)から、局面をいくつか選び、その局面で理由で指す棋士が選ぶ手とプロの指した手を比べる。
 // 使い方(problem-solverがTypeScriptなのでvite-nodeで動かす):
 //   npx vite-node scripts/reason-match-report.mjs -- [--players T30-30-30-30b,T45-45-45-45b] [--games 40] [--positions 8] [--groups edo,early,showa,heisei,reiwa,shoreikai] [--seed 1]
-// 選手の書き方は自己対局と同じT<読み>-<作戦>-<安定>-<詰み>(末尾b=観戦の時間の上限、c=前の版の駒の価値と形の点)。
+// 選手の書き方は自己対局と同じT<読み>-<作戦>-<安定>-<詰み>(末尾b=観戦の時間の上限、c=前の版の駒の価値と形の点、h=手の好みを使わない)。
 // 出すもの: 序盤(30手まで)・中盤(31〜80手)・終盤(81手から)ごとの一致率と、時代ごとの一致率。
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -27,12 +27,13 @@ function parseArgs(argv) {
 
 /** 選手の書き方から、考え方の形。 */
 export function playerProfile(spec) {
-  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?$/);
+  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?$/);
   if (!match) throw new Error(`選手の書き方が違います: ${spec}`);
   const [reading, plan, steady, mate] = match.slice(1, 5).map(Number);
   let profile = thinkProfile({ reading, plan, steady, mate });
   if (match[5]) profile = budgetProfile(profile, WATCH_THINK_BUDGET_MS);
   if (match[6]) profile = { ...profile, classic: true };
+  if (match[7]) profile = { ...profile, humanMargin: 0 };
   return profile;
 }
 

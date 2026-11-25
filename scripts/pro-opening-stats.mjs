@@ -40,7 +40,8 @@ export function styleOfNames(names, rook) {
   }
   if (has('腰掛け銀') && has('角換わり')) return 'kakugawari-kg';
   if (has('角換わり')) return 'kakugawari';
-  if (has('相掛かり')) return 'aigakari';
+  // 横歩取り・ひねり飛車は相掛かりの出だしから分かれる形なので、相掛かりに寄せる(目録に横歩取りの得意戦法はない)。
+  if (has('相掛かり') || has('横歩取り') || has('ひねり飛車')) return 'aigakari';
   if (has('雁木')) return 'gangi';
   if (has('矢倉')) return 'yagura';
   if (has('右四間')) return 'right-shiken';

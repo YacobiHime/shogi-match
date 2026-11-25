@@ -132,7 +132,8 @@ describe('羽音の弟子の作戦帳(35-14)', () => {
   it('羽音の弟子と当たる日は、観戦でも結果だけでも、羽音の弟子の作戦帳の作戦で指す', async () => {
     const { watchSpec } = await import('./disciple-run.mjs');
     const { RIVAL_START_CARDS } = await import('./disciple-rival.mjs');
-    let s = afterExam();
+    // 研修会のあいだに羽音の弟子と例会で当たる種(当たる前に奨励会へ上がる種もある)。
+    let s = afterExam(9);
     let found = null;
     for (let i = 0; i < 200 && !s.end && !s.shoreikai && !found; i += 1) {
       const kind = turnKind(s);

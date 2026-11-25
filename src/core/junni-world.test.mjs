@@ -76,8 +76,9 @@ describe('順位戦の世界(名簿に1つ)', () => {
   });
 
   it('名人戦の期が終わると、世界を1期進めて名簿へ書き戻す。期の途中の引退も直し、対戦成績を名人戦として数える', () => {
+    // 全勝でも、同じ成績の棋士との順位の差で昇級を逃す種がある。昇級する種で確かめる。
     let roster = joinJunni(createRoster({ seed: 44 }));
-    const season = playOut(createMeijinSeason({ no: roster.junni.no + 1, league: roster.junni, roster, settings, userLevel: 30, seed: 5 }));
+    const season = playOut(createMeijinSeason({ no: roster.junni.no + 1, league: roster.junni, roster, settings, userLevel: 30, seed: 6 }));
     expect(season.phase).toBe('done');
     // 期の途中で、C級1組の棋士が1人引退した。
     const retired = roster.junni.classes.C1[4];

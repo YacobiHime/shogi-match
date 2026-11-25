@@ -1,2 +1,9 @@
-// 人が指しそうな手の好みの重み。scripts/pro-move-prior.mjs --writeで作る。
-export const PRO_MOVE_PRIOR = Object.freeze({});
+// 人が指しそうな手の好みの重み(docs/disciple-mode-design.mdの40章のL3)。scripts/pro-move-prior.mjs --writeで作る。手で書き換えない。
+// 将棋DB2のプロの棋譜(私的利用)で、プロの手がその特徴を持つ割合と、合法手全体の中の割合の比の対数。棋譜そのものは入れていない。
+// op=序盤(30手まで)・mid=中盤(80手まで)・end=終盤。特徴の名前はmove-prior.mjsのmoveFeatures。
+
+export const PRO_MOVE_PRIOR = Object.freeze({
+  op: Object.freeze({"cap:dragon":1.72,"cap:major":0.21,"cap:minor":-0.44,"cap:pawn":1.27,"cap:promoted":1.22,"check":-1.3,"dir:back":-0.44,"dir:forward":0.23,"dir:side":-0.66,"drop:B":-2.82,"drop:G":-2.42,"drop:L":-0.37,"drop:N":0.02,"drop:P":-0.22,"drop:R":-1.36,"drop:S":-1.82,"escape":0.59,"hang":-1.11,"near:enemy-king":-1.12,"near:own-king":-0.01,"piece:+B":0,"piece:+P":-0.12,"piece:+R":-0.06,"piece:B":-0.46,"piece:G":-0.41,"piece:K":0.28,"piece:L":-2.97,"piece:N":-0.44,"piece:P":0.56,"piece:R":-0.83,"piece:S":0.64,"promote":-0.25,"quiet":-0.05,"recapture":2.46}),
+  mid: Object.freeze({"cap:dragon":1.74,"cap:major":2.51,"cap:minor":1.89,"cap:pawn":1.62,"cap:promoted":1.56,"check":0.54,"dir:back":0,"dir:forward":0.38,"dir:side":-0.21,"drop:B":-1.32,"drop:G":-1.18,"drop:L":-0.9,"drop:N":-0.94,"drop:P":0.07,"drop:R":-0.76,"drop:S":-1.13,"escape":1.26,"hang":-0.42,"near:enemy-king":0.21,"near:own-king":-0.11,"piece:+B":0.65,"piece:+L":1.14,"piece:+N":1.18,"piece:+P":1.22,"piece:+R":0.57,"piece:+S":0.96,"piece:B":0.2,"piece:G":-0.14,"piece:K":-0.33,"piece:L":-1.3,"piece:N":0.44,"piece:P":0.67,"piece:R":0.04,"piece:S":0.49,"promote":1.17,"quiet":-0.3,"recapture":2.32}),
+  end: Object.freeze({"cap:dragon":1.52,"cap:major":2.51,"cap:minor":1.73,"cap:pawn":1.36,"cap:promoted":1.05,"check":1.68,"dir:back":0.15,"dir:forward":0.53,"dir:side":0.26,"drop:B":-0.67,"drop:G":-0.94,"drop:L":-0.76,"drop:N":-0.61,"drop:P":-0.02,"drop:R":-0.47,"drop:S":-0.68,"escape":0.73,"hang":-0.26,"near:enemy-king":0.86,"near:own-king":0.09,"piece:+B":0.7,"piece:+L":0.81,"piece:+N":0.89,"piece:+P":0.97,"piece:+R":0.6,"piece:+S":0.77,"piece:B":0.62,"piece:G":0.44,"piece:K":-0.15,"piece:L":-0.25,"piece:N":0.75,"piece:P":0.69,"piece:R":0.42,"piece:S":0.6,"promote":1.5,"quiet":-0.41,"recapture":1.4}),
+});
