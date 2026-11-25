@@ -262,8 +262,9 @@ function orderMoves(ctx, moves, ttMove, ply) {
       if (v) s = 1e6 + v * 16 - moverValue(board, m);
       else if ((m >> 14) & 1) s = 9e5;
       else if (killers.includes(m)) s = 8e5;
-      // 静かな手は、よく効いた手(history)の順。同じくらいなら、人がよく指す形の手(手の好み。40章)から読む。
-      else s = ctx.history[m & 0x7fff] + (ctx.prior ? Math.round(quietPrior(board, m, ctx.prior) * PRIOR_ORDER) : 0);
+      // 静かな手は、よく効いた手(history)の順。根(ply 0)だけは、人がよく指す形の手(手の好み。40章)から読む。
+      // 途中の局面でも使うと、読む局面の数はほとんど減らず(−3%)、数える手間で約2割遅くなった(40-8)。
+      else s = ctx.history[m & 0x7fff] + (ctx.prior && ply === 0 ? Math.round(quietPrior(board, m, ctx.prior) * PRIOR_ORDER) : 0);
     }
     return { m, s };
   });
