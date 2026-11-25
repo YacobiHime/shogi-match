@@ -174,8 +174,10 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
       if (list.includes(best.move)) return done(best.move, 'quiet', kind, { score: best.score, line: best.pv });
       if (tactical) continue;
       if (Date.now() > deadline - 30) break;
-      const scores = scoreMoves(sfen, list, scoreOpts());
-      const good = list.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= best.score - profile.quietMargin);
+      // 最善の手も同じ深さで読み直して比べる(浅く読んだ点と深く読んだ点を比べると、読みの深さによる点のずれで悪い手が近く見える。40-8)。
+      const scores = scoreMoves(sfen, [best.move, ...list], scoreOpts());
+      const reference = scores.get(best.move)?.score ?? best.score;
+      const good = list.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= reference - profile.quietMargin);
       if (good.length) {
         // 差の小さい手の中からは、人が指しそうな手を選びやすくする(40章のL3。好みの点の大きい手ほど選ばれやすい)。
         const usi = useHuman ? weightedPick(good, priorsOf(human(), good), random) : good[Math.floor(random() * good.length)];
@@ -193,8 +195,9 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
     const bestPrior = priors.get(best.move) ?? -Infinity;
     const tried = top.filter((usi) => priors.get(usi) > bestPrior);
     if (tried.length) {
-      const scores = scoreMoves(sfen, tried, scoreOpts());
-      const near = tried.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= best.score - profile.humanMargin);
+      const scores = scoreMoves(sfen, [best.move, ...tried], scoreOpts());
+      const reference = scores.get(best.move)?.score ?? best.score;
+      const near = tried.filter((usi) => (scores.get(usi)?.score ?? -Infinity) >= reference - profile.humanMargin);
       if (near.length) {
         const usi = near.sort((a, b) => priors.get(b) - priors.get(a))[0];
         const scored = scores.get(usi);
