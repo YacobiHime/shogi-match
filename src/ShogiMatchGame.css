@@ -4945,10 +4945,141 @@
 .shogi-title__panel--home { display: grid; gap: inherit; }
 .shogi-title__panel--off { visibility: hidden; }
 /* まなぶ・しらべるのタブ。ホームの札がない分、タイルを大きくする。 */
-.shogi-title__panels[data-home-tab="learn"] .shogi-title__tiles--learn .shogi-title__tile,
-.shogi-title__panels[data-home-tab="dex"] .shogi-title__tiles--dex .shogi-title__tile { min-height: 6em; }
+/* まなぶ・しらべるの札は、面の高さを等分して埋める(8章。前の「最低6em」はやめた)。 */
 .shogi-title__panels[data-home-tab="learn"] .shogi-title__group-title,
 .shogi-title__panels[data-home-tab="dex"] .shogi-title__group-title { font-size: 1em; }
+/*
+ * まなぶ・しらべるの進み具合の札(docs/home-roadmap-design.mdの8章、案A)。
+ * タブの面いっぱいに札を並べ、名前の下に「いまどこまでか」を出す(UD:4 主役を大きさで、UD:7-4 集めて眺めるとうれしい)。
+ * 3つのタブの面は同じ高さに重ねてある(6-6)ので、まなぶ・しらべるの面を伸ばし、札の段を残りの高さで等分する。
+ */
+.shogi-title__group--learn,
+.shogi-title__group--dex {
+  align-self: stretch;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+}
+.shogi-game .shogi-title__group--learn .shogi-title__tiles--learn {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+  min-height: 0;
+}
+.shogi-game .shogi-title__group--dex .shogi-title__tiles--dex {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+}
+@media (orientation: portrait) {
+  .shogi-game .shogi-title__group--dex .shogi-title__tiles--dex {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+}
+/* まなぶの札: 左にアイコン、右に名前と進み具合。右の端に「›」。 */
+.shogi-game .shogi-home--title .shogi-title__tiles--learn .shogi-title__card {
+  position: relative;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon info";
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-items: start;
+  column-gap: 0.9em;
+  row-gap: 0.25em;
+  min-height: 0;
+  padding: 0.6em 2.2em 0.6em 1em;
+  text-align: left;
+}
+.shogi-game .shogi-title__tiles--learn .shogi-title__card .shogi-title__icon { width: 3em; height: 3em; }
+.shogi-game .shogi-title__tiles--learn .shogi-title__card .shogi-title__label { font-size: 1.2em; }
+.shogi-title__card-info {
+  grid-area: info;
+  display: grid;
+  gap: 0.3em;
+  justify-self: stretch;
+  min-width: 0;
+  color: #d9e3ea;
+  font-size: 0.82em;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.shogi-title__card-line { overflow-wrap: anywhere; }
+.shogi-title__card-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5em;
+}
+.shogi-title__card-bar i {
+  display: block;
+  height: 0.5em;
+  overflow: hidden;
+  border-radius: 1em;
+  background: rgba(255, 252, 244, 0.18);
+}
+.shogi-title__card-bar i::before {
+  content: "";
+  display: block;
+  width: var(--card-p, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--amber);
+}
+.shogi-title__card-bar small,
+.shogi-title__card-week small { color: #fffcf4; font-size: 1em; white-space: nowrap; }
+.shogi-title__card-chips { display: flex; flex-wrap: wrap; gap: 0.3em; }
+.shogi-title__card-chips span {
+  padding: 0.05em 0.55em;
+  border: 1px solid rgba(255, 252, 244, 0.22);
+  border-radius: 1em;
+  background: rgba(23, 38, 50, 0.6);
+  white-space: nowrap;
+}
+.shogi-title__card-week { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25em; }
+.shogi-title__card-week span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  border: 1px solid rgba(255, 252, 244, 0.35);
+  border-radius: 50%;
+  font-size: 0.85em;
+}
+.shogi-title__card-week span.is-on { border-color: var(--amber); color: #172632; background: var(--amber); }
+.shogi-title__card-week span.is-today { border: 2px solid #fffcf4; }
+.shogi-title__card-week small { margin-left: 0.4em; }
+.shogi-title__card-go {
+  position: absolute;
+  top: 50%;
+  right: 0.8em;
+  color: rgba(255, 252, 244, 0.55);
+  font-size: 1.5em;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+/* しらべるの札: アイコンの下に名前と1行。名前の大きさはこれまでどおり札の幅から決める(7章)。 */
+.shogi-game .shogi-home--title .shogi-title__tiles--dex .shogi-title__card {
+  grid-template-areas: "icon" "label" "info";
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  row-gap: 0.2em;
+  min-height: 0;
+}
+.shogi-game .shogi-title__tiles--dex .shogi-title__card .shogi-title__icon { width: 2.8em; height: 2.8em; }
+.shogi-game .shogi-title__tiles--dex .shogi-title__card .shogi-title__card-info {
+  justify-self: center;
+  font-size: min(0.78em, 11cqi);
+  text-align: center;
+}
+/* 背の高い面では、しらべるの札のアイコンも大きくする。 */
+@media (min-height: 700px) {
+  .shogi-game .shogi-title__tiles--dex .shogi-title__card .shogi-title__icon { width: 3.4em; height: 3.4em; }
+}
+/* 背の低い面(スマホの横・小さいスマホ)では、札のアイコンを小さくして名前と1行を残す。 */
+@media (max-height: 600px) {
+  .shogi-game .shogi-title__tiles--learn .shogi-title__card .shogi-title__icon { width: 2.4em; height: 2.4em; }
+  .shogi-game .shogi-title__tiles--dex .shogi-title__card .shogi-title__icon { width: 2em; height: 2em; }
+  .shogi-game .shogi-home--title .shogi-title__tiles--learn .shogi-title__card { padding-block: 0.4em; }
+}
 @media (min-width: 1100px) and (min-height: 600px) {
   .shogi-title__tile--pillar .shogi-title__icon { width: 3.4em; height: 3.4em; }
   .shogi-game .shogi-home--title .shogi-title__tile--pillar { min-height: 5.8em; }

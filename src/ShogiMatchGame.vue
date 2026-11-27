@@ -378,7 +378,7 @@
           <section class="shogi-title__panel shogi-title__group shogi-title__group--learn" :class="{ 'shogi-title__panel--off': homeTab !== 'learn' }" :inert="homeTab !== 'learn'" aria-labelledby="shogi-home-school" data-home-group="learn">
             <h2 id="shogi-home-school" class="shogi-title__group-title">まなぶ</h2>
             <div class="shogi-title__tiles shogi-title__tiles--learn">
-              <button type="button" class="shogi-title__tile" :class="homeTileClass('tutorial')" @click="tutorialOpen = true">
+              <button type="button" class="shogi-title__tile shogi-title__card" :class="homeTileClass('tutorial')" data-learn-card="tutorial" @click="tutorialOpen = true">
                 <span v-if="homeTile('tutorial').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#f1a54c">
@@ -396,8 +396,14 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">将棋教室</span>
+                <span class="shogi-title__card-info">
+                  <span class="shogi-title__card-line">{{ learnCardView.tutorial.line }}</span>
+                  <span v-if="learnCardView.tutorial.bar" class="shogi-title__card-bar"><i :style="{ '--card-p': `${Math.round(learnCardView.tutorial.bar.ratio * 100)}%` }"></i><small>{{ learnCardView.tutorial.bar.text }}</small></span>
+                  <span v-if="learnCardView.tutorial.chips.length" class="shogi-title__card-chips"><span v-for="chip in learnCardView.tutorial.chips" :key="chip">{{ chip }}</span></span>
+                </span>
+                <span class="shogi-title__card-go" aria-hidden="true">›</span>
               </button>
-              <button type="button" class="shogi-title__tile" :class="homeTileClass('problems')" @click="problemSetOpen = true">
+              <button type="button" class="shogi-title__tile shogi-title__card" :class="homeTileClass('problems')" data-learn-card="problems" @click="problemSetOpen = true">
                 <span v-if="homeTile('problems').recommended" class="shogi-title__tile-badge">おすすめ</span>
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
@@ -412,9 +418,15 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">問題集</span>
+                <span class="shogi-title__card-info">
+                  <span class="shogi-title__card-line">{{ learnCardView.problems.line }}</span>
+                  <span v-if="learnCardView.problems.bar" class="shogi-title__card-bar"><i :style="{ '--card-p': `${Math.round(learnCardView.problems.bar.ratio * 100)}%` }"></i><small>{{ learnCardView.problems.bar.text }}</small></span>
+                  <span v-if="learnCardView.problems.chips.length" class="shogi-title__card-chips"><span v-for="chip in learnCardView.problems.chips" :key="chip">{{ chip }}</span></span>
+                </span>
+                <span class="shogi-title__card-go" aria-hidden="true">›</span>
               </button>
               <!-- 脳トレ道場(docs/brain-training-design.mdの11章)。計算力と記憶力の2つの部屋。 -->
-              <button type="button" class="shogi-title__tile" data-brain-tile @click="openBrainTraining">
+              <button type="button" class="shogi-title__tile shogi-title__card" data-learn-card="brain" data-brain-tile @click="openBrainTraining">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4">
                     <rect x="5" y="4" width="6" height="1" />
@@ -434,6 +446,11 @@
                   </g>
                 </svg>
                 <span class="shogi-title__label">脳トレ</span>
+                <span class="shogi-title__card-info">
+                  <span class="shogi-title__card-line">{{ learnCardView.brain.line }}</span>
+                  <span v-if="learnCardView.brain.week" class="shogi-title__card-week"><span v-for="cell in learnCardView.brain.week" :key="cell.label" :class="{ 'is-on': cell.on, 'is-today': cell.today }">{{ cell.label }}</span><small v-if="learnCardView.brain.weekText">{{ learnCardView.brain.weekText }}</small></span>
+                </span>
+                <span class="shogi-title__card-go" aria-hidden="true">›</span>
               </button>
             </div>
           </section>
@@ -445,15 +462,16 @@
                 v-for="shelf in DEX_SHELF"
                 :key="shelf.kind"
                 type="button"
-                class="shogi-title__tile"
+                class="shogi-title__tile shogi-title__card"
                 :data-dex-tile="shelf.kind"
                 @click="openDexFromHome(shelf.kind)"
               >
                 <DexIcon class="shogi-title__icon" :kind="shelf.kind" />
                 <span class="shogi-title__label">{{ shelf.label }}</span>
+                <span class="shogi-title__card-info">{{ dexCardLines[shelf.kind] }}</span>
               </button>
               <!-- 研究モード(docs/research-mode-design.md)。好きな局面をAIと一緒に調べる。 -->
-              <button type="button" class="shogi-title__tile" data-research-tile @click="openResearch()">
+              <button type="button" class="shogi-title__tile shogi-title__card" data-research-tile @click="openResearch()">
                 <svg class="shogi-title__icon" viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">
                   <g fill="#fffcf4"><rect x="1" y="2" width="9" height="9" /></g>
                   <g fill="#1d303f"><rect x="2" y="3" width="7" height="7" /></g>
@@ -461,6 +479,7 @@
                   <g fill="#d7d1fd"><rect x="9" y="9" width="2" height="2" /><rect x="11" y="11" width="2" height="2" /><rect x="13" y="13" width="2" height="2" /></g>
                 </svg>
                 <span class="shogi-title__label">研究</span>
+                <span class="shogi-title__card-info">{{ dexCardLines.research }}</span>
               </button>
             </div>
           </section>
@@ -3154,6 +3173,7 @@ import EvaluationGraph from "./EvaluationGraph.vue";
 import { useResponsiveLayout } from "./composables/useResponsiveLayout";
 import { useAssistTools } from "./composables/useAssistTools";
 import DexIcon from "./DexIcon.vue";
+import { dexLines, learnCards } from "./core/home-tab-cards.mjs";
 import { useBackNavigation } from "./composables/useBackNavigation";
 import { WELCOME_SEEN_KEY } from "./core/welcome.mjs";
 import { VOLUME_2_LAST_LESSON, homeRoadmap, roadmapTile, welcomeChoiceFrom } from "./core/home-roadmap.mjs";
@@ -10231,6 +10251,40 @@ const noteFrameStyle = computed(() => noteBesideRail.value
 function homeTabOn(id: (typeof HOME_TABS)[number]["id"]) {
   return noteBesideRail.value || noteAboveBar.value ? id === "note" : homeTab.value === id;
 }
+/*
+ * まなぶ・しらべるの札の「いまどこまでか」(docs/home-roadmap-design.mdの8章、案A 進み具合の札)。
+ * 教室・問題集・用語辞典の大きなデータを読むので、数える処理はホームが見えているときに遅れて読む(最初のJSに入れない)。
+ * 数がまだないあいだは、何ができるかの1行を出す。教室・問題集・脳トレ・研究・ノートから戻るたびに数え直す。
+ */
+const homeTabStatsValue = shallowRef<any>(null);
+const learnCardView = computed(() => learnCards(homeTabStatsValue.value));
+const dexCardLines = computed(() => dexLines(homeTabStatsValue.value));
+let homeTabStatsLoading = false;
+let homeTabStatsTimer: ReturnType<typeof setTimeout> | undefined;
+async function refreshHomeTabStats() {
+  if (homeTabStatsLoading) return;
+  homeTabStatsLoading = true;
+  try {
+    const { homeTabStats } = await import("./core/home-tab-stats.mjs");
+    homeTabStatsValue.value = homeTabStats(browserStorage());
+  } catch (error) {
+    onLazyLoadError(error);
+  } finally {
+    homeTabStatsLoading = false;
+  }
+}
+watch(
+  () => [homeTab.value, homeOpen.value, tutorialOpen.value, problemSetOpen.value, brainTrainingOpen.value, researchOpen.value, yakobiNoteOpen.value] as const,
+  ([tab, home, ...covering]) => {
+    clearTimeout(homeTabStatsTimer);
+    if (!home || covering.some(Boolean)) return;
+    // ホームのタブにいるあいだは、少し待ってから先に数えておく(まなぶ・しらべるを開いたとき、すぐ出るように)。
+    if (tab === "home") homeTabStatsTimer = setTimeout(() => void refreshHomeTabStats(), 1500);
+    else void refreshHomeTabStats();
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => clearTimeout(homeTabStatsTimer));
 /** まなぶのタイルに、強くなる道のおすすめがあるか(タブに点を付ける)。 */
 const homeLearnRecommended = computed(() => homeTile("tutorial").recommended || homeTile("problems").recommended);
 function homeTileClass(id: string) {

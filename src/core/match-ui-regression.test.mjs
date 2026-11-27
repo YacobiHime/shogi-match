@@ -1123,6 +1123,13 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/:show-back="noteShowsBack"/);
     expect(source).toMatch(/\.shogi-game \.shogi-dex\.shogi-note--above-bar \{\s*bottom: var\(--note-bar, 0px\);/);
   });
+  it("まなぶ・しらべるの札は進み具合を出し、数える処理は遅れて読む(docs/home-roadmap-design.mdの8章)", () => {
+    expect(source).not.toMatch(/^import .*home-tab-stats/m);
+    expect(source).toMatch(/await import\("\.\/core\/home-tab-stats\.mjs"\)/);
+    expect(source).toMatch(/data-learn-card="tutorial"[\s\S]*?learnCardView\.tutorial\.line/);
+    expect(source).toMatch(/\{\{ dexCardLines\[shelf\.kind\] \}\}/);
+    expect(source).toMatch(/\.shogi-title__group--learn,\s*\.shogi-title__group--dex \{\s*align-self: stretch;/);
+  });
   it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
     expect(source).toMatch(/class="shogi-title__tiles shogi-title__tiles--learn"[\s\S]*?将棋教室[\s\S]*?問題集[\s\S]*?data-brain-tile @click="openBrainTraining"/);
     expect(source).toMatch(/const ShogiBrainTraining = lazyScreen\(loadBrainTraining\);/);
