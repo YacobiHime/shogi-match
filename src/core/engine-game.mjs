@@ -184,7 +184,7 @@ export function shouldEngineResign({ ply, best, lastValue, style = resignStyleBy
  *   onMove?: (entry: import('./relay-game.mjs').RelayMoveEntry, index: number) => void,
  *   isCancelled?: () => boolean,
  *   resume?: import('./relay-game.mjs').RelayMoveEntry[],
- *   think?: (request: { sfen: string, levels: Record<string, number>, planMove: string | null, seed: number }) => Promise<any>,
+ *   think?: (request: { sfen: string, levels: Record<string, number>, planMove: string | null, seed: number, budgetMs?: number, lastMove?: string | null, era?: string | null }) => Promise<any>,
  * }} options
  * @returns {Promise<import('./relay-game.mjs').RelayGame | null>} 止めたらnull
  */
@@ -311,7 +311,7 @@ export async function playEngineGame({ spec, search: baseSearch, formationMaster
         if (pick) choice = { move: pick.move, reason: { stage: 'follow', reason: 'follow', skipped: [] } };
       }
       if (!choice) {
-        const thought = await think({ sfen, levels: reasoner.levels ?? {}, planMove, seed: (spec.seed ?? 0) ^ Math.imul(ply + 7, 0x85ebca6b), budgetMs: spec.thinkBudgetMs ?? 0, lastMove: moves.at(-1) ?? null });
+        const thought = await think({ sfen, levels: reasoner.levels ?? {}, planMove, seed: (spec.seed ?? 0) ^ Math.imul(ply + 7, 0x85ebca6b), budgetMs: spec.thinkBudgetMs ?? 0, lastMove: moves.at(-1) ?? null, era: reasoner.era ?? null });
         if (isCancelled()) return null;
         if (thought?.move && allowed.includes(thought.move)) choice = { move: thought.move, reason: thought };
       }

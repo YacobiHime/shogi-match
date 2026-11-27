@@ -15,6 +15,7 @@ import { legalMoves } from './light-moves.mjs';
 import { createRng } from './ryuo-random.mjs';
 import { moveFeatures, priorPhase, priorScore } from './move-prior.mjs';
 import { PRO_MOVE_PRIOR } from '../data/pro-move-prior.mjs';
+import { pickBookMove } from './pro-book.mjs';
 
 const LV_MIN = 12;
 const LV_MAX = 49;
@@ -108,11 +109,15 @@ function bestReason(sfen, usi, score) {
 /**
  * 考えて1手を選ぶ。
  * lastMoveは直前の相手の手(人の好みの「取り返し」を見る。なくてもよい)。
- * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile> & { classic?: boolean, handWeights?: boolean }, planMove?: string | null, random?: () => number, lastMove?: string | null }} options
+ * @param {{ sfen: string, profile: ReturnType<typeof thinkProfile> & { classic?: boolean, handWeights?: boolean, noBook?: boolean, era?: string | null }, planMove?: string | null, random?: () => number, lastMove?: string | null }} options
  * @returns {{ move: string, stage: string, reason: string, score: number, line: string[], skipped: string[], mate?: number } | null}
  */
 export function chooseThinkingMove({ sfen, profile, planMove = null, random = Math.random, lastMove = null }) {
   const skipped = [];
+  // プロの序盤の手(40-9): 作戦の手がないときは、プロが何局も指した手を、育った時代の手を多めに選ぶ。駒の損得の確かめは作戦の手と同じ(下の3)。
+  // 前の版(classic)と、比べ用の選手(noBook)では使わない。
+  const proBook = !planMove && !profile.classic && !profile.noBook ? pickBookMove(sfen, { era: profile.era ?? null, random }) : null;
+  if (proBook) planMove = proBook;
   const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, depth: skipped.includes('hanging') ? 1 : profile.depth, ...extra });
   // 1. 自分の詰み。
   const mateLine = findMateLine(sfen, profile.mateDepth, { nodeLimit: 4000 * profile.mateDepth, maxTimeMs: 250 });
@@ -146,10 +151,10 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
     const planScore = scores.get(planMove);
     const bestScore = scores.get(best.move);
     if (planScore && planScore.score >= (bestScore?.score ?? best.score) - BOOK_MARGIN) {
-      return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv });
+      return done(planMove, 'book', 'book', { score: planScore.score, line: planScore.pv, pro: Boolean(proBook) });
     }
   } else if (planMove === best.move) {
-    return done(planMove, 'book', 'book', { score: best.score, line: best.pv });
+    return done(planMove, 'book', 'book', { score: best.score, line: best.pv, pro: Boolean(proBook) });
   }
   const reason = bestReason(sfen, best.move, best.score);
   // 人が指しそうな手の好み(40章のL3)。前の版(classic)と、うっかりの手では使わない。
@@ -241,7 +246,7 @@ export function budgetProfile(profile, budgetMs) {
  * budgetMsは1手の時間の上限(観戦の本局。38章)。
  * @param {{ sfen: string, levels: Record<string, number>, planMove: string | null, seed: number, budgetMs?: number, lastMove?: string | null }} request
  */
-export async function thinkHere({ sfen, levels, planMove, seed, budgetMs = 0, lastMove = null }) {
+export async function thinkHere({ sfen, levels, planMove, seed, budgetMs = 0, lastMove = null, era = null }) {
   const rng = createRng(seed >>> 0);
-  return chooseThinkingMove({ sfen, profile: budgetProfile(thinkProfile(levels), budgetMs), planMove, random: () => rng.next(), lastMove });
+  return chooseThinkingMove({ sfen, profile: { ...budgetProfile(thinkProfile(levels), budgetMs), era }, planMove, random: () => rng.next(), lastMove });
 }

@@ -2,7 +2,7 @@
 // 手元に集めた棋譜(scripts/fetch-pro-kifu.mjsの.kifu-cache/)から、局面をいくつか選び、その局面で理由で指す棋士が選ぶ手とプロの指した手を比べる。
 // 使い方(problem-solverがTypeScriptなのでvite-nodeで動かす):
 //   npx vite-node scripts/reason-match-report.mjs -- [--players T30-30-30-30b,T45-45-45-45b] [--games 40] [--positions 8] [--groups edo,early,showa,heisei,reiwa,shoreikai] [--seed 1]
-// 選手の書き方は自己対局と同じT<読み>-<作戦>-<安定>-<詰み>(末尾b=観戦の時間の上限、c=前の版の駒の価値と形の点、h=手の好みを使わない、w=形の点を手で決めた重みで読む)。
+// 選手の書き方は自己対局と同じT<読み>-<作戦>-<安定>-<詰み>(末尾b=観戦の時間の上限、c=前の版の駒の価値と形の点、h=手の好みを使わない、w=形の点を手で決めた重みで読む、k=プロの序盤の手を使わない)。
 // 出すもの: 序盤(30手まで)・中盤(31〜80手)・終盤(81手から)ごとの一致率と、時代ごとの一致率。
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ function parseArgs(argv) {
 
 /** 選手の書き方から、考え方の形。 */
 export function playerProfile(spec) {
-  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?(w)?(?:m(\d+))?$/);
+  const match = String(spec).match(/^T(\d+)-(\d+)-(\d+)-(\d+)(b)?(c)?(h)?(w)?(k)?(?:m(\d+))?$/);
   if (!match) throw new Error(`選手の書き方が違います: ${spec}`);
   const [reading, plan, steady, mate] = match.slice(1, 5).map(Number);
   let profile = thinkProfile({ reading, plan, steady, mate });
@@ -37,7 +37,9 @@ export function playerProfile(spec) {
   // 末尾w: 形の点を手で決めた重みで読む(40章のL2の前)。
   if (match[8]) profile = { ...profile, handWeights: true };
   // 末尾m<数>: 手の好みで選ぶ幅(humanMargin)をその値にする(合わせるための試し)。
-  if (match[9]) profile = { ...profile, humanMargin: Number(match[9]) };
+  // 末尾k: プロの序盤の手(40-9)を使わない。
+  if (match[9]) profile = { ...profile, noBook: true };
+  if (match[10]) profile = { ...profile, humanMargin: Number(match[10]) };
   return profile;
 }
 
@@ -104,7 +106,8 @@ const phaseOf = (ply) => (ply <= 30 ? 'opening' : ply <= 80 ? 'middle' : 'ending
         for (const player of players) {
           const profile = playerProfile(player);
           const seeded = createRng((Number(options.seed) * 7919 + ply * 31 + k) >>> 0);
-          const thought = chooseThinkingMove({ sfen, profile, random: () => seeded.next(), lastMove: ply > 0 ? parsed.moves[ply - 1] : null });
+          // 棋士の育った時代は、その棋譜の時代にする(プロの序盤の手。40-9)。
+          const thought = chooseThinkingMove({ sfen, profile: { ...profile, era: group }, random: () => seeded.next(), lastMove: ply > 0 ? parsed.moves[ply - 1] : null });
           const hit = thought?.move === pro;
           add(player, `phase:${phaseOf(ply + 1)}`, hit);
           add(player, `group:${group}`, hit);

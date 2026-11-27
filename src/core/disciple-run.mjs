@@ -1004,7 +1004,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
   const disciple = {
     id: 'disciple', name: next.name, level: Math.round(effectiveLevel(strength)), kind: eventKind,
     disciple: { strength: { ...strength, attack }, profile: { weakness: next.weakness, aptitudes: aptitudeRanks(next), style: next.style }, time: 'fast' },
-    reason: { levels: { ...strength.levels }, mastery, notes: ownCard ? researchNotes(book, ownCard.id) : {} },
+    // 弟子は今の子どもなので、令和のプロの序盤の手(40-9)。
+    reason: { levels: { ...strength.levels }, mastery, notes: ownCard ? researchNotes(book, ownCard.id) : {}, era: 'reiwa' },
   };
   const opponentLevels = { reading: level, plan: level, steady: level, mate: level };
   const plans = {
@@ -1016,8 +1017,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
     repertoire: member.repertoire ?? null, style: member.style ?? null,
     // 羽音の弟子は作戦帳の熟練度と研究メモで指す(35-14)。
     reason: rivalPick
-      ? { levels: opponentLevels, mastery: rivalBook(next.rival).cards[rivalPick.id]?.mastery ?? 0, notes: researchNotes(rivalBook(next.rival), rivalPick.id) }
-      : { levels: opponentLevels, mastery: masteryForLevel(level) },
+      ? { levels: opponentLevels, mastery: rivalBook(next.rival).cards[rivalPick.id]?.mastery ?? 0, notes: researchNotes(rivalBook(next.rival), rivalPick.id), era: 'reiwa' }
+      : { levels: opponentLevels, mastery: masteryForLevel(level), era: member.repertoire?.era ?? null },
   };
   const timeRule = /** @type {NonNullable<ReturnType<typeof discipleTimeRule>>} */ (discipleTimeRule({ event: eventKind, ranks: next.shoreikai ? [next.shoreikai.rank, member.rank] : [] }));
   const spec = {
