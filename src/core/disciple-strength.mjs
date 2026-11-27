@@ -333,8 +333,8 @@ export function discipleSelfplaySettings(spec) {
 // 育成の早さはほとんど変わらない(休んでばかりの弟子の四段は約237ターン、よい育て方は約170〜190ターンのまま)。
 export const ELO_PER_LEVEL = 45;
 
-/** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせ、41-3で作戦の効きが小さく読みが大きいのに合わせて序盤を軽くした)。 */
-export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.1, middle: 0.6, ending: 0.3 });
+/** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせた。41-4で4つの能力の効きがそろったので、作戦の効く序盤を0.2に)。 */
+export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.2, middle: 0.5, ending: 0.3 });
 /** いつも効くスキルが、観戦しない局の強さに足すLv(藤井曲線は22-3で測った約＋230のレーティング。ほかは仮の見積もり。41-3で1Lvを45にしたとき、勝つ割合が変わらないよう80/45倍にした)。 */
 export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 4.1, researcher: 0.4, clairvoyance: 0.9, 'quick-sight': 0.5 });
 

@@ -14,7 +14,7 @@ export const DEFAULT_REASON_LEVEL = 25;
  * 間は線でつなぐ。
  */
 export const REASON_EQUIVALENT = Object.freeze([
-  [12, 8], [20, 13], [30, 20], [40, 24], [49, 26],
+  [12, 9], [20, 12], [30, 18], [40, 22], [49, 26],
 ]);
 
 /** 能力値のLvを、選べる範囲に丸める。 */
