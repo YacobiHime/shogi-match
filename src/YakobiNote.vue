@@ -2109,6 +2109,8 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
   .shogi-game .shogi-note__album-switch button { min-height: 44px; font-size: 0.88em; }
   .shogi-game .shogi-note__album > .shogi-note__hint:first-child { display: none; }
   .shogi-game .shogi-note__card.shogi-note__album { padding: 0.5rem 0.6rem; }
+  /* いちばん背の低いスマホでも中身の欄を動かさないよう、カードの枠のいちばん低い高さを少し下げる(カードの枠の中は動く)。 */
+  .shogi-game .shogi-note__panel--album.shogi-note__panel--fit > :last-child { min-height: 4.5rem; }
 }
 
 /* 設定: 札は縦に並べ、レベルごとの成績の札が残りの高さに収まる(一覧は枠の中で動く)。広い画面は2列。 */
@@ -2533,6 +2535,13 @@ const levelRows = computed(() => CPU_STRENGTH_PRESETS
 .shogi-game .shogi-note__album-pages button { display: inline-flex; align-items: baseline; gap: 0.3rem; padding: 0 0.85rem; border: 2px solid #3b5570; background: var(--note-deep); }
 .shogi-game .shogi-note__album-pages button small { font-size: 0.78em; opacity: 0.8; }
 .shogi-game .shogi-note__album-pages button[aria-selected="true"] { border-color: var(--note-gold); }
+/* いちばん小さいスマホ(幅380px以下)では、ページの札を詰めて「そのほか」を1行に収め、切り替えの字も折り返さない(中身の欄をスクロールさせない。docs/player-world-note-design.mdの8章、docs/home-roadmap-design.mdの8-8)。 */
+@media (max-width: 380px) {
+  .shogi-game .shogi-note__album-pages { gap: 0.3rem 0.6rem; }
+  .shogi-game .shogi-note__album-group { gap: 0.25rem; }
+  .shogi-game .shogi-note__album-pages button { gap: 0.2rem; padding: 0 0.5rem; font-size: 0.92em; }
+  .shogi-game .shogi-note__album-switch button { white-space: nowrap; font-size: 0.82em; }
+}
 /* カード: 完成形の小さな盤と名前。取ったものは金の縁、挑戦できるものは点線の縁、まだのものは薄く。 */
 .shogi-game .shogi-note__album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .shogi-note__album-card {

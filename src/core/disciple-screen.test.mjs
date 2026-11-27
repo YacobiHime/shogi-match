@@ -90,3 +90,17 @@ describe('理由で指す棋士の考えの一言と読み筋(34-17・34-18)', (
     expect(source).toMatch(/data-disciple-reading/);
   });
 });
+
+describe('観戦の盤の技の演出(docs/disciple-mode-design.mdの42章)', () => {
+  it('見せた手に駒音と帯を当て、弟子の大きな帯のあいだは次の手を待たせる', () => {
+    expect(source).toMatch(/<WazaCutin v-if="watchCutin" :key="watchCutin\.id" :cutin="watchCutin" \/>/);
+    expect(source).toMatch(/:waza-glow="watchGlow"/);
+    expect(source).toMatch(/const hold = revealMoves\(current, index \+ 1\);/);
+    expect(source).toMatch(/if \(step\.cutin\.size === "big"\) hold = Math\.max\(hold, step\.cutin\.ms\);/);
+    expect(source).toMatch(/revealMoves\(current, index \+ 1, \{ quiet: true \}\);/);
+  });
+  it('詰みで終わった局の終局の札に「N手詰め」を添え、判子の音を鳴らす', () => {
+    expect(source).toMatch(/finishingMate\(current\.entries\.map/);
+    expect(source).toMatch(/moveSounds\.play\("stamp"\)/);
+  });
+});

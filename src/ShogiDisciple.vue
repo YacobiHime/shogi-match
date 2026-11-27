@@ -359,9 +359,12 @@
             :white-player-name="watch.side === 'white' ? view?.name ?? '' : watch.opponent.name"
             :clocks="watchClockView"
             :fast-clock="watchClockView?.fast ?? ''"
+            :waza-glow="watchGlow"
             @resize="onBoardResize"
           />
         </div>
+        <!-- 技の演出(42章)。対局と同じ帯。弟子の手は名前つきの大きな帯、相手の手は小さな帯。押せない。 -->
+        <WazaCutin v-if="watchCutin" :key="watchCutin.id" :cutin="watchCutin" />
       </div>
       <div v-if="watch.phase === 'review'" class="disciple__watch-nav" data-disciple-nav>
         <button type="button" aria-label="最初へ" data-disciple-nav-first @click="goPly(0)">⏮</button>
@@ -453,6 +456,7 @@
       <!-- 終局の札(33-3)。押すか、少し待つと結果発表へ。 -->
       <button v-if="watch.phase === 'end' && watch.endCard" type="button" class="disciple__endcard" :class="{ 'disciple__endcard--big': watch.day?.big, 'disciple__endcard--loss': !watch.win }" data-disciple-endcard @click="showDayResult">
         <span class="disciple__endcard-stamp">{{ watch.endCard.stamp }}</span>
+        <b v-if="watch.endCard.mate" class="disciple__endcard-mate" data-disciple-endcard-mate>{{ watch.endCard.mate }}</b>
         <small>{{ watch.endCard.line }}</small>
       </button>
       <!-- その日の結果発表(33-3)。○●・知らせを見てから、検討するか決める。 -->
@@ -632,6 +636,12 @@ import { sfenAfter } from "./core/pro-cut.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import { paceMs, watchClocks } from "./core/watch-pace.mjs";
+import WazaCutin, { type WazaCutinView } from "./WazaCutin.vue";
+import { createWatchWaza, planNames, watchWazaStep } from "./core/watch-waza.mjs";
+import { WAZA_EFFECT_KEY, wazaChime } from "./core/move-waza.mjs";
+import { createWazaAudio } from "./waza-audio";
+import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
+import { finishingMate } from "./core/mate-finish.mjs";
 import type { EngineFactory } from "./composables/match/analysisEngines";
 
 const props = defineProps({
@@ -921,7 +931,7 @@ type Watch = {
   marks: WatchMark[]; guesses: (string | null)[]; selected: number; error: string;
   /** 観戦の段(33-3)。指している→終局の札→その日の結果発表→検討。 */
   phase: "playing" | "end" | "result" | "review";
-  endCard: { stamp: string; line: string } | null;
+  endCard: { stamp: string; line: string; mate?: string } | null;
   day: ReturnType<typeof dayResultView> | null;
   /** live=観戦した直後、book=棋譜帳から開いた(答えは入れない。33-4)。 */
   mode: "live" | "book";
@@ -958,6 +968,7 @@ function startWatch() {
   watch.value = current;
   const ticket = ++watchTicket;
   stopPace();
+  resetWatchWaza();
   // 保存していた手(画面を離れて戻ったとき)は、playの中で先にまとめて届くので、待たずに並べる。
   paceInstant = true;
   const playing = engineGame.play(made.spec, (entry, index) => {
@@ -966,6 +977,7 @@ function startWatch() {
     if (paceInstant) {
       current.entries = arrived.slice(0, index + 1);
       watch.value = { ...current, entries: [...current.entries] };
+      revealMoves(current, index + 1, { quiet: true });
       return;
     }
     pumpPace(current, ticket);
@@ -996,12 +1008,89 @@ const paceProgress = ref(0);
 function stopPace() {
   if (paceTimer) clearInterval(paceTimer);
   paceTimer = null;
+  clearTimeout(holdTimer);
+  holdUntil = 0;
   arrived = [];
   paceEnd = null;
   paceProgress.value = 0;
 }
+// ---- 技の演出・駒音・終局の判子(42章)。対局と同じ判定と帯(watch-waza.mjs)を、見せた1手ずつに当てる。
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+onMounted(() => moveSounds.preload());
+const wazaAudio = createWazaAudio();
+let wazaTracker = createWatchWaza();
+/** 演出を当てた手の数(保存から戻ったときにまとめて並べた手は、形の追跡だけ進める)。 */
+let wazaSeen = 0;
+const watchCutin = ref<WazaCutinView | null>(null);
+const watchGlow = ref<{ id: number; square: string; tier: string; mine: boolean; targets: string[]; pieces?: string[]; edge?: boolean; look?: string } | null>(null);
+let wazaSeq = 0;
+let holdUntil = 0;
+const holding = () => Date.now() < holdUntil;
+let cutinTimer: ReturnType<typeof setTimeout> | undefined;
+let glowTimer: ReturnType<typeof setTimeout> | undefined;
+let holdTimer: ReturnType<typeof setTimeout> | undefined;
+/** 光の輪は帯より少し長く残す(どの駒の手だったか見返せる。対局と同じ)。 */
+const WATCH_GLOW_MIN_MS = 1200;
+/** 対局の「技の演出」の設定(全部・かんたん・なし)に従う。 */
+function wazaChoice(): string {
+  try {
+    const value = storage()?.getItem(WAZA_EFFECT_KEY);
+    return value === "off" || value === "simple" ? value : "on";
+  } catch {
+    return "on";
+  }
+}
+function clearWatchWaza() {
+  clearTimeout(cutinTimer);
+  clearTimeout(glowTimer);
+  clearTimeout(holdTimer);
+  watchCutin.value = null;
+  watchGlow.value = null;
+}
+function resetWatchWaza() {
+  clearWatchWaza();
+  wazaTracker = createWatchWaza();
+  wazaSeen = 0;
+}
+onBeforeUnmount(clearWatchWaza);
+/**
+ * 見せた手(index番目まで)に、駒音と技の演出を当てる。帯の分だけ次の手を待たせるミリ秒を返す。
+ * quietなら音と帯を出さず、形の追跡だけ進める(保存から戻ったときの手)。
+ */
+function revealMoves(current: Watch, upto: number, { quiet = false }: { quiet?: boolean } = {}) {
+  let hold = 0;
+  const start = current.sfen || STANDARD_SFEN;
+  const choice = wazaChoice();
+  for (let index = wazaSeen; index < upto; index += 1) {
+    const entry = current.entries[index];
+    if (!entry) break;
+    const moves = current.entries.slice(0, index).map((item) => item.move);
+    const before = index ? sfenAfter(moves, current.sfen ?? "") ?? start : start;
+    const after = sfenAfter([...moves, entry.move], current.sfen ?? "") ?? before;
+    const step = watchWazaStep(wazaTracker, {
+      before, usi: entry.move, after, ply: index + 1, side: current.side, name: view.value?.name ?? "",
+      plan: planNames(current.plans?.own), simple: choice === "simple",
+    });
+    wazaSeen = index + 1;
+    if (quiet || index < upto - 1) continue;
+    const sound = moveSoundForUsi(before, entry.move);
+    if (sound) moveSounds.play(sound);
+    if (!step || choice === "off") continue;
+    wazaSeq += 1;
+    clearTimeout(cutinTimer);
+    clearTimeout(glowTimer);
+    watchCutin.value = { id: wazaSeq, ...step.cutin };
+    watchGlow.value = { id: wazaSeq, ...step.glow };
+    cutinTimer = setTimeout(() => { watchCutin.value = null; }, step.cutin.ms);
+    glowTimer = setTimeout(() => { watchGlow.value = null; }, Math.max(step.cutin.ms, WATCH_GLOW_MIN_MS));
+    wazaAudio.play(wazaChime(step.cutin.size === "big" ? step.cutin.tier : "normal", { mine: step.cutin.mine }), 90);
+    // 弟子の大きな帯は読み終わるまで次の手を待たせる(小さな帯は待たせない。D:3-2 間)。
+    if (step.cutin.size === "big") hold = Math.max(hold, step.cutin.ms);
+  }
+  return hold;
+}
 function pumpPace(current: Watch, ticket: number) {
-  if (paceTimer || ticket !== watchTicket) return;
+  if (paceTimer || holding() || ticket !== watchTicket) return;
   const index = current.entries.length;
   const entry = arrived[index];
   if (!entry) {
@@ -1028,7 +1117,11 @@ function pumpPace(current: Watch, ticket: number) {
     paceProgress.value = 0;
     current.entries = arrived.slice(0, index + 1);
     watch.value = { ...current, entries: [...current.entries] };
-    pumpPace(current, ticket);
+    const hold = revealMoves(current, index + 1);
+    if (hold > 0) {
+      holdUntil = Date.now() + hold;
+      holdTimer = setTimeout(() => { holdUntil = 0; pumpPace(current, ticket); }, hold);
+    } else pumpPace(current, ticket);
   }, 100);
 }
 onBeforeUnmount(stopPace);
@@ -1063,6 +1156,14 @@ function finishWatchGame(current: Watch, end: { winner: string }) {
   current.done = true;
   // 終局の札 → その日の結果発表 → 検討の順に見せる(33-3。結果を先に知らせる)。
   current.endCard = endCardText({ win: current.win, reason: (end as { reason?: string })?.reason, plies: current.entries.length });
+  // 詰みで終わった局は、最後の王手の連続を「N手詰め」で添える(大会の寄せの記録と同じ数え方。mate-finish.mjs)。
+  if ((end as { reason?: string })?.reason === "mate") {
+    const mate = finishingMate(current.entries.map((entry) => entry.move), { initialSfen: current.sfen || STANDARD_SFEN });
+    if (mate?.plies) current.endCard = { ...current.endCard, mate: `${mate.plies}手詰め` };
+  }
+  clearWatchWaza();
+  // 判子の音(大会の終局の判子と同じ音)。札が押されるのに合わせる。
+  window.setTimeout(() => moveSounds.play("stamp"), 180);
   current.day = dayResultView(state.value?.lastEvent);
   current.phase = "end";
   current.upto = current.entries.length;
@@ -1172,6 +1273,12 @@ function goPly(ply: number) {
   const current = watch.value;
   if (!current) return;
   const upto = Math.max(0, Math.min(current.entries.length, Math.round(ply)));
+  // 検討で1手進めたときは駒音を鳴らす(42章。飛ぶときは鳴らさない)。
+  if (upto === current.upto + 1) {
+    const before = sfenAfter(current.entries.slice(0, current.upto).map((entry) => entry.move), current.sfen ?? "") ?? (current.sfen || STANDARD_SFEN);
+    const sound = moveSoundForUsi(before, current.entries[current.upto]?.move ?? "");
+    if (sound) moveSounds.play(sound);
+  }
   watch.value = { ...current, upto, selected: seeking.value ? -1 : current.marks.findIndex((mark) => mark.ply === upto), goodSel: current.good.findIndex((good) => good.ply === upto) };
   // 手の一覧だけを動かす(scrollIntoViewは画面ごと動いて、盤が見えなくなる)。
   requestAnimationFrame(() => {
@@ -1774,6 +1881,8 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__endcard--big { min-width: 17rem; padding: 1.3rem 2rem; }
 .shogi-game .disciple__endcard-stamp { font-size: 2.6rem; font-weight: 900; letter-spacing: 0.2em; line-height: 1; }
 .shogi-game .disciple__endcard--big .disciple__endcard-stamp { font-size: 3.4rem; }
+.shogi-game .disciple__endcard-mate { padding: 0.05rem 0.7rem; border-radius: 999px; color: #fffaf0; background: #c0392b; font-size: 1rem; font-weight: 900; letter-spacing: 0.08em; }
+.shogi-game .disciple__endcard--loss .disciple__endcard-mate { background: #34495e; }
 .shogi-game .disciple__endcard small { color: var(--ink); font-size: 0.85rem; font-weight: 800; }
 @keyframes disciple-stamp { from { transform: translate(-50%, -50%) rotate(-4deg) scale(1.8); opacity: 0; } to { transform: translate(-50%, -50%) rotate(-4deg) scale(1); opacity: 1; } }
 .shogi-game .disciple__result { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 1rem; background: rgba(20, 28, 36, 0.72); }
