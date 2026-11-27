@@ -27,6 +27,6 @@ describe('自由対局の将棋AI(論理)(docs/disciple-mode-design.mdの41章)'
     const source = readFileSync(new URL('../ShogiMatchGame.vue', import.meta.url), 'utf8');
     expect(source).not.toMatch(/^import .*useThinkWorker/m);
     expect(source).toMatch(/await import\("\.\/composables\/match\/useThinkWorker"\)/);
-    expect(source).toMatch(/&& !usesReasonAi\.value\n\s+\/\/ Lv0/);
+    expect(source).toMatch(/\/\/ 将棋AI\(論理\)はCPUの強さの表とは別の物差しなので、レーティングに数えない\(41章\)。\n\s+&& !usesReasonAi\.value/);
   });
 });

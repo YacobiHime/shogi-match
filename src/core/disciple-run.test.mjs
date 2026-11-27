@@ -86,7 +86,7 @@ describe('師匠の1年の育成の進み(23章)', () => {
     expect(turns[0]).toBeGreaterThan(30);
   }, 15000);
 
-  it('休んでばかりでは強くならず、上限のターンで終わる', () => {
+  it('休んでばかりでは強くならず、四段にはなれずに終わる', () => {
     let s = createDiscipleRun({ seed: 5, discipleId: 'tsumugi' });
     for (let i = 0; i < 300 && !s.end; i += 1) {
       const kind = turnKind(s);
@@ -94,7 +94,8 @@ describe('師匠の1年の育成の進み(23章)', () => {
       else if (kind === 'words') s = chooseWords(s, 'quiet').state;
       else s = playEvent(s).state;
     }
-    expect(s.end.kind).toBe('timeup');
+    // 41-3: 対局で少しずつ伸びるので、奨励会までは届くことがある(年齢で退会)。四段にはならない。
+    expect(['timeup', 'retired']).toContain(s.end.kind);
   });
 
   it('暦は4月前半から半月ずつ進み、学年が上がる', () => {

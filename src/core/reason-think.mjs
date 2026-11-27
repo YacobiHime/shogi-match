@@ -19,6 +19,22 @@ import { pickBookMove } from './pro-book.mjs';
 
 const LV_MIN = 12;
 const LV_MAX = 49;
+/** これより後の手数を終盤として、うっかりを詰みの力で決める(player-character.mjsのPHASE_LIMITS.middleと同じ)。 */
+const PHASE_END_PLY = 80;
+/** 持ち駒(両方)がこの枚数以上なら、手数によらず終盤とみる(駒がぶつかって玉の近くで詰む・詰まないの勝負になる。41-3)。 */
+const ENDING_HAND_PIECES = 6;
+
+/**
+ * 終盤の局面か(うっかりを詰みの力で決める)。81手目からか、持ち駒が多い局面。
+ * @param {string} sfen
+ */
+export function isEnding(sfen) {
+  const [, , hand = '-', ply = '1'] = String(sfen).trim().split(/\s+/);
+  if (Number(ply) > PHASE_END_PLY) return true;
+  let count = 0;
+  for (const match of hand.matchAll(/(\d*)[A-Za-z]/g)) count += Number(match[1] || 1);
+  return count >= ENDING_HAND_PIECES;
+}
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const unit = (lv) => clamp(((Number(lv) || LV_MIN) - LV_MIN) / (LV_MAX - LV_MIN), 0, 1);
@@ -47,10 +63,14 @@ export function thinkProfile(levels = {}) {
     quietMargin: Math.round(lerp(150, 30, p)),
     /** 何もない局面で、手順表を局面に合わせて選ぶ割合。 */
     situational: Math.round(p * 100) / 100,
-    /** 読みを1手だけにし、取り合いも読まない確率(うっかり)。 */
-    skip: Math.round(lerp(0.35, 0.02, s) * 1000) / 1000,
+    /** 序盤・中盤で、読みを1手だけにし、取り合いも読まない確率(うっかり。安定で決まる。41-3で0.35から0.2へ)。 */
+    skip: Math.round(lerp(0.2, 0.02, s) * 1000) / 1000,
+    /** 終盤(81手目からか、持ち駒が多い局面。isEnding)のうっかりの確率。詰みを主に、安定も効く(41-3)。 */
+    skipEnd: Math.round(lerp(0.25, 0.02, 0.35 * s + 0.65 * m) * 1000) / 1000,
     /** 自分の詰みを探す手数(1〜9)。 */
     mateDepth: 1 + 2 * Math.round(m * 4),
+    /** 自分の詰みを探す時間の上限(ミリ秒。詰みが高いほど長い。41-3)。 */
+    mateMs: Math.round(100 + 300 * m),
     /** 人が指しそうな手の好み(40章のL3)を使って、最善との差がこれ以内の手から選ぶ(点。作戦が高いほど小さい)。0なら使わない。 */
     humanMargin: Math.round(lerp(70, 25, p)),
   };
@@ -120,12 +140,13 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   if (proBook) planMove = proBook;
   const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, depth: skipped.includes('hanging') ? 1 : profile.depth, ...extra });
   // 1. 自分の詰み。
-  const mateLine = findMateLine(sfen, profile.mateDepth, { nodeLimit: 4000 * profile.mateDepth, maxTimeMs: 250 });
+  const mateLine = findMateLine(sfen, profile.mateDepth, { nodeLimit: 4000 * profile.mateDepth, maxTimeMs: profile.mateMs ?? 250 });
   if (mateLine?.length) return done(mateLine[0], 'mate', 'mate', { mate: mateLine.length, line: mateLine });
   // うっかり: この手は読みを1手だけにする(相手の返し・駒取りを読まない)。
   // 1手の時間の上限(読みの時間の1.6倍)。定跡・手順表の手の確かめは、残りの時間で行う。
   const deadline = Date.now() + profile.timeMs * (profile.deadlineScale ?? 1.6);
-  const careless = random() < profile.skip;
+  const ending = isEnding(sfen);
+  const careless = random() < (ending ? profile.skipEnd ?? profile.skip : profile.skip);
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
   const qdepth = careless ? 0 : profile.qdepth ?? 6;

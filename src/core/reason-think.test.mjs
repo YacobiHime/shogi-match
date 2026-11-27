@@ -8,9 +8,15 @@ const never = () => 0.99;
 
 describe('理由で指す棋士の考え方(34-16)', () => {
   it('能力値で読みの手数・大局観・うっかり・詰みの手数が変わる', () => {
-    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, qdepth: 1, shapeScale: 0, skip: 0.35, mateDepth: 1 });
+    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, qdepth: 1, shapeScale: 0, skip: 0.2, skipEnd: 0.25, mateDepth: 1, mateMs: 100 });
     expect(thinkProfile({ reading: 18 }).depth).toBe(1);
-    expect(strong).toMatchObject({ depth: 6, shapeScale: 1, skip: 0.02, mateDepth: 9 });
+    expect(strong).toMatchObject({ depth: 6, shapeScale: 1, skip: 0.02, skipEnd: 0.02, mateDepth: 9, mateMs: 400 });
+  });
+  it('終盤のうっかりは詰みの力を主に決まる(41-3)', () => {
+    const mateHigh = thinkProfile({ reading: 30, plan: 30, steady: 30, mate: 49 });
+    const steadyHigh = thinkProfile({ reading: 30, plan: 30, steady: 49, mate: 30 });
+    expect(mateHigh.skipEnd).toBeLessThan(steadyHigh.skipEnd);
+    expect(steadyHigh.skip).toBeLessThan(mateHigh.skip);
   });
   it('詰みがあれば詰ます', () => {
     const got = chooseThinkingMove({ sfen: '8k/9/7G1/9/9/9/9/9/K8 b G 1', profile: strong, random: never });
@@ -30,5 +36,15 @@ describe('理由で指す棋士の考え方(34-16)', () => {
   it('うっかりした手は、思考の記録に残る', () => {
     const got = chooseThinkingMove({ sfen: START, profile: { ...strong, depth: 3 }, random: () => 0 });
     expect(got.skipped).toContain('hanging');
+  });
+});
+
+describe('終盤の見分け(41-3)', () => {
+  it('81手目からか、持ち駒が6枚以上なら終盤', async () => {
+    const { isEnding } = await import('./reason-think.mjs');
+    expect(isEnding('lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1')).toBe(false);
+    expect(isEnding('4k4/9/9/9/9/9/9/9/4K4 b - 81')).toBe(true);
+    expect(isEnding('4k4/9/9/9/9/9/9/9/4K4 b 2P2Sg2p 40')).toBe(true);
+    expect(isEnding('4k4/9/9/9/9/9/9/9/4K4 b 2Pp 40')).toBe(false);
   });
 });

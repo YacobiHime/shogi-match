@@ -12928,9 +12928,9 @@ function recordRatedGame(matchResult: MatchResult) {
   const rated = (matchKind.value === "normal" || tournament)
     && normalizedMode.value === "cpu"
     && !tutorialMatch.value
-    && matchInitialSfen.value === STANDARD_SFEN
     // 将棋AI(論理)はCPUの強さの表とは別の物差しなので、レーティングに数えない(41章)。
     && !usesReasonAi.value
+    && matchInitialSfen.value === STANDARD_SFEN
     // Lv0(駒の動きを覚えたて)は練習相手で、レーティングに数えない(docs/level-ladder-design.md)。
     && isRatedLevel(level);
   // 竜王戦の千日手は、先後を入れ替えて指し直す(recordRyuoOutcome)ので、指し直した対局の結果だけを数える。

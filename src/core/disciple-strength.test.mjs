@@ -193,7 +193,7 @@ describe('稽古と勝ち負け', () => {
     expect(gain({ ...even(600), steady: 1200 })).toBeGreaterThan(380);
     expect(gain({ ...even(600), reading: 1200 })).toBeGreaterThan(380);
     const fujii = discipleStrength({ stats: even(900), skills: ['fujii-curve'] });
-    expect(effectiveLevel(fujii) - effectiveLevel(discipleStrength({ stats: even(900) }))).toBeCloseTo(2.3, 1);
+    expect(effectiveLevel(fujii) - effectiveLevel(discipleStrength({ stats: even(900) }))).toBeCloseTo(4.1, 1);
   });
 
   it('弟子の候補3人は、能力・適性・戦い方・スキルを持つ', () => {

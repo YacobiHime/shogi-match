@@ -329,12 +329,14 @@ export function discipleSelfplaySettings(spec) {
 /** 1Lvの差を、勝つ割合のレーティングの差に換える目安(前は100。docs/disciple-mode-design.mdの34-17)。 */
 // 2026-11-21: 弟子と相手が理由で指すようになり(34-16・34-17)、能力値の1Lvは実際の強さで約0.6Lv(約60)に縮んだ。
 // 観戦しない局をそれに合わせて60にすると、休んでばかりの弟子でも運で上がれてしまう(育て方が効かない)ので、間の80にした。
-export const ELO_PER_LEVEL = 80;
+// 2026-11-27(41-3): 将棋AI(論理)で測り直すと、4つをそろえた能力値の1Lvは約34(Lv20〜40は約47)。観戦する局と同じにするため45にした。
+// 育成の早さはほとんど変わらない(休んでばかりの弟子の四段は約237ターン、よい育て方は約170〜190ターンのまま)。
+export const ELO_PER_LEVEL = 45;
 
-/** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせた)。 */
-export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.15, middle: 0.55, ending: 0.3 });
-/** いつも効くスキルが、観戦しない局の強さに足すLv(藤井曲線は22-3で測った約＋230のレーティング。ほかは仮の見積もり)。 */
-export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 2.3, researcher: 0.2, clairvoyance: 0.5, 'quick-sight': 0.3 });
+/** 観戦しない局の強さで、局面ごとのLvをどれだけ重く見るか(22-3の自己対局に合わせ、41-3で作戦の効きが小さく読みが大きいのに合わせて序盤を軽くした)。 */
+export const EFFECTIVE_PHASE_WEIGHTS = Object.freeze({ opening: 0.1, middle: 0.6, ending: 0.3 });
+/** いつも効くスキルが、観戦しない局の強さに足すLv(藤井曲線は22-3で測った約＋230のレーティング。ほかは仮の見積もり。41-3で1Lvを45にしたとき、勝つ割合が変わらないよう80/45倍にした)。 */
+export const SKILL_LEVEL_PLUS = Object.freeze({ 'fujii-curve': 4.1, researcher: 0.4, clairvoyance: 0.9, 'quick-sight': 0.5 });
 
 /**
  * 観戦しない局で使う弟子の強さ(Lv)。局面ごとのLvの重みつきの平均と、いつも効くスキル。
