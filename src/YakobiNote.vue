@@ -1,7 +1,7 @@
 <template>
   <div class="shogi-dex shogi-note" role="dialog" aria-modal="true" aria-labelledby="shogi-note-title">
     <header class="shogi-dex__header">
-      <button type="button" class="shogi-dex__back" @click="emit('close')">
+      <button v-if="showBack" type="button" class="shogi-dex__back" @click="emit('close')">
         <span aria-hidden="true">←</span> {{ backLabel }}
       </button>
       <h1 id="shogi-note-title">やこびノート</h1>
@@ -1077,6 +1077,8 @@ type UsageRow = { name: string; wins: number; losses: number; draws: number; gam
 const props = defineProps({
   assetBaseUrl: { type: String, default: "." },
   backLabel: { type: String, default: "戻る" },
+  /** 戻るボタンを出すか。ホームのタブが見えているときは、タブで移れるので出さない(docs/home-roadmap-design.mdの8章)。 */
+  showBack: { type: Boolean, default: true },
   /** 開いたときの項目(大会の結果の画面からは「大会」)。空なら最後に開いた項目。覚えている項目は変えない。 */
   initialTab: { type: String, default: "" },
   state: { type: Object as PropType<RatingState>, required: true },

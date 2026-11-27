@@ -1648,7 +1648,17 @@ defineExpose({ goBack });
 .shogi-game .disciple__versus b { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 0.3rem; color: #fff; font-size: 0.7rem; }
 .shogi-game .disciple__skills { left: 50%; top: 4.4rem; z-index: 7; transform: translateX(-50%); width: min(24rem, calc(100% - 1.2rem)); max-height: calc(100% - 12rem); overflow-y: auto; }
 .shogi-game .disciple__skills h4 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.3rem; font-size: 0.9rem; }
-.shogi-game .disciple .disciple__x { width: 2rem; height: 2rem; border: 0; border-radius: 50%; background: #e9e2d2; color: var(--ink); font-weight: 900; }
+/* 札を閉じる丸いボタン。全体のボタンの書式(最低の高さ44px・余白)に負けて縦長の楕円になっていたので、
+   大きさと余白をここで決め直す(押せる大きさは44px。U:7-4 操作しやすさ)。 */
+.shogi-game .disciple .disciple__x {
+  flex: none; display: inline-grid; place-items: center; align-self: center;
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; margin: -6px -6px -6px 0.4rem; padding: 0;
+  border: 1px solid rgba(43, 36, 28, 0.18); border-radius: 50%; background: #efe8da; color: var(--ink);
+  box-shadow: none; font-size: 1.15rem; font-weight: 900; line-height: 1;
+}
+@media (hover: hover) {
+  .shogi-game .disciple .disciple__x:not(:disabled):hover { background-color: #e4dac6; border-color: rgba(43, 36, 28, 0.35); transform: none; }
+}
 .shogi-game .disciple__skills ul { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
 .shogi-game .disciple__skills li { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem; align-items: center; font-size: 0.8rem; }
 .shogi-game .disciple__skills small { color: var(--muted); font-size: 0.68rem; }

@@ -1111,11 +1111,17 @@ describe("match screen regressions", () => {
     expect(source).toMatch(/\.shogi-title__tiles--dex \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\); \}/);
   });
   it("広い横向きの画面では、ホームから開いたノートを左のタブの列の右に置き、列を残す(docs/home-roadmap-design.mdの7章)", () => {
-    expect(source).toMatch(/:class="\{ 'shogi-note--beside-rail': noteBesideRail \}"/);
-    expect(source).toMatch(/const noteBesideRail = computed\(\(\) => homeOpen\.value && yakobiNoteOpen\.value && homeRailWidth\.value > 0\);/);
-    expect(source).toMatch(/homeRailWidth\.value = rect\.height > rect\.width \? Math\.round\(rect\.width\) : 0;/);
-    expect(source).toMatch(/if \(noteBesideRail\.value\) closeYakobiNote\(\);\s*homeTab\.value = id;/);
+    expect(source).toMatch(/:class="\{ 'shogi-note--beside-rail': noteBesideRail, 'shogi-note--above-bar': noteAboveBar \}"/);
+    expect(source).toMatch(/const noteBesideRail = computed\(\(\) => homeOpen\.value && yakobiNoteOpen\.value && !noteFromTournament\.value && homeRailWidth\.value > 0\);/);
+    expect(source).toMatch(/homeRailWidth\.value = !bar && window\.innerWidth >= NOTE_RAIL_MIN_WIDTH \? Math\.round\(rect\.width\) : 0;/);
+    expect(source).toMatch(/if \(noteBesideRail\.value \|\| noteAboveBar\.value\) closeYakobiNote\(\);\s*homeTab\.value = id;/);
     expect(source).toMatch(/\.shogi-game \.shogi-dex\.shogi-note--beside-rail \{\s*left: var\(--note-rail, 0px\);/);
+  });
+  it("縦向きでホームから開いたノートは下のタブの帯を残し、ホームのタブが見えるときは戻るを出さない(docs/home-roadmap-design.mdの8章)", () => {
+    expect(source).toMatch(/homeBarHeight\.value = bar && rect\.height > 0 \? Math\.round\(rect\.height\) : 0;/);
+    expect(source).toMatch(/const noteShowsBack = computed\(\(\) => !noteBesideRail\.value && !noteAboveBar\.value\);/);
+    expect(source).toMatch(/:show-back="noteShowsBack"/);
+    expect(source).toMatch(/\.shogi-game \.shogi-dex\.shogi-note--above-bar \{\s*bottom: var\(--note-bar, 0px\);/);
   });
   it("まなぶは将棋教室・問題集・脳トレの3枚。脳トレは遅れて読み込み、戻る操作で閉じる", () => {
     expect(source).toMatch(/class="shogi-title__tiles shogi-title__tiles--learn"[\s\S]*?将棋教室[\s\S]*?問題集[\s\S]*?data-brain-tile @click="openBrainTraining"/);

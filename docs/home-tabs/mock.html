@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>まなぶ・しらべるの作り直し（モックアップ）</title>
+<!--
+  docs/home-roadmap-design.mdの8章のモックアップ。今のホームを開き、まなぶ・しらべるのタブの中身を
+  mock-fragments.js の断片に差し替えて撮った写真(アイコン・字・色は今のアプリのもの。数字は見本)。
+-->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px; background: #0e1820; color: #fffcf4; font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", sans-serif; }
+  h1 { margin: 0 0 6px; font-size: 22px; } h2 { margin: 28px 0 6px; font-size: 18px; }
+  p { margin: 0 0 12px; color: #cfd8de; font-size: 13px; line-height: 1.6; max-width: 72em; }
+  .row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  figure { margin: 0; } figcaption { margin-top: 4px; color: #cfd8de; font-size: 12px; }
+  img { display: block; border: 2px solid #4b6577; border-radius: 10px; max-width: 100%; }
+  img.pc { width: 560px; } img.phone { width: 260px; } img.tablet { width: 300px; } img.land { width: 420px; }
+</style></head><body>
+<h1>まなぶ・しらべるの作り直し（モックアップ）</h1>
+<p>設計は docs/home-roadmap-design.md の8章。今と2つの案を、スマホ縦（390×844）とPC（1366×768）で並べた。案Aは、ほかの大きさ（375×553・820×1180・844×390）も載せた。数字は見本。</p>
+
+<h2>今</h2>
+<div class="row">
+  <figure><img class="phone" src="mock-now-learn-phone-390x844.png" alt=""><figcaption>まなぶ（スマホ）</figcaption></figure>
+  <figure><img class="phone" src="mock-now-dex-phone-390x844.png" alt=""><figcaption>しらべる（スマホ）</figcaption></figure>
+  <figure><img class="pc" src="mock-now-learn-pc-1366x768.png" alt=""><figcaption>まなぶ（PC）</figcaption></figure>
+  <figure><img class="pc" src="mock-now-dex-pc-1366x768.png" alt=""><figcaption>しらべる（PC）</figcaption></figure>
+</div>
+
+<h2>案A　進み具合の札（おすすめ）</h2>
+<p>タブの面いっぱいに、札を大きくする。札には名前の下に「いまどこまでか」を1〜2行（教室はつぎのレッスンと進み具合、問題集は今日の5問と解いた数、脳トレは今日の部屋と今週の判子、図鑑は集めた数）。押すと今と同じ画面が開く（手数は同じ）。</p>
+<div class="row">
+  <figure><img class="phone" src="mock-a-learn-phone-390x844.png" alt=""><figcaption>まなぶ（スマホ）</figcaption></figure>
+  <figure><img class="phone" src="mock-a-dex-phone-390x844.png" alt=""><figcaption>しらべる（スマホ）</figcaption></figure>
+  <figure><img class="pc" src="mock-a-learn-pc-1366x768.png" alt=""><figcaption>まなぶ（PC）</figcaption></figure>
+  <figure><img class="pc" src="mock-a-dex-pc-1366x768.png" alt=""><figcaption>しらべる（PC）</figcaption></figure>
+</div>
+<div class="row" style="margin-top:16px">
+  <figure><img class="phone" src="mock-a-learn-phone-375x553.png" alt=""><figcaption>まなぶ（375×553）</figcaption></figure>
+  <figure><img class="phone" src="mock-a-dex-phone-375x553.png" alt=""><figcaption>しらべる（375×553）</figcaption></figure>
+  <figure><img class="tablet" src="mock-a-learn-tablet-820x1180.png" alt=""><figcaption>まなぶ（タブレット）</figcaption></figure>
+  <figure><img class="tablet" src="mock-a-dex-tablet-820x1180.png" alt=""><figcaption>しらべる（タブレット）</figcaption></figure>
+  <figure><img class="land" src="mock-a-learn-phone-land-844x390.png" alt=""><figcaption>まなぶ（スマホ横）</figcaption></figure>
+  <figure><img class="land" src="mock-a-dex-phone-land-844x390.png" alt=""><figcaption>しらべる（スマホ横）</figcaption></figure>
+</div>
+
+<h2>案B　おすすめ1枚と一覧</h2>
+<p>まなぶは、やこび姫の「次はこれ」の大きな札と「続きから」のボタン、その下に今の3枚。しらべるは「さいきん見たもの」の札と6枚。</p>
+<div class="row">
+  <figure><img class="phone" src="mock-b-learn-phone-390x844.png" alt=""><figcaption>まなぶ（スマホ）</figcaption></figure>
+  <figure><img class="phone" src="mock-b-dex-phone-390x844.png" alt=""><figcaption>しらべる（スマホ）</figcaption></figure>
+  <figure><img class="pc" src="mock-b-learn-pc-1366x768.png" alt=""><figcaption>まなぶ（PC）</figcaption></figure>
+  <figure><img class="pc" src="mock-b-dex-pc-1366x768.png" alt=""><figcaption>しらべる（PC）</figcaption></figure>
+</div>
+</body></html>

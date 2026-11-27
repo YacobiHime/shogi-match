@@ -4978,6 +4978,15 @@
   left: var(--note-rail, 0px);
   border-left: 1px solid rgba(255, 252, 244, 0.22);
 }
+/* 縦向きでは、ホームから開いたノートを下のタブの帯の上までにし、帯を残す(8章。ノートの戻るは出さない)。 */
+.shogi-game .shogi-dex.shogi-note--above-bar {
+  bottom: var(--note-bar, 0px);
+  border-bottom: 1px solid rgba(255, 252, 244, 0.22);
+}
+/* 帯の「ノート」が光っていて、戻るもないので、背の低い画面では題名の行を省き、帯の分の高さを返す。 */
+@media (max-height: 760px) {
+  .shogi-game .shogi-dex.shogi-note--above-bar > .shogi-dex__header { display: none; }
+}
 
 /* ===== 学習対局 ===== */
 .shogi-game__toolbar--learning .shogi-game__turn {

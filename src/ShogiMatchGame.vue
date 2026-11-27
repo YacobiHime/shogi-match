@@ -476,7 +476,7 @@
           :class="{ 'shogi-title__tab--on': homeTabOn(tab.id) }"
           :role="tab.id === 'note' ? undefined : 'tab'"
           :aria-selected="tab.id === 'note' ? undefined : homeTabOn(tab.id)"
-          :aria-current="tab.id === 'note' && noteBesideRail ? 'page' : undefined"
+          :aria-current="tab.id === 'note' && (noteBesideRail || noteAboveBar) ? 'page' : undefined"
           :data-home-tab-button="tab.id"
           @click="selectHomeTab(tab.id)"
         >
@@ -699,10 +699,11 @@
     <YakobiNote
       v-if="yakobiNoteOpen"
       ref="noteView"
-      :class="{ 'shogi-note--beside-rail': noteBesideRail }"
-      :style="noteBesideRail ? { '--note-rail': `${homeRailWidth}px` } : undefined"
+      :class="{ 'shogi-note--beside-rail': noteBesideRail, 'shogi-note--above-bar': noteAboveBar }"
+      :style="noteFrameStyle"
       :asset-base-url="assetBaseUrl"
       :back-label="'戻る'"
+      :show-back="noteShowsBack"
       :initial-tab="noteInitialTab"
       :state="ratingState"
       :titles="noteTitles"
@@ -10176,7 +10177,7 @@ function selectHomeTab(id: (typeof HOME_TABS)[number]["id"]) {
     return;
   }
   // 左の列を残してノートを開いているときは、ほかのタブを押すとノートを閉じてそのタブへ(7章)。
-  if (noteBesideRail.value) closeYakobiNote();
+  if (noteBesideRail.value || noteAboveBar.value) closeYakobiNote();
   homeTab.value = id;
 }
 /*
@@ -10186,15 +10187,20 @@ function selectHomeTab(id: (typeof HOME_TABS)[number]["id"]) {
 const NOTE_RAIL_MIN_WIDTH = 900;
 const homeTabsEl = ref<HTMLElement | null>(null);
 const homeRailWidth = ref(0);
+/** 縦向きで、ホームから開いたノートの下に残す、下のタブの帯の高さ(docs/home-roadmap-design.mdの8章)。 */
+const homeBarHeight = ref(0);
 function measureHomeRail() {
   const el = homeTabsEl.value;
-  if (!el || typeof window === "undefined" || window.innerWidth < NOTE_RAIL_MIN_WIDTH) {
+  if (!el || typeof window === "undefined") {
     homeRailWidth.value = 0;
+    homeBarHeight.value = 0;
     return;
   }
   const rect = el.getBoundingClientRect();
-  // 下の帯(横に長い)のときは列ではない。
-  homeRailWidth.value = rect.height > rect.width ? Math.round(rect.width) : 0;
+  const bar = rect.width >= rect.height;
+  // 下の帯(横に長い)のときは列ではない。狭い横向き(スマホの横)の左の列は、ノートを画面いっぱいにして戻るで戻る。
+  homeRailWidth.value = !bar && window.innerWidth >= NOTE_RAIL_MIN_WIDTH ? Math.round(rect.width) : 0;
+  homeBarHeight.value = bar && rect.height > 0 ? Math.round(rect.height) : 0;
 }
 let homeRailObserver: ResizeObserver | undefined;
 watch(homeTabsEl, (el) => {
@@ -10210,10 +10216,20 @@ onBeforeUnmount(() => {
   homeRailObserver?.disconnect();
   if (typeof window !== "undefined") window.removeEventListener("resize", measureHomeRail);
 });
-const noteBesideRail = computed(() => homeOpen.value && yakobiNoteOpen.value && homeRailWidth.value > 0);
+const noteBesideRail = computed(() => homeOpen.value && yakobiNoteOpen.value && !noteFromTournament.value && homeRailWidth.value > 0);
+/** 縦向きで、ホームから開いたノートの下に、下のタブの帯を残すか(8章)。 */
+const noteAboveBar = computed(() => homeOpen.value && yakobiNoteOpen.value && !noteFromTournament.value && !noteBesideRail.value && homeBarHeight.value > 0);
+/**
+ * ノートの「戻る」を出すか。ホームのタブ(左の列・下の帯)が見えていれば、タブでほかへ移れるので出さない(8章。UD:3-2 階層を浅く)。
+ * 大会から開いたとき・狭い横向きで画面いっぱいに開いたときは、戻るで来た場所へ戻る。
+ */
+const noteShowsBack = computed(() => !noteBesideRail.value && !noteAboveBar.value);
+const noteFrameStyle = computed(() => noteBesideRail.value
+  ? { "--note-rail": `${homeRailWidth.value}px` }
+  : noteAboveBar.value ? { "--note-bar": `${homeBarHeight.value}px` } : undefined);
 /** タブを光らせるか。左の列を残してノートを開いているあいだは、ノートのタブを光らせる。 */
 function homeTabOn(id: (typeof HOME_TABS)[number]["id"]) {
-  return noteBesideRail.value ? id === "note" : homeTab.value === id;
+  return noteBesideRail.value || noteAboveBar.value ? id === "note" : homeTab.value === id;
 }
 /** まなぶのタイルに、強くなる道のおすすめがあるか(タブに点を付ける)。 */
 const homeLearnRecommended = computed(() => homeTile("tutorial").recommended || homeTile("problems").recommended);
