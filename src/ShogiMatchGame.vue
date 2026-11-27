@@ -991,10 +991,11 @@
           <section v-if="matchKind === 'normal'" class="shogi-game__pregame-section" aria-label="対局相手">
             <div class="shogi-game__pregame-row" data-pregame-row="opponent">
               <span class="shogi-game__pregame-row-label">対局相手:</span>
-              <span class="shogi-game__pregame-value">{{ freeOpponent === "local" ? "プレイヤー同士" : "CPU" }}</span>
+              <span class="shogi-game__pregame-value">{{ freeOpponent === "local" ? "プレイヤー同士" : cpuBrain === "reason" ? REASON_OPPONENT_TEXT.row : "CPU" }}</span>
               <button type="button" class="shogi-game__pregame-change" aria-label="対局相手を変更" @click="pregamePicker = 'opponent'">変更</button>
             </div>
             <p v-if="freeOpponent === 'local'" class="shogi-game__pregame-note">同じ端末で、先手・後手を交互に指すよ。盤の向きは「ひふみんアイ」で変えられるよ。</p>
+            <p v-else-if="cpuBrain === 'reason'" class="shogi-game__pregame-note" data-pregame-reason-note>{{ REASON_OPPONENT_TEXT.note }}</p>
           </section>
 
           <!-- 開始局面で下に出る項目が変わるため、学習対局では最初に選ばせる。 -->
@@ -3358,6 +3359,7 @@ import { chooseAwareMove } from "./core/aware-move-choice.mjs";
 import { normalizeCpuNotes, type CpuOversight } from "./core/guided-review.mjs";
 import { chooseLogicMove } from "./core/logic-ai.mjs";
 import { logicLevelOf } from "./core/strength-settings.mjs";
+import { DEFAULT_REASON_LEVEL, REASON_OPPONENT_TEXT, normalizeReasonLevel, reasonLevels, reasonStrengthOptions } from "./core/reason-opponent.mjs";
 import { createAssistSearchControl } from "./core/assist-search-control.mjs";
 import { findMateInOne } from "./core/mate-threat";
 import {
@@ -3617,6 +3619,12 @@ type MatchKind = "normal" | "learning" | "tournament";
 type LearningStartType = "standard" | "handicap" | "formation";
 const matchKind = ref<MatchKind>("normal");
 const freeOpponent = ref<GameMode>(props.mode === "local" ? "local" : "cpu");
+// 自由対局のCPUの考え方。engineはやねうら王の強さの表、reasonは将棋AI(論理)(docs/disciple-mode-design.mdの41章)。
+const cpuBrain = ref<"engine" | "reason">("engine");
+/** 将棋AI(論理)の強さ(4つの能力値をそろえたLv)。 */
+const reasonLevel = ref(DEFAULT_REASON_LEVEL);
+/** 自由対局で将棋AI(論理)と指しているか。 */
+const usesReasonAi = computed(() => matchKind.value === "normal" && freeOpponent.value === "cpu" && cpuBrain.value === "reason");
 const matchInitialSfen = ref(props.initialSfen);
 const learningStartType = ref<LearningStartType>("standard");
 const learningHandicapId = ref("bishop");
@@ -7612,7 +7620,9 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
   const isCpu = !local && color !== pregamePlayerColor.value;
   const rows: PregameRow[] = isCpu
     ? [
-      { kind: "pick", id: "strength", label: "強さ", value: optionLabel(strengthOptions, searchNodes.value) },
+      usesReasonAi.value
+        ? { kind: "pick", id: "reasonStrength", label: "強さ", value: `能力Lv.${reasonLevel.value}` }
+        : { kind: "pick", id: "strength", label: "強さ", value: optionLabel(strengthOptions, searchNodes.value) },
       ...cpuPlanRows(),
       ...learningPlanRows("opponent"),
     ]
@@ -7624,7 +7634,7 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
     isCpu,
     name: local
       ? (color === "black" ? props.blackPlayerName : props.whitePlayerName)
-      : isCpu ? (props.cpuPlayerName.trim() || "CPU") : playerDisplayName(playerName.value),
+      : isCpu ? (usesReasonAi.value ? REASON_OPPONENT_TEXT.name : props.cpuPlayerName.trim() || "CPU") : playerDisplayName(playerName.value),
     // CPUの強さは下の「強さ」の行に出す。駒落ちでは上手・下手の別を添える。
     detail: pregameUsesHandicap.value ? (color === "white" ? "駒を落とす側" : "駒を落とされる側") : "",
     rows,
@@ -7633,7 +7643,7 @@ const pregameSides = computed(() => (["black", "white"] as const).map((color) =>
 
 /** レーティングの対象になる設定(平手の通常対局で、対CPU)のときだけ、おすすめの強さを案内する。 */
 const ratingRecommendation = computed(() => (
-  matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value
+  matchKind.value === "normal" && normalizedMode.value === "cpu" && !tutorialMatch.value && !usesReasonAi.value
 ));
 
 const pregameCommonRows = computed(() => {
@@ -7685,10 +7695,12 @@ const pregamePickerConfig = computed<{ title: string; sections: PickerSection[];
   const single = (title: string, value: PickerValue, groups: PickerSection["groups"], note = "") => ({
     title, note, sections: [{ key: id, value, groups }],
   });
-  if (id === "opponent") return single("対局相手", freeOpponent.value, [{ options: [
+  if (id === "opponent") return single("対局相手", freeOpponent.value === "cpu" && cpuBrain.value === "reason" ? "reason" : freeOpponent.value, [{ options: [
     { value: "cpu", label: "CPUと対局" },
+    { value: "reason", label: REASON_OPPONENT_TEXT.pick, description: REASON_OPPONENT_TEXT.pickNote },
     { value: "local", label: "プレイヤー同士", description: "同じ端末で交互に指す" },
   ] }]);
+  if (id === "reasonStrength") return single(REASON_OPPONENT_TEXT.strength, reasonLevel.value, [{ options: reasonStrengthOptions() }]);
   if (id === "strength") {
     // 50個を、はじめの級・級・段・プロの4つに分けて並べる(docs/level-ladder-design.mdの5章・12章)。同じ名前の段は、Rと成績で見分ける。
     const band = (from: number, to: number) => strengthPickerOptions.value.filter((_, level) => level >= from && level <= to);
@@ -7742,8 +7754,10 @@ function onPregamePick(key: string, value: PickerValue) {
   const text = String(value);
   if (key === "opponent") {
     freeOpponent.value = value === "local" ? "local" : "cpu";
+    cpuBrain.value = value === "reason" ? "reason" : "engine";
     if (freeOpponent.value === "cpu") void initializeEngine();
   }
+  else if (key === "reasonStrength") reasonLevel.value = normalizeReasonLevel(value);
   else if (key === "strength") searchNodes.value = Number(value);
   else if (key === "cpuFirstMove") cpuFirstMove.value = text;
   else if (key === "bishop") cpuBishopPreference.value = text;
@@ -10954,6 +10968,9 @@ function persistMatchState() {
     boardFlipOverride: boardFlipOverride.value,
     selectedPlayerColor: selectedPlayerColor.value,
     searchNodes: searchNodes.value,
+    // 自由対局の将棋AI(論理)(41章)。中断・リロードのあとも同じ相手で続ける。
+    cpuBrain: cpuBrain.value,
+    reasonLevel: reasonLevel.value,
     cpuStrategy: cpuStrategy.value,
     cpuDetailedStrategy: cpuDetailedStrategy.value,
     cpuDetailedCastle: cpuDetailedCastle.value,
@@ -11145,6 +11162,8 @@ function restorePersistedMatch({ resume = false } = {}): boolean {
       ? "white"
       : activePlayerColor.value;
     searchNodes.value = normalizeNodes(snapshot.searchNodes);
+    cpuBrain.value = snapshot.cpuBrain === "reason" ? "reason" : "engine";
+    reasonLevel.value = normalizeReasonLevel(snapshot.reasonLevel);
     cpuStrategy.value = typeof snapshot.cpuStrategy === "string" ? snapshot.cpuStrategy : "random";
     cpuDetailedStrategy.value = typeof snapshot.cpuDetailedStrategy === "string"
       ? snapshot.cpuDetailedStrategy
@@ -12910,6 +12929,8 @@ function recordRatedGame(matchResult: MatchResult) {
     && normalizedMode.value === "cpu"
     && !tutorialMatch.value
     && matchInitialSfen.value === STANDARD_SFEN
+    // 将棋AI(論理)はCPUの強さの表とは別の物差しなので、レーティングに数えない(41章)。
+    && !usesReasonAi.value
     // Lv0(駒の動きを覚えたて)は練習相手で、レーティングに数えない(docs/level-ladder-design.md)。
     && isRatedLevel(level);
   // 竜王戦の千日手は、先後を入れ替えて指し直す(recordRyuoOutcome)ので、指し直した対局の結果だけを数える。
@@ -13668,6 +13689,32 @@ function scheduleReviewCpuMove() {
   }, Math.max(0, props.cpuDelayMs));
 }
 
+// 自由対局の将棋AI(論理)(41章)。考え方はWorkerで動かし(useThinkWorker.ts)、開いたときにだけ読み込む(最初のJSに入れない)。
+let reasonThinker: { think: (request: any) => Promise<any>; dispose: () => void } | null = null;
+onBeforeUnmount(() => reasonThinker?.dispose());
+async function reasonCpuMove(planMove: string | null, legalMoves: string[]) {
+  if (!reasonThinker) {
+    try {
+      const { createThinker } = await import("./composables/match/useThinkWorker");
+      reasonThinker = createThinker();
+    } catch (error) {
+      // 公開し直して読み込みに失敗したら、1回だけ読み込み直すか一言で知らせ、この手はロジックAIで指す。
+      onLazyLoadError(error);
+      return chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10, planMove });
+    }
+  }
+  const thought = await reasonThinker.think({
+    sfen: record.value.position.sfen,
+    levels: reasonLevels(reasonLevel.value),
+    planMove,
+    seed: (Math.random() * 0x7fffffff) | 0,
+    lastMove: moveHistory.at(-1) ?? null,
+    era: "reiwa",
+  });
+  const move = typeof thought?.move === "string" && legalMoves.includes(thought.move) ? thought.move : "";
+  return move ? { move } : chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10, planMove });
+}
+
 async function scheduleCpuMove() {
   if (
     !active.value ||
@@ -13912,6 +13959,8 @@ async function scheduleCpuMove() {
           : null;
         let selection = forceConfiguredOpening && allowedOpeningMove
           ? { move: allowedOpeningMove }
+          : usesReasonAi.value
+          ? await reasonCpuMove(allowedOpeningMove ?? null, allowedCpuMoveList)
           : logicLevel !== null
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
@@ -13998,6 +14047,8 @@ async function scheduleCpuMove() {
         // エンジンが利用できない簡易CPUでは評価比較ができないため、合法な定跡手を優先する。
         // 24級〜16級(ロジックAI)とLv10以上(目的のある手)は、エンジンがなくてもロジックAIで指せる。
         usi = forceConfiguredOpening && allowedOpeningMove ? allowedOpeningMove
+          : usesReasonAi.value
+          ? (await reasonCpuMove(allowedOpeningMove ?? null, allowedCpuMoveList))?.move ?? ""
           : cpuLogicLevel.value !== null || strength.logicHybrid
           ? chooseLogicMove({
             sfen: record.value.position.sfen,
