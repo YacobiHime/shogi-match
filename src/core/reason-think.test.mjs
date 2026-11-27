@@ -8,9 +8,15 @@ const never = () => 0.99;
 
 describe('理由で指す棋士の考え方(34-16)', () => {
   it('能力値で読みの手数・大局観・うっかり・詰みの手数が変わる', () => {
-    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, qdepth: 1, shapeScale: 0, skip: 0.2, skipEnd: 0.25, mateDepth: 1, mateMs: 100 });
+    expect(thinkProfile({ reading: 12, plan: 12, steady: 12, mate: 12 })).toMatchObject({ depth: 1, qdepth: 1, shapeScale: 0, skip: 0.2, skipOpen: 0.25, skipEnd: 0.25, bookUse: 0.35, mateDepth: 1, mateMs: 100 });
     expect(thinkProfile({ reading: 18 }).depth).toBe(1);
-    expect(strong).toMatchObject({ depth: 6, shapeScale: 1, skip: 0.02, skipEnd: 0.02, mateDepth: 9, mateMs: 400 });
+    expect(strong).toMatchObject({ depth: 6, shapeScale: 1, skip: 0.02, skipOpen: 0.02, skipEnd: 0.02, bookUse: 1, mateDepth: 9, mateMs: 400 });
+  });
+  it('序盤のうっかりとプロの序盤の手は作戦の力で決まる(41-4)', () => {
+    const planHigh = thinkProfile({ reading: 30, plan: 49, steady: 30, mate: 30 });
+    const steadyHigh = thinkProfile({ reading: 30, plan: 30, steady: 49, mate: 30 });
+    expect(planHigh.skipOpen).toBeLessThan(steadyHigh.skipOpen);
+    expect(planHigh.bookUse).toBeGreaterThan(steadyHigh.bookUse);
   });
   it('終盤のうっかりは詰みの力を主に決まる(41-3)', () => {
     const mateHigh = thinkProfile({ reading: 30, plan: 30, steady: 30, mate: 49 });

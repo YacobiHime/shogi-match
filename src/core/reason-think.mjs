@@ -21,6 +21,10 @@ const LV_MIN = 12;
 const LV_MAX = 49;
 /** これより後の手数を終盤として、うっかりを詰みの力で決める(player-character.mjsのPHASE_LIMITS.middleと同じ)。 */
 const PHASE_END_PLY = 80;
+/** ここまでの手数を序盤として、うっかりを作戦の力で決める(player-character.mjsのPHASE_LIMITS.openingと同じ。41-4)。 */
+const PHASE_OPEN_PLY = 30;
+/** 局面の手数(SFENの4つめ)。 */
+const plyOf = (sfen) => Math.max(1, Number(String(sfen).trim().split(/\s+/)[3]) || 1);
 /** 持ち駒(両方)がこの枚数以上なら、手数によらず終盤とみる(駒がぶつかって玉の近くで詰む・詰まないの勝負になる。41-3)。 */
 const ENDING_HAND_PIECES = 6;
 
@@ -63,8 +67,12 @@ export function thinkProfile(levels = {}) {
     quietMargin: Math.round(lerp(150, 30, p)),
     /** 何もない局面で、手順表を局面に合わせて選ぶ割合。 */
     situational: Math.round(p * 100) / 100,
-    /** 序盤・中盤で、読みを1手だけにし、取り合いも読まない確率(うっかり。安定で決まる。41-3で0.35から0.2へ)。 */
-    skip: Math.round(lerp(0.2, 0.02, s) * 1000) / 1000,
+    /** 中盤で、読みを1手だけにし、取り合いも読まない確率(うっかり。安定を主に、作戦も効く。41-3で0.35から0.2へ、41-4で作戦を3割)。 */
+    skip: Math.round(lerp(0.2, 0.02, 0.7 * s + 0.3 * p) * 1000) / 1000,
+    /** 序盤(30手まで)のうっかりの確率。作戦を主に、安定も効く(41-4)。 */
+    skipOpen: Math.round(lerp(0.25, 0.02, 0.35 * s + 0.65 * p) * 1000) / 1000,
+    /** プロの序盤の手(作戦の手がないとき)を知っていて指す割合(作戦が高いほど定跡に明るい。41-4)。 */
+    bookUse: Math.round(lerp(0.35, 1, p) * 100) / 100,
     /** 終盤(81手目からか、持ち駒が多い局面。isEnding)のうっかりの確率。詰みを主に、安定も効く(41-3)。 */
     skipEnd: Math.round(lerp(0.25, 0.02, 0.35 * s + 0.65 * m) * 1000) / 1000,
     /** 自分の詰みを探す手数(1〜9)。 */
@@ -136,7 +144,9 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   const skipped = [];
   // プロの序盤の手(40-9): 作戦の手がないときは、プロが何局も指した手を、育った時代の手を多めに選ぶ。駒の損得の確かめは作戦の手と同じ(下の3)。
   // 前の版(classic)と、比べ用の選手(noBook)では使わない。
-  const proBook = !planMove && !profile.classic && !profile.noBook ? pickBookMove(sfen, { era: profile.era ?? null, random }) : null;
+  // 作戦が低い棋士は、プロの序盤の手を知らないことがある(bookUse。41-4)。作戦帳・定跡の作戦の手(planMove)は、知っている作戦なのでいつも指す。
+  const knowsBook = profile.bookUse == null || random() < profile.bookUse;
+  const proBook = !planMove && !profile.classic && !profile.noBook && knowsBook ? pickBookMove(sfen, { era: profile.era ?? null, random }) : null;
   if (proBook) planMove = proBook;
   const done = (move, stage, reason, extra = {}) => ({ move, stage, reason, score: 0, line: [move], skipped, depth: skipped.includes('hanging') ? 1 : profile.depth, ...extra });
   // 1. 自分の詰み。
@@ -146,7 +156,8 @@ export function chooseThinkingMove({ sfen, profile, planMove = null, random = Ma
   // 1手の時間の上限(読みの時間の1.6倍)。定跡・手順表の手の確かめは、残りの時間で行う。
   const deadline = Date.now() + profile.timeMs * (profile.deadlineScale ?? 1.6);
   const ending = isEnding(sfen);
-  const careless = random() < (ending ? profile.skipEnd ?? profile.skip : profile.skip);
+  const opening = !ending && plyOf(sfen) <= PHASE_OPEN_PLY;
+  const careless = random() < (ending ? profile.skipEnd ?? profile.skip : opening ? profile.skipOpen ?? profile.skip : profile.skip);
   if (careless) skipped.push('hanging');
   const depth = careless ? 1 : profile.depth;
   const qdepth = careless ? 0 : profile.qdepth ?? 6;
