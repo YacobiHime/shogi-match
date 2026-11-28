@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_DIFFICULTY, MIN_CONTENT_EVENTS, contentEstimate, contentEvents } from './play-content.mjs';
+import { CONTENT_DIFFICULTY, CONTENT_SLOPE, MIN_CONTENT_EVENTS, contentEstimate, contentEvents } from './play-content.mjs';
 
 // 先手の飛車(5八)と後手の飛車(5五)がにらみ合う。先手は飛車をタダで取れる(取れる駒)。先手の飛車は玉が守っている。
 const BEFORE = '4k4/9/9/9/4r4/9/9/4R4/4K4 b - 1';
@@ -39,7 +39,7 @@ describe('対局の場面採点', () => {
       points: [point(0, { score: { type: 'mate', value: 3 } }), point(1, { score: afterScore, moveMeasure: { mover: 'black', loss: 0, standing: 30000 } })],
       sfens: [BEFORE, TOOK], moves: ['5h5e'], color: 'black',
     });
-    expect(mate({ type: 'mate', value: 2 })).toEqual([{ kind: 'mate', ply: 1, b: CONTENT_DIFFICULTY.mate[3], correct: true }]);
+    expect(mate({ type: 'mate', value: 2 })).toEqual([{ kind: 'mate', ply: 1, b: CONTENT_DIFFICULTY.mate[3], a: CONTENT_SLOPE.mate[3], correct: true }]);
     expect(mate({ type: 'cp', value: 400 })[0].correct).toBe(false);
   });
 

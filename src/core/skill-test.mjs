@@ -37,12 +37,14 @@ const ABILITY_PRIOR_SD = 6;
 const ABILITY_SHRINK = 4;
 
 /**
- * 正解の起こりやすさ。g: 当て推量(3択は1/3)、b: 問題の難しさ(Lv)。
+ * 正解の起こりやすさ。g: 当て推量(3択は1/3)、b: 問題の難しさ(Lv)、a: 傾き(1Lvでどのくらい変わるか。省くとITEM_SLOPE)。
+ * 対局の場面採点は、場面の種類ごとの傾きを持つ(play-content.mjsのCONTENT_DIFFICULTY。docs/skill-measure-design.mdの14章)。
  * @param {number} level
- * @param {{ b: number, guess?: number }} item
+ * @param {{ b: number, guess?: number, a?: number }} item
  */
-export function successProbability(level, { b, guess = 0 }) {
-  return guess + (1 - guess - ITEM_SLIP) / (1 + Math.exp(-ITEM_SLOPE * (level - b)));
+export function successProbability(level, { b, guess = 0, a = ITEM_SLOPE }) {
+  const slope = Number.isFinite(a) && a > 0 ? a : ITEM_SLOPE;
+  return guess + (1 - guess - ITEM_SLIP) / (1 + Math.exp(-slope * (level - b)));
 }
 
 const levels = (() => {

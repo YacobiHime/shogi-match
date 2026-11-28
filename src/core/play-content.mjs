@@ -14,15 +14,23 @@ const HANG_SWING = 400;
 /** 数える詰みの長さの上限(手数)。 */
 const MAX_MATE_PLIES = 7;
 /**
- * 場面の難しさ(Lv)。取れる駒・守るは、棋力テストの同じ種類の問題の難しさ(skill-test-bank.mjsのb)の平均
- * (2026-10-27の生成で14.3・20.7)に合わせた初めの値。駒損をしないは、それよりやさしい場面として置く。
- * 詰みは手数で決める(詰将棋の手数の目安。docs/skill-assessment-design.mdの4-3)。集めた答えで直す。
+ * 場面の難しさ(Lv)と傾き(1Lvでできる割合がどのくらい変わるか)。強さの分かっているCPU(Lv8〜44)の対局160局を、アプリと同じ段階解析で読み、
+ * 場面の種類ごとに最尤で決めた(scripts/content-calibration.mjs。docs/skill-measure-design.mdの14章)。
+ * 取れる駒・守る駒は、どのLvでもかなりできるので傾きが小さい(1つの場面で分かることは少ないが、数が多い)。
+ * 駒損をしないは97%ができ、弱いLvだけを見分ける。詰みは手数が長いほど難しい(1手詰めはほぼ全員が詰ます)。
+ * 前の値(棋力テストの問題の難しさから決めた初めの値。傾きは全部0.5)は、CPUのLvの差がほとんど出なかった(13-3)。
  */
 export const CONTENT_DIFFICULTY = Object.freeze({
-  take: 14,
-  save: 20,
-  safe: 4,
-  mate: Object.freeze({ 1: 8, 3: 16, 5: 24, 7: 30 }),
+  take: 4.5,
+  save: 14,
+  safe: 2,
+  mate: Object.freeze({ 1: -20, 3: 11, 5: 12, 7: 17 }),
+});
+export const CONTENT_SLOPE = Object.freeze({
+  take: 0.08,
+  save: 0.08,
+  safe: 0.5,
+  mate: Object.freeze({ 1: 0.5, 3: 0.5, 5: 0.15, 7: 0.25 }),
 });
 export const CONTENT_KINDS = Object.freeze(['take', 'save', 'safe', 'mate']);
 /** 1局の中身の強さを出すのに要る、場面の数。 */
@@ -44,7 +52,7 @@ function mateLengthFor(score, color) {
  * 1局の場面。pointsは棋譜解析の点(kifu-analysis-pipeline.mjsのanalysisPointsFromResults。scoreは先手から見た値)、
  * sfensは0手目からの局面、movesは指した手(USI。moves[ply - 1]がply手目)、colorは採点する側。
  * @param {{ points: any[], sfens: string[], moves?: readonly string[], color: 'black' | 'white' }} game
- * @returns {{ kind: string, ply: number, b: number, correct: boolean }[]}
+ * @returns {{ kind: string, ply: number, b: number, a?: number, correct: boolean }[]}
  */
 export function contentEvents({ points, sfens, moves = [], color }) {
   const byPly = new Map((points ?? []).map((point) => [point.ply, point]));
@@ -59,8 +67,9 @@ export function contentEvents({ points, sfens, moves = [], color }) {
     const mate = mateLengthFor(before.score, color);
     if (mate) {
       if (mate <= MAX_MATE_PLIES) {
-        const b = CONTENT_DIFFICULTY.mate[mate] ?? CONTENT_DIFFICULTY.mate[7];
-        events.push({ kind: 'mate', ply: point.ply, b, correct: Boolean(mateLengthFor(point.score, color)) || point.score?.value === 0 });
+        const length = CONTENT_DIFFICULTY.mate[mate] !== undefined ? mate : 7;
+        const b = CONTENT_DIFFICULTY.mate[length];
+        events.push({ kind: 'mate', ply: point.ply, b, a: CONTENT_SLOPE.mate[length], correct: Boolean(mateLengthFor(point.score, color)) || point.score?.value === 0 });
       }
       continue;
     }
@@ -72,12 +81,12 @@ export function contentEvents({ points, sfens, moves = [], color }) {
     const bestNet = netAfter(state, best, 2);
     // 取れる駒: 最善手が、取り合いの2手の読みで300以上の駒得になる駒取り。
     if (best && !best.includes('*') && state.board.get(best.slice(2, 4))?.color && bestNet !== null && bestNet - now >= MATERIAL_SWING) {
-      events.push({ kind: 'take', ply: point.ply, b: CONTENT_DIFFICULTY.take, correct: loss < MISS_LOSS });
+      events.push({ kind: 'take', ply: point.ply, b: CONTENT_DIFFICULTY.take, a: CONTENT_SLOPE.take, correct: loss < MISS_LOSS });
     }
     // 守る駒: 手番を渡したら、相手の取りの読みで300以上の駒を取られる。
     const passed = { ...state, turn: state.turn === 'black' ? 'white' : 'black' };
     if (replyLoss(passed, 2) >= MATERIAL_SWING) {
-      events.push({ kind: 'save', ply: point.ply, b: CONTENT_DIFFICULTY.save, correct: loss < MISS_LOSS });
+      events.push({ kind: 'save', ply: point.ply, b: CONTENT_DIFFICULTY.save, a: CONTENT_SLOPE.save, correct: loss < MISS_LOSS });
     }
     // 駒損をしない: 指した手で、取り合いの2手の読みで今より400以上駒を失い(成り込まれるだけの300は数えない)、
     // 最善より300以上悪く、評価値でも300以上損をしたら、できなかった(取れる駒を逃しただけなら、取れる駒の場面で数える)。
@@ -85,18 +94,18 @@ export function contentEvents({ points, sfens, moves = [], color }) {
     const playedNet = played ? netAfter(state, played, 2) : null;
     const hung = bestNet !== null && playedNet !== null && now - playedNet >= HANG_SWING
       && bestNet - playedNet >= MATERIAL_SWING && loss >= MISS_LOSS;
-    events.push({ kind: 'safe', ply: point.ply, b: CONTENT_DIFFICULTY.safe, correct: !hung });
+    events.push({ kind: 'safe', ply: point.ply, b: CONTENT_DIFFICULTY.safe, a: CONTENT_SLOPE.safe, correct: !hung });
   }
   return events;
 }
 
 /**
  * 1局の場面から、中身の強さ(Lv)と幅、場面ごとの数。場面が少なければnull。
- * @param {{ kind: string, b: number, correct: boolean }[]} events
+ * @param {{ kind: string, b: number, a?: number, correct: boolean }[]} events
  */
 export function contentEstimate(events) {
   if ((events?.length ?? 0) < MIN_CONTENT_EVENTS) return null;
-  const { level, spread } = posteriorLevel(events.map(({ b, correct }) => ({ b, guess: 0, correct })), null);
+  const { level, spread } = posteriorLevel(events.map(({ b, a, correct }) => ({ b, a, guess: 0, correct })), null);
   const counts = Object.fromEntries(CONTENT_KINDS.map((kind) => {
     const list = events.filter((event) => event.kind === kind);
     return [kind, { n: list.length, hit: list.filter(({ correct }) => correct).length }];
