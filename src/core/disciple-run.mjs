@@ -294,7 +294,7 @@ const EXIT_SCENE_CLASS = 9;
 /**
  * 予定を1つ選んでターンを進める(このターンが予定を選ぶターンのときだけ)。
  * @param {any} state
- * @param {{ kind: 'train' | 'rest' | 'outing' | 'study' | 'master', id?: string, choice?: string, cards?: string[] }} action cardsは指導の引き出しで選んだカード(25-1)
+ * @param {{ kind: 'train' | 'rest' | 'outing' | 'study' | 'master' | 'research', id?: string, choice?: string, cards?: string[], card?: string }} action cardsは指導の引き出しで選んだカード(25-1)、cardは研究する作戦帳のカード(49章)
  * @returns {{ state: any, result: { kind: string, gains?: Record<string, number>, failed?: boolean, text: string, newSkills?: string[], newCards?: string[], [key: string]: any } }}
  */
 export function chooseAction(state, action) {
@@ -362,6 +362,18 @@ export function chooseAction(state, action) {
       kind: 'study', gains, learned: taught,
       text: `研究会で実戦（${who || '弟子と2人で'}）。読み＋${gains.reading}・安定＋${gains.steady}${masteryUp ? `・戦法熟練度＋${masteryUp}` : ''}${taught ? `。${taught}を教わった` : ''}`,
     };
+  } else if (action.kind === 'research') {
+    // 研究(49章): 作戦帳の1枚を研究して、その作戦の熟練度(定跡のあとにエンジンの読みで指せる手数)を上げる。能力値は伸びない。
+    next.planBook = planBookOf(next);
+    const cardId = next.planBook.cards[action.card ?? ''] ? action.card : bookHeadline(next.planBook)?.id;
+    const card = cardId ? planCard(cardId) : null;
+    if (!card) return { state, result: { kind: 'none', text: '' } };
+    const scale = MOOD_SCALE[clamp(Math.round(next.mood), -2, 2)] ?? 1;
+    const gain = notePlanGames(next.planBook, card.id, { gain: Math.round(RESEARCH.mastery * scale) });
+    next.stamina = clamp(next.stamina - RESEARCH.stamina, 0, 100);
+    next.researchCount = (next.researchCount ?? 0) + 1;
+    const now = next.planBook.cards[card.id].mastery;
+    result = { kind: 'research', card: card.id, gain, text: `${card.label}を研究した。熟練度＋${gain}（${now}）` };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
     const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));
@@ -570,6 +582,12 @@ function ensureKenshukai(state) {
  */
 /** 戦法熟練度の伸び(34-17): 対局1局ごとと、研究会。熟練度は作戦帳のカードごと(35章のO2)。 */
 export const MASTERY_GAIN = Object.freeze({ game: 1, study: 5 });
+/**
+ * 研究(49章)の1回の熟練度の伸び(やる気で増減)と使う体力。熟練度は定跡のあとにエンジンの読みで指せる手数と読みの量を決める。
+ * 自己対局では、熟練度40どうしに比べ、熟練度70で勝率+13点(64局)・100で+14点(32局)。誤差は大きい(49-12)。
+ * 局面の定跡ファイル(研究ノート)は強さにほとんど効かなかった(49-11)。
+ */
+export const RESEARCH = Object.freeze({ mastery: 8, stamina: 12 });
 /** 棋譜並べを何回するごとに新しい作戦を覚えられるか、研究会で奇襲を教わる見込み(35-12。初期値)。 */
 export const PLAN_STUDY_EVERY = 2;
 export const STUDY_SURPRISE_CHANCE = 0.25;

@@ -169,7 +169,8 @@
         <ul>
           <li v-for="row in view.book.rows" :key="row.id" :data-disciple-plan-row="row.id">
             <b>{{ row.label }}</b>
-            <small>{{ row.tierLabel }}・{{ row.vs }}　熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝<template v-if="row.memo">・研究メモ {{ row.memo }}局面</template></small>
+            <small>{{ row.tierLabel }}・{{ row.vs }}　熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝</small>
+            <button v-if="row.memo" type="button" class="disciple__link disciple__note-open" :data-disciple-notes-open="row.id" @click="openNotes(row.id)">研究ノート {{ row.memo }}局面を見る</button>
             <small v-if="row.chainNow.length || row.chainNext" class="disciple__plan-chain">
               <template v-if="row.chainNow.length">囲いの続き {{ row.chainNow.join('→') }}</template>
               <template v-if="row.chainNext">{{ row.chainNow.length ? '　' : '' }}次は{{ row.chainNext.label }}（あと{{ row.chainNext.left }}局）</template>
@@ -177,6 +178,39 @@
           </li>
         </ul>
         <p v-if="view.book.seen.length" class="disciple__muted" data-disciple-plan-seen>覚えられそう（負けた相手の作戦）：{{ view.book.seen.join('・') }}</p>
+      </section>
+
+      <!-- 研究ノート(49章)。観戦した局で研究の続きに指して形勢を保った手を、局面ごとに残したもの。盤は対局と同じ部品。 -->
+      <section v-if="notesCard && !view.end" class="disciple__panel disciple__notes" data-disciple-notes>
+        <h4>研究ノート　{{ notesLabel }}<button type="button" class="disciple__x" aria-label="閉じる" @click="notesCard = ''">×</button></h4>
+        <p class="disciple__muted">観戦した対局で、定跡のあとに指して形勢を保った手。同じ局面になったら、考えずにこの手を指す。負けた局で大きく損をした手は×（次は避ける）。</p>
+        <div class="disciple__notes-body">
+          <div ref="noteStageEl" class="disciple__notes-board">
+            <div class="disciple__board-box" :style="noteBoxStyle">
+              <ShogiMatchBoard
+                v-if="noteRow"
+                :sfen="noteRow.sfen"
+                :last-move="''"
+                :candidates="noteArrows"
+                :allow-move="false"
+                :enable-drag-and-drop="false"
+                :flip="noteRow.sfen.split(' ')[1] === 'w'"
+                :mobile="true"
+                :layout="'portrait'"
+                :asset-base-url="assetBaseUrl"
+                @resize="onNoteBoardResize"
+              />
+            </div>
+          </div>
+          <ol class="disciple__notes-list">
+            <li v-for="(row, index) in noteList" :key="row.key">
+              <button type="button" class="disciple__opt" :aria-pressed="noteRow?.key === row.key" :data-disciple-note="index" @click="noteIndex = index">
+                {{ index + 1 }}. {{ row.move ? noteMoveLabel(row) : '×' + noteMoveLabel(row, true) }}
+                <small>{{ row.games }}局で指して{{ row.wins }}勝<template v-if="row.avoid">・避ける</template></small>
+              </button>
+            </li>
+          </ol>
+        </div>
       </section>
 
       <p v-if="line" class="disciple__say" data-disciple-say>{{ line }}</p>
@@ -296,7 +330,17 @@
 
       <!-- 稽古を選ぶ(48-3): 選んだ稽古の札と、その稽古にいる一門の仲間 -->
       <template v-if="training && !lessonOrSheet">
-        <section class="disciple__panel disciple__picked" data-disciple-preview>
+        <!-- 研究(49章): 作戦帳の1枚を選び、その作戦の熟練度を上げる。能力値は伸びない。 -->
+        <section v-if="researching" class="disciple__panel disciple__picked" data-disciple-preview data-disciple-research-preview>
+          <b>研究<em>作戦の熟練度</em></b>
+          <small>定跡のあと、研究してきた手で指せる手数が増える</small>
+          <span class="disciple__risk">{{ researchRow?.label }}　熟練度 {{ researchRow?.mastery }}→<i>{{ Math.min(100, (researchRow?.mastery ?? 0) + researchGain) }}</i>・体力 <b>−{{ RESEARCH.stamina }}</b></span>
+          <div class="disciple__research-cards">
+            <button v-for="row in view.book.rows" :key="row.id" type="button" class="disciple__opt" :aria-pressed="researchRow?.id === row.id"
+              :data-disciple-research-card="row.id" @click="researchCardId = row.id">{{ row.label }}<small>熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝</small></button>
+          </div>
+        </section>
+        <section v-else class="disciple__panel disciple__picked" data-disciple-preview>
           <b>{{ selected?.label }}<em>Lv{{ selected?.level }}</em></b>
           <small>{{ trainingNote }}</small>
           <span class="disciple__risk">失敗率 <i :class="{ 'disciple__warn': (selected?.fail ?? 0) >= 8 }">{{ selected?.fail }}%</i>・体力 <b>−{{ selected?.stamina }}</b></span>
@@ -306,7 +350,7 @@
           </div>
           <p v-if="selected?.aptitude" class="disciple__extra">{{ APTITUDE_LABELS[selected.aptitude] }}の適性 +1目盛り</p>
         </section>
-        <div v-if="selected?.friends.length" class="disciple__friends" data-disciple-friends>
+        <div v-if="!researching && selected?.friends.length" class="disciple__friends" data-disciple-friends>
           <small>一門の仲間</small>
           <span v-for="id in selected.friends" :key="id" class="disciple__friend" :style="{ background: friendColor(id) }" :title="friendName(id)">
             {{ friendName(id).slice(0, 1) }}<em v-if="friendBond(id) >= 80">絆</em>
@@ -339,11 +383,16 @@
               <span class="disciple__tbtn-mark">{{ TRAINING_MARKS[item.id] }}</span>{{ item.label }}
               <span class="disciple__tbtn-lv">Lv{{ item.level }}</span>
             </button>
+            <button v-if="view.book.rows.length" type="button" class="disciple__tbtn disciple__tbtn--research" :aria-pressed="researching"
+              data-disciple-train="research" @click="pickTraining('research')">
+              <span class="disciple__tbtn-mark">研</span>研究
+              <span class="disciple__tbtn-lv">熟練度</span>
+            </button>
           </nav>
           <div class="disciple__tfoot">
             <button type="button" class="disciple__pill" @click="training = false">戻る</button>
             <span class="disciple__tfoot-hint">もう一度押しても決まる</span>
-            <button type="button" class="disciple__pill disciple__pill--go" data-disciple-train-go @click="openLesson">これにする</button>
+            <button type="button" class="disciple__pill disciple__pill--go" data-disciple-train-go @click="confirmTraining">これにする</button>
           </div>
         </template>
 
@@ -686,18 +735,20 @@ import ShoreikaiNameboard from "./ShoreikaiNameboard.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import { MEMBER_MASTERY_MAX, memberMakeup, societyView, systemCardsOf } from "./core/disciple-society.mjs";
 import {
-  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, STAT_MAX, TRAININGS, moverOfPly, skillById, statRank,
+  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, MOOD_SCALE, PLAY_STYLES, STAT_KEYS, STAT_LABELS, STAT_MAX, TRAININGS, moverOfPly, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import { levelGradeName } from "./core/tournament-world.mjs";
 import {
-  FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
+  FRIENDS, PLANS, RESEARCH, WORDS, applyFindings, planBookOf, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
+import { noteRows, planCard } from "./core/disciple-plans.mjs";
+import { moveLabel } from "./core/research-record.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
 import { paceMs, watchClocks } from "./core/watch-pace.mjs";
 import WazaCutin, { type WazaCutinView } from "./WazaCutin.vue";
-import { createWatchWaza, planNames, watchWazaStep } from "./core/watch-waza.mjs";
+import { createWatchWaza, planNames, watchMemoStep, watchWazaStep } from "./core/watch-waza.mjs";
 import { WAZA_EFFECT_KEY, wazaChime } from "./core/move-waza.mjs";
 import { createWazaAudio } from "./waza-audio";
 import { createMoveSoundPlayer, moveSoundForUsi } from "./core/move-sound";
@@ -829,15 +880,37 @@ const training = ref(false);
 const selectedId = ref("tsume");
 const choice = ref("steady");
 const selected = computed(() => view.value?.trainings.find((item) => item.id === selectedId.value) ?? null);
-const previewGains = computed<Record<string, number>>(() => (training.value && selected.value ? selected.value.gains : {}));
+const previewGains = computed<Record<string, number>>(() => (training.value && selected.value && !researching.value ? selected.value.gains : {}));
 const friendName = (id: string) => view.value?.friends.find((friend: { id: string }) => friend.id === id)?.name ?? "";
 function openTraining() {
   training.value = true;
 }
 /** 稽古の丸いボタン。選んでいる稽古をもう一度押すと決まる(48-3、D:3-1)。 */
 function pickTraining(id: string) {
-  if (id === selectedId.value) openLesson();
+  if (id === selectedId.value) confirmTraining();
   else selectedId.value = id;
+}
+/** 「これにする」: 稽古は指導の引き出しへ、研究はそのまま決める(49章)。 */
+function confirmTraining() {
+  if (researching.value) research();
+  else openLesson();
+}
+// ---- 研究(49章)。作戦帳の1枚の熟練度を上げる。
+const researching = computed(() => selectedId.value === "research");
+const researchCardId = ref("");
+const researchRow = computed(() => {
+  const rows = view.value?.book.rows ?? [];
+  return rows.find((row: { id: string }) => row.id === researchCardId.value) ?? rows.find((row: { id: string }) => row.id === view.value?.mastery?.card) ?? rows[0] ?? null;
+});
+const researchGain = computed(() => Math.round(RESEARCH.mastery * ((MOOD_SCALE as Record<string, number>)[String(Math.round(view.value?.mood ?? 0))] ?? 1)));
+function research() {
+  const card = researchRow.value?.id;
+  if (!card) return;
+  const { state: next, result } = chooseAction(state.value, { kind: "research", card });
+  training.value = false;
+  selectedId.value = "tsume";
+  commit(next);
+  say(growthLine(result) || result.text);
 }
 /** 選んだ稽古で何が伸びるか(主に・少し)。 */
 const trainingNote = computed(() => {
@@ -847,7 +920,7 @@ const trainingNote = computed(() => {
   return selected.value?.friends.length ? `${head}・仲間と一緒で伸びが増える` : head;
 });
 /** 稽古を選んでいるあいだ、体力のゲージに斜線で見せる使う分。 */
-const staminaCost = computed(() => (training.value && selected.value ? selected.value.stamina : 0));
+const staminaCost = computed(() => (training.value ? (researching.value ? RESEARCH.stamina : selected.value?.stamina ?? 0) : 0));
 const friendColor = (id: string) => {
   const index = view.value?.friends.findIndex((friend: { id: string }) => friend.id === id) ?? 0;
   return FRIEND_COLORS[Math.max(0, index) % FRIEND_COLORS.length];
@@ -923,6 +996,46 @@ function growthLine(result: { newSkills?: string[]; newCards?: string[]; newChar
   return charms ? `お守り${charms}を手に入れた。大一番に持たせられる` : "";
 }
 const skillsOpen = ref(false);
+// ---- 研究ノート(49章)
+const notesCard = ref("");
+const noteIndex = ref(0);
+const noteList = computed(() => (notesCard.value && state.value ? noteRows(planBookOf(state.value), notesCard.value) : []));
+const notesLabel = computed(() => planCard(notesCard.value)?.label ?? "");
+const noteRow = computed(() => noteList.value[Math.min(noteIndex.value, Math.max(0, noteList.value.length - 1))] ?? null);
+const noteArrows = computed(() => {
+  const row = noteRow.value;
+  if (!row) return [];
+  // 避ける手は矢印を出さない(盤の点線の矢印は「相手の狙い」の印なので)。一覧の「×」で見せる。
+  return row.move ? [{ usi: row.move, guideKind: "plan" as const }] : [];
+});
+function openNotes(cardId: string) {
+  notesCard.value = cardId;
+  noteIndex.value = 0;
+}
+/** ノートの手の表記(「▲7六歩」)。 */
+function noteMoveLabel(row: { sfen: string; move: string; avoid: string }, avoid = false) {
+  return moveLabel(row.sfen, avoid ? row.avoid : row.move, "") || (avoid ? row.avoid : row.move);
+}
+const noteStageEl = ref<HTMLElement | null>(null);
+const noteBoxStyle = ref<Record<string, string>>({});
+const noteAspect = ref(878 / 1128);
+function onNoteBoardResize({ width, height }: { width: number; height: number }) {
+  if (width > 0 && height > 0 && Math.abs(width / height - noteAspect.value) > 0.005) noteAspect.value = width / height;
+}
+function layoutNoteBox() {
+  const stage = noteStageEl.value;
+  if (!stage) return;
+  const width = Math.max(1, Math.floor(Math.min(stage.clientWidth, stage.clientHeight * noteAspect.value)));
+  noteBoxStyle.value = { width: `${width}px`, height: `${Math.max(1, Math.floor(width / noteAspect.value))}px` };
+}
+const noteObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => layoutNoteBox()) : null;
+vueWatch(noteStageEl, (stage) => {
+  noteObserver?.disconnect();
+  if (stage) noteObserver?.observe(stage);
+  layoutNoteBox();
+});
+vueWatch(noteAspect, layoutNoteBox);
+onBeforeUnmount(() => noteObserver?.disconnect());
 // ---- 会の画面(36-5)。名札掛け・対戦表・会員・規定。
 const SOCIETY_TABS = [
   { id: "board", label: "名札掛け" },
@@ -1190,10 +1303,13 @@ function revealMoves(current: Watch, upto: number, { quiet = false }: { quiet?: 
     const moves = current.entries.slice(0, index).map((item) => item.move);
     const before = index ? sfenAfter(moves, current.sfen ?? "") ?? start : start;
     const after = sfenAfter([...moves, entry.move], current.sfen ?? "") ?? before;
-    const step = watchWazaStep(wazaTracker, {
+    const wazaStep = watchWazaStep(wazaTracker, {
       before, usi: entry.move, after, ply: index + 1, side: current.side, name: view.value?.name ?? "",
       plan: planNames(current.plans?.own), simple: choice === "simple",
     });
+    // 弟子が研究ノートの手を指したら「研究どおり！」の帯(49章。技の帯が出る手は技の帯を先に)。
+    const memo = !wazaStep && (entry.d as { s?: string } | undefined)?.s === "memo" && moverOfPly(index + 1, current.sfen) === current.side;
+    const step = wazaStep ?? (memo ? watchMemoStep(wazaTracker, { usi: entry.move, name: view.value?.name ?? "", simple: choice === "simple" }) : null);
     wazaSeen = index + 1;
     if (quiet || index < upto - 1) continue;
     const sound = moveSoundForUsi(before, entry.move);
@@ -2125,7 +2241,7 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__pill--go, .shogi-game .disciple .disciple__pill--go:not(:disabled):hover { min-height: 2.7rem; padding: 0 1.3rem; background: #e8913a; box-shadow: 0 3px 0 #b8621d; font-size: 0.95rem; font-weight: 900; }
 .shogi-game .disciple__tfoot-hint { flex: 1; min-width: 0; padding: 0.3rem 0.5rem; border-radius: 999px; background: var(--panel-solid); font-size: 0.7rem; text-align: center; }
 /* 稽古を選ぶ */
-.shogi-game .disciple__tbtns { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.35rem; align-items: end; margin-top: 0.8rem; padding: 0 0.2rem; }
+.shogi-game .disciple__tbtns { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.35rem; align-items: end; margin-top: 0.8rem; padding: 0 0.2rem; }
 .shogi-game .disciple .disciple__tbtn { position: relative; display: grid; place-items: center; align-content: center; justify-self: center; width: 100%; max-width: 5rem; min-height: 0; aspect-ratio: 1; padding: 0; border: 3px solid #fff; border-radius: 50%; background: radial-gradient(circle at 50% 30%, #fff, #f6eedc); color: var(--ink); box-shadow: 0 4px 0 #c9b184; font-size: 0.72rem; font-weight: 900; line-height: 1.15; transition: transform 0.12s; }
 .shogi-game .disciple .disciple__tbtn:not(:disabled):hover { background: radial-gradient(circle at 50% 30%, #fff, #fbf3e2); color: var(--ink); }
 .shogi-game .disciple__tbtn-mark { font-size: 1.25rem; }
@@ -2147,6 +2263,10 @@ defineExpose({ goBack });
 .shogi-game .disciple__bond { position: absolute; left: 50%; bottom: -0.35rem; width: 2.4rem; height: 0.32rem; overflow: hidden; transform: translateX(-50%); border: 1px solid #fff; border-radius: 999px; background: #e6dccb; }
 .shogi-game .disciple__bond i { position: absolute; inset: 0 auto 0 0; background: #e8913a; }
 .shogi-game .disciple__bond i.disciple__bond--full { background: #d9a832; }
+/* 研究(49章): 作戦帳の札の一覧は札の中で動かす。研究のボタンは藍色の縁 */
+.shogi-game .disciple__research-cards { display: grid; gap: 0.3rem; max-height: min(14rem, 32vh); margin-top: 0.3rem; overflow-y: auto; }
+.shogi-game .disciple .disciple__research-cards .disciple__opt { min-height: 2.6rem; text-align: left; }
+.shogi-game .disciple .disciple__tbtn--research { border-color: #c9d6ef; }
 /* 稽古を選んでいるあいだ、右の丸いボタンと一言は仲間の顔に場所をゆずる */
 .shogi-game .disciple--training .disciple__side, .shogi-game .disciple--training .disciple__say { display: none; }
 /* 広い横長の画面(PC・横向きのタブレット): 左上に札、左下に能力の列、右下にコマンド、立ち絵は真ん中 */
@@ -2176,5 +2296,21 @@ defineExpose({ goBack });
   .shogi-game .disciple__goal small { display: none; }
   .shogi-game .disciple__val { font-size: 0.92rem; }
   .shogi-game .disciple__rank { min-width: 1.3rem; height: 1.3rem; font-size: 0.7rem; }
+}
+/* 研究ノート(49章)。会の画面と同じ大きさのシート。広い画面は盤と一覧を横に、狭い画面は縦に。 */
+.shogi-game .disciple__notes {
+  position: absolute; left: 50%; top: 4.4rem; bottom: 0.8rem; z-index: 8; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 0.4rem; width: min(46rem, calc(100% - 1.2rem)); overflow: hidden; background: var(--panel-solid);
+}
+.shogi-game .disciple__notes h4 { display: flex; align-items: center; justify-content: space-between; margin: 0; font-size: 1rem; }
+.shogi-game .disciple__notes > p { margin: 0; font-size: 0.74rem; }
+.shogi-game .disciple__notes-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 0.5rem; }
+.shogi-game .disciple__notes-board { position: relative; min-height: 0; display: grid; place-items: center; }
+.shogi-game .disciple__notes-list { display: grid; align-content: start; gap: 0.3rem; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.shogi-game .disciple .disciple__notes-list .disciple__opt { width: 100%; min-height: 2.6rem; text-align: left; }
+.shogi-game .disciple .disciple__note-open { display: block; margin-top: 0.15rem; font-size: 0.72rem; }
+@media (max-width: 640px), (max-aspect-ratio: 1/1) {
+  .shogi-game .disciple__notes { top: 0.4rem; bottom: 0.4rem; width: calc(100% - 0.8rem); }
+  .shogi-game .disciple__notes-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); }
 }
 </style>

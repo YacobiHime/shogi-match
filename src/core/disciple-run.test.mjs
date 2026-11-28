@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXAM_TURN, MAX_TURNS, PLAN_STUDY_EVERY, learnPlan, skipLearn, applyFindings, praiseLine, masteryView, MASTERY_GAIN, chooseAction, watchSpec, chooseWords, createDiscipleRun, discipleView, isBigEvent, loadDiscipleRun, nextGoal, planFit, playEvent, saveDiscipleRun, trainingPreview, turnCalendar, turnKind, placeText, discipleAgeMonths, eventOpponent, SHOREIKAI_BASE_LEVEL, shoreikaiOpponentLevel, HARD_TURNS,
 } from './disciple-run.mjs';
-import { dayResultView, endCardText } from './disciple-run.mjs';
+import { RESEARCH, dayResultView, endCardText } from './disciple-run.mjs';
 import { STAT_KEYS } from './disciple-strength.mjs';
 
 function memoryStorage() {
@@ -358,5 +358,19 @@ describe('研究メモ(35-13)', () => {
     const book = after.planBook;
     expect(Object.keys(book.notes[made.card])).toHaveLength(1);
     expect(discipleView(after).book.rows.find((row) => row.id === made.card).memo).toBe(1);
+  });
+
+  it('研究(49章): 作戦帳の1枚の熟練度を上げ、能力値は変えず、体力を使ってターンを進める', () => {
+    const state = createDiscipleRun({ seed: 7, discipleId: 'minato' });
+    expect(turnKind(state)).toBe('free');
+    const cardId = Object.keys(state.planBook.cards)[0];
+    const before = structuredClone(state);
+    const { state: after, result } = chooseAction(state, { kind: 'research', card: cardId });
+    expect(result.kind).toBe('research');
+    expect(result.gain).toBeGreaterThan(0);
+    expect(after.planBook.cards[cardId].mastery - before.planBook.cards[cardId].mastery).toBe(result.gain);
+    expect(after.stats).toEqual(before.stats);
+    expect(after.stamina).toBe(Math.max(0, before.stamina - RESEARCH.stamina));
+    expect(after.turn).toBe(before.turn + 1);
   });
 });

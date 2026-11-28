@@ -280,4 +280,28 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     expect(plans.memoLimit(100)).toBe(40);
     expect(plans.noteResearch(book, 'ibisha+yagura', entries, { side: 'black', win: true })).toMatchObject({ added: 0 });
   });
+
+  it('研究ノート(49章): 手ごとに回数と勝ちを数え、外した手は避ける印で残し、前の版の手の文字も読む', () => {
+    const book = plans.createPlanBook({ style: 'counter', aptitudes: {}, startingMastery: () => 0 });
+    const record = createGameRecord();
+    appendUsiMove(record, '7g7f');
+    appendUsiMove(record, '3c3d');
+    const key = record.position.sfen.split(' ').slice(0, 3).join(' ');
+    // 前の版の研究メモ(局面→手の文字)は、経験で1回覚えた手として読む。
+    book.notes = { 'shiken+mino': { [key]: '6g6f' } };
+    expect(plans.noteEntry('6g6f')).toEqual({ m: '6g6f', n: 1, w: 0, s: 'exp' });
+    expect(plans.researchNotes(book, 'shiken+mino')).toEqual({ [key]: '6g6f' });
+    const opening = [{ move: '7g7f', loss: 0, d: { s: 'book' } }, { move: '3c3d', loss: 0 }];
+    // ノートの手を指して勝つと、回数と勝ちが増える。
+    plans.noteResearch(book, 'shiken+mino', [...opening, { move: '6g6f', loss: 10, d: { s: 'memo' } }], { side: 'black', win: true });
+    expect(plans.noteRows(book, 'shiken+mino')[0]).toMatchObject({ move: '6g6f', games: 2, wins: 1, avoid: '', source: 'exp', sfen: `${key} 1` });
+    // 負けた局で大きく損をしたら、手を外して避ける印を残す。本局には渡さない。
+    plans.noteResearch(book, 'shiken+mino', [...opening, { move: '6g6f', loss: 400, d: { s: 'memo' } }], { side: 'black', win: false });
+    expect(plans.noteRows(book, 'shiken+mino')[0]).toMatchObject({ move: '', avoid: '6g6f', games: 3, wins: 1 });
+    expect(plans.researchNotes(book, 'shiken+mino')).toEqual({});
+    // 避けた手は、研究の続きでまた指しても覚え直さない。ほかの手なら覚える。
+    expect(plans.noteResearch(book, 'shiken+mino', [...opening, { move: '6g6f', loss: 0, d: { s: 'follow' } }], { side: 'black', win: true }).added).toBe(0);
+    expect(plans.noteResearch(book, 'shiken+mino', [...opening, { move: '5g5f', loss: 0, d: { s: 'follow' } }], { side: 'black', win: true }).added).toBe(1);
+    expect(plans.researchNotes(book, 'shiken+mino')).toEqual({ [key]: '5g5f' });
+  });
 });

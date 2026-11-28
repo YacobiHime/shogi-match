@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WATCH_PLAN_BADGE, createWatchWaza, planNames, watchWazaStep } from './watch-waza.mjs';
+import { WATCH_MEMO_BADGE, WATCH_MEMO_NAME, WATCH_PLAN_BADGE, createWatchWaza, planNames, watchMemoStep, watchWazaStep } from './watch-waza.mjs';
 import { sfenAfter } from './pro-cut.mjs';
 
 const STANDARD = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1';
@@ -39,5 +39,13 @@ describe('弟子の観戦の技の演出(docs/disciple-mode-design.mdの42章)',
     const theirs = shown.filter(({ cutin }) => cutin.mover === 'black');
     expect(theirs.length).toBeGreaterThan(0);
     expect(theirs.every(({ cutin }) => cutin.kindLabel.startsWith('相手の') && cutin.size === 'small' && !cutin.badge)).toBe(true);
+  });
+
+  it('研究ノートの手(49章): 1局のはじめは大きな「研究どおり！」の帯、2手目からは小さな帯', () => {
+    const tracker = createWatchWaza();
+    const first = watchMemoStep(tracker, { usi: '7g7f', name: '湊' });
+    expect(first.cutin).toMatchObject({ size: 'big', badge: WATCH_MEMO_BADGE, kindLabel: '湊の研究', name: WATCH_MEMO_NAME });
+    expect(first.glow.square).toBe('7f');
+    expect(watchMemoStep(tracker, { usi: '2g2f', name: '湊' }).cutin.size).toBe('small');
   });
 });

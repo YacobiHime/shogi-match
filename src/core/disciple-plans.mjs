@@ -472,36 +472,64 @@ export const memoLimit = (mastery) => 10 + Math.round((Math.max(0, Math.min(100,
 const memoKey = (sfen) => String(sfen).split(' ').slice(0, 3).join(' ');
 
 /**
- * 観戦した本局から、その作戦の研究メモを書き足す(書き換えてよい写しを渡す)。
- * 研究の続き(エンジン)とメモの手のうち、損の小さい手を局面ごとに覚える。負けた局で大きく損をしたメモの手は忘れる(次は避ける)。
+ * 研究ノートの1局面(49章。前の版は手の文字だけだった)。mは指す手、nは指した回数、wは勝った回数、sは出どころ
+ * (exp 経験=観戦した局の研究の続き。ほかの出どころ(師匠の棋譜・一門の先輩)は後で足す。49-9のF5)、xは負けた局で大きく損をして外した手(避ける。次はその手を指さない)。
+ * @typedef {{ m?: string, n: number, w: number, s: string, x?: string }} NoteEntry
+ */
+
+/** ノートの1局面を今の形にする(前の版の手の文字は、経験で1回覚えた手として読む)。 */
+export function noteEntry(value) {
+  if (typeof value === 'string') return { m: value, n: 1, w: 0, s: 'exp' };
+  if (!value || typeof value !== 'object') return null;
+  const entry = { n: Math.max(0, Number(value.n) || 0), w: Math.max(0, Number(value.w) || 0), s: typeof value.s === 'string' && value.s ? value.s : 'exp' };
+  if (typeof value.m === 'string' && value.m) entry.m = value.m;
+  if (typeof value.x === 'string' && value.x) entry.x = value.x;
+  return entry.m || entry.x ? entry : null;
+}
+
+/**
+ * 観戦した本局から、その作戦の研究ノートを書き足す(書き換えてよい写しを渡す)。
+ * 研究の続き(エンジン)とノートの手のうち、損の小さい手を局面ごとに覚える。ノートの手を指した局は回数と勝ちを数える。
+ * 負けた局で大きく損をしたノートの手は外して「避ける」印を残す(次はその局面で自分で考える)。
  * @param {any} book
  * @param {string} cardId
  * @param {readonly { move: string, loss?: number, d?: { s?: string } }[]} entries
- * @param {{ side: 'black' | 'white', win: boolean }} game
+ * @param {{ side: 'black' | 'white', win: boolean, start?: string }} game startは駒落ちの開始局面
  * @returns {{ added: number, used: number, forgot: number }}
  */
-export function noteResearch(book, cardId, entries, { side, win }) {
+export function noteResearch(book, cardId, entries, { side, win, start = STANDARD_SFEN }) {
   const entry = book?.cards?.[cardId];
   if (!entry || !entries?.length) return { added: 0, used: 0, forgot: 0 };
   book.notes ??= {};
-  const notes = { ...(book.notes[cardId] ?? {}) };
-  const record = createGameRecord(STANDARD_SFEN);
+  const notes = {};
+  for (const [key, value] of Object.entries(book.notes[cardId] ?? {})) {
+    const item = noteEntry(value);
+    if (item) notes[key] = item;
+  }
+  const record = createGameRecord(start || STANDARD_SFEN);
+  const firstMover = String(start || STANDARD_SFEN).split(' ')[1] === 'w' ? 'white' : 'black';
   let added = 0;
   let used = 0;
   let forgot = 0;
   entries.forEach((item, index) => {
-    const mine = (index % 2 === 0 ? 'black' : 'white') === side;
+    const mover = index % 2 === 0 ? firstMover : firstMover === 'black' ? 'white' : 'black';
+    const mine = mover === side;
     const key = memoKey(record.position.sfen);
     const stage = item?.d?.s;
     if (mine && (stage === 'follow' || stage === 'memo')) {
       const loss = Number(item.loss) || 0;
-      if (stage === 'memo') used += 1;
-      if (!win && loss >= MEMO_FORGET_LOSS && notes[key] === item.move) {
-        delete notes[key];
+      const now = notes[key];
+      if (stage === 'memo' && now?.m === item.move) {
+        used += 1;
+        now.n += 1;
+        if (win) now.w += 1;
+      }
+      if (!win && loss >= MEMO_FORGET_LOSS && now?.m === item.move) {
+        notes[key] = { n: now.n, w: now.w, s: now.s, x: item.move };
         forgot += 1;
-      } else if (loss <= MEMO_KEEP_LOSS && notes[key] !== item.move) {
+      } else if (loss <= MEMO_KEEP_LOSS && now?.m !== item.move && now?.x !== item.move) {
         delete notes[key];
-        notes[key] = item.move;
+        notes[key] = { m: item.move, n: 1, w: win ? 1 : 0, s: 'exp' };
         added += 1;
       }
     }
@@ -514,5 +542,23 @@ export function noteResearch(book, cardId, entries, { side, win }) {
   return { added, used, forgot };
 }
 
-/** 本局に渡す、その作戦の研究メモ(局面→手)。 */
-export const researchNotes = (book, cardId) => ({ ...(book?.notes?.[cardId] ?? {}) });
+/** 本局に渡す、その作戦の研究ノート(局面→手。避ける印だけの局面は渡さない)。 */
+export function researchNotes(book, cardId) {
+  const out = {};
+  for (const [key, value] of Object.entries(book?.notes?.[cardId] ?? {})) {
+    const item = noteEntry(value);
+    if (item?.m) out[key] = item.m;
+  }
+  return out;
+}
+
+/**
+ * 作戦帳のシートの研究ノートの行(49章)。新しく覚えた順。sfenは盤に出す局面(手数は1にする)。
+ * @returns {{ key: string, sfen: string, move: string, avoid: string, games: number, wins: number, source: string }[]}
+ */
+export function noteRows(book, cardId) {
+  return Object.entries(book?.notes?.[cardId] ?? {}).map(([key, value]) => {
+    const item = noteEntry(value);
+    return item ? { key, sfen: `${key} 1`, move: item.m ?? '', avoid: item.x ?? '', games: item.n, wins: item.w, source: item.s } : null;
+  }).filter(Boolean).reverse();
+}

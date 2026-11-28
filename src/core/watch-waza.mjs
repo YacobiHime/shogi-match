@@ -73,3 +73,24 @@ export function watchWazaStep(tracker, { before, usi, after, ply, side, name = "
     glow: { square: usi.slice(2, 4), tier: waza.tier, mine, targets: waza.targets ?? [], pieces, edge: Boolean(view.edge), look: view.look },
   };
 }
+
+/** 研究ノートの手の帯の札(49章)。 */
+export const WATCH_MEMO_BADGE = "研究どおり！";
+/** 研究ノートの手の帯の名前(1局ではじめての研究の手だけ大きな帯にする)。 */
+export const WATCH_MEMO_NAME = "研究が当たった";
+
+/**
+ * 弟子が研究ノートの手を指したときの帯(49章)。ノートの局面に来ることは少ないので、来たときは大きな帯で知らせる(D:2-2)。
+ * 技の帯が出る手は技の帯を先にする(呼ぶ側で、技の帯がないときだけ使う)。1局の2手目からは小さな帯。
+ * @param {{ shown: Set<string> }} tracker
+ * @param {{ usi: string, name?: string, simple?: boolean }} input
+ */
+export function watchMemoStep(tracker, { usi, name = "", simple = false }) {
+  const repeat = tracker.shown.has("memo");
+  tracker.shown.add("memo");
+  const view = wazaPresentation({ kind: "tesuji", name: WATCH_MEMO_NAME, tier: "rare" }, { mine: true, repeat, first: false, tip: false, evolved: "", simple });
+  return {
+    cutin: { ...view, kindLabel: name ? `${name}の研究` : "研究", badge: WATCH_MEMO_BADGE, mover: "" },
+    glow: { square: usi.slice(2, 4), tier: "rare", mine: true, targets: [], pieces: [], edge: false, look: view.look },
+  };
+}
