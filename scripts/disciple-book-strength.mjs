@@ -4,7 +4,7 @@
 // 早い順に--study局面まで、深く読んで(--nodes)、最善の手をファイル(研究メモと同じ「局面→手」)に残す。次の局からその局面ではその手を指す。
 // --book offは研究しない比べの組(同じ種)。2つの組の勝率の差が、研究ノートの効き目。
 // 使い方: npx vite-node scripts/disciple-book-strength.mjs -- [--book on|off] [--games 16] [--level 25] [--mastery 40]
-//   [--study 6] [--nodes 400000] [--max-ply 60] [--plies 160] [--budget 700] [--cap 300] [--seed 1] [--out out.json]
+//   [--a-mastery 70] [--study 6] [--nodes 400000] [--max-ply 60] [--plies 160] [--budget 700] [--cap 300] [--seed 1] [--out out.json]
 // 本番と同じ定跡(定跡エディターの上書きデータを含む)で測るため、環境変数を立ててからモジュールを読む。
 process.env.OPENING_GUIDE_EDITOR_OVERRIDES = '1';
 const fs = await import('node:fs');
@@ -23,6 +23,8 @@ const useBook = option('book', 'on') !== 'off';
 const games = Number(option('games', 16));
 const level = Number(option('level', 25));
 const mastery = Number(option('mastery', 40));
+/** Aだけの熟練度(研究のカードで熟練度を上げたときの効き目を測る。省けばBと同じ)。 */
+const aMastery = Number(option('a-mastery', mastery));
 const studyPer = Number(option('study', 6));
 const studyNodes = Number(option('nodes', 400000));
 const maxPly = Number(option('max-ply', 60));
@@ -60,7 +62,7 @@ for (let game = 0; game < games; game += 1) {
   const spec = {
     key: `book-strength:${game}`, seed: (seedBase * 0x9e3779b1 + game * 7919) >>> 0, event: 'kenshukai', kind: 'game', label: '測定',
     thinkBudgetMs: budget,
-    [aSide]: { id: 'a', name: 'A', level, kind: 'kenshukai', reasonRecord: true, reason: { levels, mastery, notes: useBook ? { ...notes } : {} } },
+    [aSide]: { id: 'a', name: 'A', level, kind: 'kenshukai', reasonRecord: true, reason: { levels, mastery: aMastery, notes: useBook ? { ...notes } : {} } },
     [bSide]: { id: 'b', name: 'B', level, kind: 'kenshukai', reason: { levels, mastery } },
     plans: { [aSide]: planSpec(aPlan, { steps: 1 }), [bSide]: planSpec(bPlan, { steps: 1 }) },
   };
