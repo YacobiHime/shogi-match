@@ -4,7 +4,7 @@
 //   選手はL<レベル>、D<読み>-<作戦>-<安定>-<詰み>(師匠の1年の弟子。+fujii-curveのようにスキルを足せる)、
 //   R<読み>-<作戦>-<安定>-<詰み>(評価関数を使わず理由で指す棋士。能力値のLv12〜49。docs/disciple-mode-design.mdの34章)、
 //   S<深さ>(m)(t<ミリ秒>)(全部の手を読む論理の探索。mは駒の損得だけ。34-15)、
-//   T<読み>-<作戦>-<安定>-<詰み>(理由で指す棋士の考え方。34-16)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
+//   T<読み>-<作戦>-<安定>-<詰み>(理由で指す棋士の考え方。34-16)、G(棋力測定の指導対局の相手。skill-measure-designの13章)、s<技量>(例: s0.3)、e<もとの校正のLv>(小数可、例: e12.5)、old<旧識別値>(2026-09-26版の設定、例: old6000)で指定する。
 //   末尾にn<nodes>を付けると探索量だけを差し替える(例: L40n2000000)。
 //   末尾にnoriskを付けると、危険への態度(無難な手・勝負手の選び直し)を外す(例: L25norisk)。
 //   末尾にclassicを付けると、人間らしいCPUの選び方を外して今までの選び方で指す(例: L15classic)。
@@ -34,6 +34,7 @@ const { chooseAwareMove } = await import("../src/core/aware-move-choice.mjs");
 const { chooseReasonMove, reasonProfile } = await import("../src/core/reason-move.mjs");
 const { searchBestMove } = await import("../src/core/logic-search.mjs");
 const { WATCH_THINK_BUDGET_MS, budgetProfile, chooseThinkingMove, thinkProfile } = await import("../src/core/reason-think.mjs");
+const { GUIDE_SEARCH, chooseGuidedMove } = await import("../src/core/guided-play.mjs");
 import { comparableScore } from "../src/core/move-selection.mjs";
 import { createNaturalnessEvaluator } from "../src/core/move-naturalness.mjs";
 import { discipleSelfplaySettings } from "../src/core/disciple-strength.mjs";
@@ -161,6 +162,8 @@ export function strengthForPlayer(spec) {
     if (reasonSpec[6]) profile.readNodes = Number(reasonSpec[6]);
     return { reasonProfile: profile, reasonTimeMs: reasonSpec[7] ? Number(reasonSpec[7]) : 800, nodes: 0 };
   }
+  // G: 棋力測定の指導対局の相手(docs/skill-measure-design.mdの13章)。強めに候補を読み、帯へ寄せる手・問いの手を選ぶ。
+  if (spec === "G") return { guided: true, nodes: GUIDE_SEARCH.nodes, multiPv: GUIDE_SEARCH.multiPv };
   if (/^L\d+$/.test(spec)) {
     const preset = CPU_STRENGTH_PRESETS.find(({ level }) => level === Number(spec.slice(1)));
     if (!preset) throw new Error(`存在しないレベルです: ${spec}`);
@@ -237,7 +240,10 @@ async function playGame(engines, players, seed, openingPlies = 0) {
     const sfen = position.sfen;
     const logicLevel = strength.logicLevel ?? null;
     const result = !logicLevel && strength.nodes > 0 ? await search(engine, sfen, strength) : undefined;
-    let choice = strength.thinkProfile ? (() => {
+    let choice = strength.guided ? (() => {
+      const found = chooseGuidedMove({ sfen, candidates: result?.candidates ?? [], ply, legalMoves: moves });
+      return found && moves.includes(found.move) ? { move: found.move } : { move: result?.move && moves.includes(result.move) ? result.move : moves[0] };
+    })() : strength.thinkProfile ? (() => {
       const found = chooseThinkingMove({ sfen, profile: strength.thinkProfile, random, lastMove: history.at(-1) ?? null });
       return found && moves.includes(found.move) ? { move: found.move } : { move: moves[0] };
     })() : strength.fullSearch ? (() => {

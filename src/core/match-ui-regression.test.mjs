@@ -131,7 +131,11 @@ describe("match screen regressions", () => {
     // 推定の幅が広いときは、推定したLvの相手と「もう1局で確かめる」を主ボタンにする(docs/skill-measure-design.mdの8章)。
     expect(source).toMatch(/measureFollowUp\(\{ estimate: skillDiagnosis\.value, games: \(measureCarry\.value\?\.games \?\? 0\) \+ 1, opponent: from, outcome \}\)/);
     // 確かめの1局は選べる形で、竜王戦へ進む主ボタンより後ろに置く(主ボタンにしない)。
-    expect(source).toMatch(/v-if="measureNext\?\.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>[\s\S]*?class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">もう1局で確かめる/);
+    expect(source).toMatch(/v-if="measureNext\?\.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>[\s\S]*?class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">\{\{ measureGuided \? "確かめの1局" : "もう1局で確かめる" \}\}/);
+    // 測定の1局目は指導対局。勝ち負けはレーティングに数えず、中身だけ裏の解析へ入れる(docs/skill-measure-design.mdの13章)。
+    expect(source).toMatch(/const measureGuided = computed\(\(\) => \(measureMode\.value \|\| measureSession\.value\) && !measureCarry\.value\);/);
+    expect(source).toMatch(/if \(measureMode\.value && !measureCarry\.value\) \{[\s\S]{0,300}?event: "guided"[\s\S]{0,200}?return;/);
+    expect(source).toMatch(/chooseGuidedMove\(\{ sfen: record\.value\.position\.sfen, candidates: searchedCandidates/);
     expect(source).toMatch(/\.shogi-game \.shogi-game__measure-band \{[^}]*border-left: 4px solid var\(--measure-accent\);/);
   });
   it("offers another measuring game with the carried moves when too few moves were measured", () => {

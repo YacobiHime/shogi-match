@@ -3001,8 +3001,9 @@
             竜王戦への道を先にし、確かめは選べる形で添える(10章)。
           -->
           <div v-if="measureNext?.kind === 'confirm'" class="shogi-game__measure-confirm" data-measure-confirm>
-            <p>{{ (measureCarry?.games ?? 0) + 1 }}局だと、まだ幅のある目安だよ。もっと正確にしたいなら、{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局。勝てば相手が上がり、負ければ下がって、絞り込むよ。</p>
-            <button type="button" class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">もう1局で確かめる（Lv.{{ measureNext.level }}）</button>
+            <p v-if="measureGuided">今の対局は、いい勝負になるよう加減して指したよ。本気の{{ measureNextLabel }}（Lv.{{ measureNext.level }}）と1局指すと、勝ち負けでも確かめられるよ。</p>
+            <p v-else>{{ (measureCarry?.games ?? 0) + 1 }}局だと、まだ幅のある目安だよ。もっと正確にしたいなら、{{ measureNextLabel }}（Lv.{{ measureNext.level }}）ともう1局。勝てば相手が上がり、負ければ下がって、絞り込むよ。</p>
+            <button type="button" class="shogi-game__analysis-button" data-measure-continue @click="continueMeasure">{{ measureGuided ? "確かめの1局" : "もう1局で確かめる" }}（Lv.{{ measureNext.level }}）</button>
           </div>
           <dl v-if="measureStats" class="shogi-game__result-details">
             <div>
@@ -3223,7 +3224,9 @@ import {
 } from "./game-state";
 import { ShogiEngine } from "./core/engine.js";
 import { capGodMoves, judgeGodMove, moveContext } from "./core/god-move.mjs";
+import { GUIDE_FROM_PLY, GUIDE_SEARCH, chooseGuidedMove } from "./core/guided-play.mjs";
 import {
+  MAX_DIAGNOSED_LEVEL,
   MAX_MEASURE_GAMES,
   MEASURE_PICKER_ACTION,
   MIN_MEASURED_MOVES,
@@ -4666,11 +4669,17 @@ const measureBand = computed(() => {
   if (!measureMode.value || reviewMode.value || !matchStarted.value) return null;
   const game = (measureCarry.value?.games ?? 0) + 1;
   return {
-    title: game === 1 ? "ふだんどおり指してね" : `${game}局目`,
-    detail: game === 1 ? "終わったら、勝ち負けと指し手から棋力を測るよ" : "前の対局の勝ち負けと合わせて測るよ",
+    title: game === 1 ? "指導対局：ふだんどおり指してね" : `${game}局目：確かめの1局`,
+    detail: game === 1 ? "いい勝負になるよう加減して指すよ。指し手から棋力を測るね" : "今度は本気で指すよ。勝ち負けも合わせて測るね",
     note: "閃き・待った・作戦の案内はお休み",
   };
 });
+/**
+ * 測定の1局目は指導対局(docs/skill-measure-design.mdの13章)。相手は強めに読んで、形勢を「あなたが少しリード」の帯へ
+ * 少しずつ寄せ、あなたの駒に当てる手(守れるかの問い)を選ぶ。勝ち負けは相手が加減したのでレーティングに数えず、
+ * 指し手の中身(場面採点)で測る。続けて指す「確かめの1局」(持ち越しがある局)は本気で指す。
+ */
+const measureGuided = computed(() => (measureMode.value || measureSession.value) && !measureCarry.value);
 /** 棋力測定以外の解析で、棋力診断を表示するか。「その他」メニューから切り替える。 */
 const skillDiagnosisVisible = ref(false);
 /** レーティングに近いLvの段級位の表示名。 */
@@ -12901,6 +12910,11 @@ const measureNext = computed(() => {
   if (!measureSession.value || !skillDiagnosis.value) return null;
   const from = cpuStrengthLevel();
   if (from === undefined) return null;
+  // 指導対局のあとは、見立てたLvの相手と本気の「確かめの1局」を勧める(勝ち負けは加減したものなので使わない。13章)。
+  if (measureGuided.value) {
+    const level = skillDiagnosis.value.level;
+    return Number.isFinite(level) ? { from, kind: "confirm" as const, level: Math.min(MAX_DIAGNOSED_LEVEL, Math.max(1, Math.round(level as number))) } : null;
+  }
   const winner = result.value?.winner;
   const outcome = !winner ? "draw" : winner === humanColor.value ? "win" : "loss";
   const next = measureFollowUp({ estimate: skillDiagnosis.value, games: (measureCarry.value?.games ?? 0) + 1, opponent: from, outcome });
@@ -12915,7 +12929,8 @@ function continueMeasure() {
   const next = measureNext.value;
   if (!next) return;
   const color = humanColor.value === Color.WHITE ? "white" : "black";
-  const current = measureGameResult();
+  // 指導対局の勝ち負けは持ち越さない(相手が加減した。13章)。
+  const current = measureGuided.value ? null : measureGameResult();
   const carry = {
     moves: [...(measureCarry.value?.moves ?? []), ...measurableMoves(analysisPoints.value, color)],
     games: (measureCarry.value?.games ?? 0) + 1,
@@ -13017,6 +13032,17 @@ function recordRatedGame(matchResult: MatchResult) {
   // 竜王戦の千日手は、先後を入れ替えて指し直す(recordRyuoOutcome)ので、指し直した対局の結果だけを数える。
   if (!rated || (tournament && !matchResult.winner)) return;
   const outcome = !matchResult.winner ? "draw" : matchResult.winner === humanColor.value ? "win" : "loss";
+  // 棋力測定の指導対局は、相手が加減したので勝ち負けをレーティングに数えない。中身(場面採点)だけ裏で解析して、棋力カルテに入れる
+  // (docs/skill-measure-design.mdの13章。棋戦の印 guided で、ふつうの対局と見分ける)。
+  if (measureMode.value && !measureCarry.value) {
+    const insight = enqueuePlayInsight(loadPlayInsight(browserStorage()), {
+      moves: [...moveHistory], color: humanColor.value === Color.WHITE ? "white" : "black", outcome, level, event: "guided",
+    });
+    savePlayInsight(browserStorage(), insight);
+    playInsight.value = insight;
+    void playInsightAnalysis.processQueue();
+    return;
+  }
   // やこびノートの統計用に、プレイヤーの手番と、終局時点の戦型・戦法・囲いを控える。
   const color = humanColor.value === Color.WHITE ? "white" : "black";
   const own = formationState.value[color];
@@ -13964,7 +13990,9 @@ async function scheduleCpuMove() {
       } else if (usesNaturalMoveOnly(searchNodes.value)) {
         usi = await naturalCpuMove();
       } else if (engine && engineReady.value) {
-        engine.applyStrengthOptions({ multiPv: strength.multiPv });
+        // 棋力測定の指導対局は、強めの読み(GUIDE_SEARCH)で候補を多く読み、帯へ寄せる手を選ぶ(docs/skill-measure-design.mdの13章)。
+        const guideStrength = measureGuided.value ? { nodes: GUIDE_SEARCH.nodes } : null;
+        engine.applyStrengthOptions({ multiPv: guideStrength ? GUIDE_SEARCH.multiPv : strength.multiPv });
         cpuSearchRunning = true;
         cpuSearchGeneration = generation;
         // Lv40だけ2スレッドで読む。ほかのレベルは校正どおり1スレッドに戻す。
@@ -13972,9 +14000,9 @@ async function scheduleCpuMove() {
         // setPositionが「position sfen」を付けるため、SFENだけを渡す。
         const enginePosition = currentEnginePosition();
         engine.setPosition(enginePosition);
-        startCpuGauge(strength.nodes);
+        startCpuGauge(guideStrength?.nodes ?? strength.nodes);
         const search = await engine.go({
-          nodes: strength.nodes,
+          nodes: guideStrength?.nodes ?? strength.nodes,
           maxTimeMs: 60000,
           searchMoves: [...allowedCpuMoveIds],
           onNodes: updateCpuGauge,
@@ -14068,8 +14096,14 @@ async function scheduleCpuMove() {
         const safeOpening = allowedOpeningMove && !forceConfiguredOpening && logicLevel === null && !selectionStrength.logicHybrid
           ? chooseSafeOpeningMove(allowedOpeningMove, searchedCandidates, planScoreLimit)
           : null;
+        // 指導対局(13章): 序盤の作戦の手のあいだは作戦どおり、そのあとは帯へ寄せる手・問いの手。
+        const guided = guideStrength && !(allowedOpeningMove && moveHistory.length < GUIDE_FROM_PLY)
+          ? chooseGuidedMove({ sfen: record.value.position.sfen, candidates: searchedCandidates, ply: moveHistory.length, legalMoves: allowedCpuMoveList })
+          : null;
         let selection = forceConfiguredOpening && allowedOpeningMove
           ? { move: allowedOpeningMove }
+          : guided
+          ? { move: guided.move }
           : usesReasonAi.value
           ? await reasonCpuMove(allowedOpeningMove ?? null, allowedCpuMoveList)
           : logicLevel !== null
