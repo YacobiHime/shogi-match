@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>師匠の1年 新しい画面の見本</title>
+<!--
+  師匠の1年の画面の作り直しの見本(docs/disciple-mode-design.mdの48章)。
+  ユーザーが見せた育成ゲームの画面から「組み立て」だけを借りる(左上の残りの回数・目標の帯・体力と調子・真ん中の立ち絵・
+  下の能力の列・大きな丸いコマンド・稽古を選ぶと伸びる数が能力の上に出る)。絵柄・色・名前はこのゲームのもの(百花の立ち絵・和室・和紙と墨の色)。
+  弟子の絵はまだないので、百花の立ち絵を仮に使う(19-9)。上の「画面」の帯は見本の切り替えで、本物には出ない。?s=train で稽古の画面を直接開ける。
+-->
+<style>
+:root {
+  --ink: #1f2b36; --ink-soft: #55636f; --paper: #fffaf0; --paper-2: #f6eedc; --wood: #9c7f4e; --wood-2: #c9b184;
+  --accent: #e8913a; --accent-ink: #5a3410; --red: #cf5a4e; --green: #4f9e62; --blue: #4f7fc4; --gold: #d9a832;
+  --panel: rgba(255, 251, 242, 0.94); --line: rgba(31, 43, 54, 0.16);
+  --r-ss: #c0392b; --r-s: #e0692d; --r-a: #e8a531; --r-b: #b8a02a; --r-c: #5f9e4f; --r-d: #3f8fa3; --r-e: #4f6fc4; --r-f: #7a6ab8; --r-g: #8a8f96;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif; color: var(--ink); background: #2a3440; }
+button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mockbar { position: fixed; z-index: 50; top: 0; left: 0; right: 0; display: flex; gap: 0.3rem; overflow-x: auto; padding: 0.3rem 0.4rem; background: #111a22; }
+.mockbar button { flex: none; padding: 0.25rem 0.7rem; border: 1px solid #44525f; border-radius: 999px; background: transparent; color: #cfd8de; font-size: 0.75rem; }
+.mockbar button[aria-pressed="true"] { background: #cfd8de; color: #111a22; }
+
+/* ---- 部屋(師匠の家の和室) */
+.game { position: fixed; inset: 2rem 0 0 0; overflow: hidden; background: linear-gradient(180deg, #f3e5c6, #e4ecec 72%); container-type: size; }
+.game::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 30%; background: repeating-linear-gradient(90deg, #cdb88a 0 2px, #d9c79c 2px 46px); border-top: 6px solid var(--wood); }
+.game::after { content: ""; position: absolute; left: 6%; right: 6%; top: 10%; height: 56%; opacity: 0.6; border: 6px solid #b99d6b; border-bottom: 0;
+  background: linear-gradient(90deg, transparent 49.6%, #b99d6b 49.6% 50.4%, transparent 50.4%),
+    repeating-linear-gradient(0deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px),
+    repeating-linear-gradient(90deg, transparent 0 58px, rgba(185, 157, 107, 0.5) 58px 60px), rgba(255, 252, 240, 0.55); }
+
+/* ---- 立ち絵(真ん中に大きく。UIはその上に重ねる) */
+.figure { position: absolute; z-index: 1; left: 50%; top: 13%; height: 160%; aspect-ratio: 0.344; transform: translateX(-50%); pointer-events: none; transition: transform 0.25s; }
+.figure img { width: 100%; height: 100%; object-fit: contain; object-position: 50% 0; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18)); }
+.game[data-s="train"] .figure { transform: translateX(-50%) scale(0.92); }
+
+/* ---- 上: 残りの回数の札・目標の帯・体力と調子 */
+.hud { position: absolute; z-index: 5; top: 0.6rem; left: 0.6rem; right: 0.6rem; display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 0.5rem; }
+.turn { grid-row: span 2; display: grid; align-content: center; justify-items: center; min-width: 5.8rem; padding: 0.35rem 0.5rem; border-radius: 0.9rem; background: var(--ink); color: #fff; box-shadow: 0 3px 0 #0d151c; line-height: 1.1; }
+.turn small { font-size: 0.66rem; color: #c6d2dc; }
+.turn b { font-size: 1.9rem; letter-spacing: -0.02em; } .turn b span { font-size: 0.85rem; margin-left: 0.1rem; }
+.turn em { margin-top: 0.2rem; padding: 0.08rem 0.45rem; border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.66rem; font-style: normal; font-weight: 800; }
+.goal { display: flex; align-items: center; gap: 0.5rem; min-width: 0; padding: 0.3rem 0.35rem 0.3rem 0.7rem; border-radius: 0.8rem; background: var(--panel); border: 2px solid var(--accent); }
+.goal small { flex: none; padding: 0.05rem 0.4rem; border-radius: 0.3rem; background: var(--accent); color: #fff; font-size: 0.66rem; font-weight: 900; }
+.goal b { flex: 1; min-width: 0; font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal button { flex: none; padding: 0.25rem 0.55rem; border: 0; border-radius: 0.5rem; background: var(--ink); color: #fff; font-size: 0.7rem; font-weight: 800; }
+.vital { display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.5rem; border-radius: 0.8rem; background: var(--panel); border: 1px solid var(--line); }
+.vital > span { flex: none; font-size: 0.7rem; font-weight: 900; color: var(--ink-soft); }
+.gauge { position: relative; flex: 1; height: 0.9rem; border-radius: 999px; background: #e6dccb; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15); }
+.gauge i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, #f0b23e, #6cc06a); }
+.gauge s { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(45deg, rgba(207, 90, 78, 0.55) 0 4px, rgba(207, 90, 78, 0.25) 4px 8px); border-right: 2px solid var(--red); text-decoration: none; transition: left 0.2s, width 0.2s; }
+.gauge b { position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); font-size: 0.62rem; color: var(--ink); }
+.mood { flex: none; display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: #ffe5c7; color: #b9561a; font-size: 0.74rem; font-weight: 900; }
+
+/* ---- 右上の丸い小さなボタン(会・棋譜帳・記録・メニュー) */
+.side { position: absolute; z-index: 5; right: 0.6rem; top: 5.6rem; display: grid; gap: 0.45rem; }
+.side button { display: grid; place-items: center; width: 2.9rem; height: 2.9rem; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--paper-2); box-shadow: 0 2px 0 var(--wood-2); font-size: 0.6rem; font-weight: 800; line-height: 1.05; }
+.side button span { font-size: 1.1rem; }
+
+/* ---- やこび姫のひとこと(吹き出し) */
+.say { position: absolute; z-index: 4; left: 0.6rem; top: 5.6rem; max-width: min(16rem, 58%); display: flex; gap: 0.45rem; align-items: flex-start; padding: 0.45rem 0.6rem; border-radius: 0.9rem; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 10px rgba(0,0,0,0.08); font-size: 0.8rem; line-height: 1.45; }
+.say img { flex: none; width: 2rem; height: 2rem; border-radius: 50%; background: #fff; object-fit: cover; }
+.say b { color: var(--accent-ink); }
+
+/* ---- 下: 能力の列とコマンド */
+.bottom { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; padding: 0 0.6rem 0.7rem; }
+.stats { position: relative; display: grid; grid-template-columns: repeat(4, 1fr) 1.15fr; gap: 0.3rem; padding: 0.4rem; border-radius: 0.9rem; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.stat { position: relative; display: grid; justify-items: center; gap: 0.05rem; padding: 0.2rem 0 0.25rem; border-radius: 0.6rem; background: #fff; }
+.stat > small { font-size: 0.68rem; font-weight: 900; color: var(--ink-soft); }
+.stat .row { display: flex; align-items: baseline; gap: 0.2rem; }
+.rank { display: inline-grid; place-items: center; min-width: 1.45rem; height: 1.45rem; padding: 0 0.15rem; border-radius: 0.35rem; color: #fff; font-size: 0.86rem; font-weight: 900; font-style: italic; }
+.stat .val { font-size: 1.05rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.stat .max { font-size: 0.58rem; color: var(--ink-soft); }
+.stat.aim::after { content: "ねらい"; position: absolute; top: -0.45rem; right: 0.1rem; padding: 0 0.3rem; border-radius: 999px; background: var(--blue); color: #fff; font-size: 0.55rem; font-weight: 800; }
+.stat.lv { background: var(--ink); color: #fff; }
+.stat.lv > small { color: #c6d2dc; }
+.stat.lv b { font-size: 0.95rem; } .stat.lv .max { color: #c6d2dc; }
+.plus { position: absolute; left: 50%; top: -1.5rem; transform: translateX(-50%); font-size: 1.15rem; font-weight: 900; color: var(--accent); -webkit-text-stroke: 0.5px #fff; text-shadow: 0 2px 0 #fff, 0 0 6px #fff; white-space: nowrap; animation: pop 0.25s ease; }
+.plus.small { font-size: 0.92rem; }
+@keyframes pop { from { transform: translateX(-50%) translateY(6px) scale(0.6); opacity: 0; } }
+.stat.lv .plus { color: #7fd3ff; text-shadow: 0 2px 0 var(--ink); -webkit-text-stroke: 0; }
+
+.cmds { display: grid; grid-template-columns: 1fr 1.45fr 1fr; grid-template-rows: auto auto; gap: 0.45rem 0.6rem; align-items: center; margin-top: 0.6rem; }
+.cmd { display: grid; place-items: center; align-content: center; gap: 0.05rem; aspect-ratio: 1; width: 100%; max-width: 5.6rem; justify-self: center; padding: 0; border: 3px solid #fff; border-radius: 50%; background: radial-gradient(circle at 50% 30%, #fff, var(--paper-2)); box-shadow: 0 4px 0 var(--wood-2), 0 6px 10px rgba(0,0,0,0.12); font-weight: 900; font-size: 0.86rem; transition: transform 0.08s; }
+.cmd:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--wood-2); }
+.cmd span { font-size: 1.45rem; line-height: 1; }
+.cmd small { font-size: 0.56rem; color: var(--ink-soft); font-weight: 700; }
+.cmd.main { grid-row: span 2; max-width: 8.4rem; background: radial-gradient(circle at 50% 30%, #ffd59a, var(--accent)); color: #fff; border-color: #fff4e2; box-shadow: 0 5px 0 #b8621d, 0 8px 14px rgba(0,0,0,0.18); font-size: 1.25rem; }
+.cmd.main span { font-size: 2.2rem; } .cmd.main small { color: #fff4e2; font-size: 0.66rem; }
+.cmd.main.event { background: radial-gradient(circle at 50% 30%, #ffb3a8, var(--red)); box-shadow: 0 5px 0 #8f3128, 0 8px 14px rgba(0,0,0,0.18); }
+.cmd:disabled { opacity: 0.6; filter: grayscale(0.7); }
+.foot { display: flex; justify-content: space-between; margin-top: 0.5rem; }
+.foot button { padding: 0.25rem 0.8rem; border: 0; border-radius: 999px; background: rgba(31, 43, 54, 0.75); color: #fff; font-size: 0.72rem; font-weight: 800; }
+
+/* ---- 稽古を選ぶ画面 */
+.train { display: none; }
+.game[data-s="train"] .train { display: block; }
+.game[data-s="train"] .cmds, .game[data-s="train"] .say, .game[data-s="train"] .side { display: none; }
+.picked { position: absolute; z-index: 4; left: 0.6rem; top: 5.6rem; display: grid; gap: 0.15rem; padding: 0.45rem 0.7rem; border-radius: 0.9rem; background: var(--panel); border: 2px solid var(--accent); min-width: 10rem; }
+.picked b { font-size: 1.05rem; } .picked b em { font-style: normal; color: var(--accent); font-size: 0.8rem; margin-left: 0.3rem; }
+.picked small { font-size: 0.72rem; color: var(--ink-soft); }
+.risk { display: inline-flex; gap: 0.3rem; align-items: center; font-size: 0.76rem; font-weight: 800; }
+.risk i { font-style: normal; padding: 0 0.4rem; border-radius: 999px; background: #e3f3e6; color: var(--green); }
+.risk i.warn { background: #fde4e0; color: var(--red); }
+.friends { position: absolute; z-index: 4; right: 0.6rem; top: 5.6rem; display: grid; gap: 0.4rem; justify-items: center; }
+.friends small { font-size: 0.62rem; font-weight: 800; color: var(--ink-soft); background: var(--panel); padding: 0.05rem 0.4rem; border-radius: 999px; }
+.friend { position: relative; display: grid; place-items: center; width: 3rem; height: 3rem; border: 3px solid #fff; border-radius: 50%; color: #fff; font-weight: 900; font-size: 1.1rem; box-shadow: 0 2px 6px rgba(0,0,0,0.15); animation: pop 0.25s ease; }
+.friend .bond { position: absolute; left: 50%; bottom: -0.35rem; transform: translateX(-50%); width: 2.4rem; height: 0.32rem; border-radius: 999px; background: #e6dccb; overflow: hidden; border: 1px solid #fff; }
+.friend .bond i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.friend .bond i.full { background: var(--gold); }
+.friend .hot { position: absolute; top: -0.3rem; right: -0.4rem; padding: 0 0.25rem; border-radius: 999px; background: var(--red); font-size: 0.55rem; }
+.tbtns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem; padding: 0 0.2rem; margin-top: 0.75rem; align-items: end; }
+.tbtn { position: relative; display: grid; place-items: center; align-content: center; aspect-ratio: 1; width: 100%; max-width: 5rem; justify-self: center; padding: 0; border: 3px solid #fff; border-radius: 50%; background: radial-gradient(circle at 50% 30%, #fff, var(--paper-2)); box-shadow: 0 4px 0 var(--wood-2); font-weight: 900; font-size: 0.76rem; line-height: 1.15; transition: transform 0.12s; }
+.tbtn span { font-size: 1.25rem; }
+.tbtn .lvl { position: absolute; bottom: -0.55rem; left: 50%; transform: translateX(-50%); padding: 0 0.35rem; border-radius: 999px; background: var(--ink); color: #fff; font-size: 0.55rem; white-space: nowrap; }
+.tbtn .cnt { position: absolute; top: -0.25rem; right: -0.25rem; display: grid; place-items: center; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: var(--blue); color: #fff; font-size: 0.6rem; }
+.tbtn[aria-pressed="true"] { transform: translateY(-0.6rem) scale(1.05); background: radial-gradient(circle at 50% 30%, #ffd59a, var(--accent)); color: #fff; box-shadow: 0 5px 0 #b8621d, 0 8px 14px rgba(0,0,0,0.2); }
+.tfoot { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+.tfoot .back { padding: 0.55rem 0.9rem; border: 0; border-radius: 999px; background: rgba(31, 43, 54, 0.8); color: #fff; font-size: 0.8rem; font-weight: 800; }
+.tfoot .hint { flex: 1; text-align: center; font-size: 0.72rem; color: var(--ink); background: var(--panel); border-radius: 999px; padding: 0.3rem 0.5rem; }
+.tfoot .go { padding: 0.6rem 1.2rem; border: 0; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 900; box-shadow: 0 3px 0 #b8621d; }
+
+/* ---- 広い横長の画面(PC・横向きのタブレット): 左に札、右にコマンド、立ち絵は真ん中 */
+@media (min-width: 900px) and (min-aspect-ratio: 1/1) {
+  .hud { right: auto; width: 24rem; }
+  .figure { top: 8%; height: 175%; }
+  .say { top: 9.4rem; max-width: 22rem; font-size: 0.9rem; }
+  .side { top: 0.6rem; grid-auto-flow: column; }
+  .bottom { left: auto; right: 0.8rem; bottom: 0.8rem; width: 25rem; padding: 0; }
+  .bottom .stats { position: fixed; left: 0.8rem; bottom: 0.8rem; width: 28rem; }
+  .picked { top: 9.4rem; }
+  .friends { right: 27rem; top: 6rem; }
+  .cmd { max-width: 6rem; } .cmd.main { max-width: 9rem; }
+}
+@media (min-width: 1200px) and (min-aspect-ratio: 1/1) { html { font-size: 20px; } }
+/* ---- 背の低いスマホ縦(360×640など) */
+@media (max-height: 700px) and (max-aspect-ratio: 1/1) {
+  .cmd { max-width: 4.4rem; } .cmd.main { max-width: 6.6rem; } .cmd span { font-size: 1.15rem; } .cmd.main span { font-size: 1.7rem; }
+  .cmd small { display: none; }
+  .tbtn { max-width: 4rem; }
+}
+</style>
+</head>
+<body>
+<nav class="mockbar" aria-label="画面">
+  <button type="button" data-go="home">ホーム（いつも）</button>
+  <button type="button" data-go="event">ホーム（例会の日）</button>
+  <button type="button" data-go="train">稽古を選ぶ</button>
+</nav>
+
+<main class="game" data-s="home">
+  <div class="figure"><img src="../../public/characters/sakurano-momoka.webp" alt=""></div>
+
+  <section class="hud">
+    <div class="turn"><small>次の例会まで</small><b id="left">3<span>回</span></b><em id="phase">研修会 D2</em></div>
+    <div class="goal"><small>目標</small><b id="goal">例会で4連勝してC1へ昇級</b><button type="button">詳細</button></div>
+    <div class="vital"><span>体力</span><div class="gauge"><i style="width:62%"></i><s id="cost" style="left:62%;width:0"></s><b id="hp">62/100</b></div><span class="mood">▲ 好調</span></div>
+  </section>
+
+  <aside class="side" aria-label="見る">
+    <button type="button"><span>🏯</span>会</button>
+    <button type="button"><span>📖</span>棋譜帳</button>
+    <button type="button"><span>✎</span>記録</button>
+  </aside>
+
+  <p class="say"><img src="../../public/characters/yakobihime-mini.webp" alt=""><span id="say">今日は<b>詰将棋</b>に仲間が2人いるよ。伸びが大きいみたい。</span></p>
+
+  <section class="train">
+    <div class="picked"><b id="tname">詰将棋<em>Lv3</em></b><small id="tnote">主に「詰み」、少し「読み」</small><span class="risk">失敗率 <i id="fail">4%</i>・体力 <b id="tcost">−20</b></span></div>
+    <div class="friends" id="friends"></div>
+  </section>
+
+  <section class="bottom">
+    <div class="stats" id="stats"></div>
+    <div class="cmds" id="cmds">
+      <button type="button" class="cmd"><span>🍵</span>休む<small>体力が戻る</small></button>
+      <button type="button" class="cmd main" data-open="train"><span>♟</span>稽古<small>能力を伸ばす</small></button>
+      <button type="button" class="cmd"><span>✦</span>スキル<small>4つ</small></button>
+      <button type="button" class="cmd"><span>🎐</span>出かける<small>やる気</small></button>
+      <button type="button" class="cmd" id="slot"><span>👥</span>研究会<small>読みと安定</small></button>
+    </div>
+    <div class="train">
+      <div class="tbtns" id="tbtns"></div>
+      <div class="tfoot"><button type="button" class="back" data-open="home">戻る</button><span class="hint">選ぶと、伸びる数が上に出る</span><button type="button" class="go">これにする</button></div>
+    </div>
+    <div class="foot" id="foot"><button type="button">ログ</button><button type="button">師匠の予定</button></div>
+  </section>
+</main>
+
+<script>
+const STATS = [
+  { key: 'reading', label: '読み', value: 412 },
+  { key: 'plan', label: '作戦', value: 538, aim: true },
+  { key: 'steady', label: '安定', value: 287 },
+  { key: 'mate', label: '詰み', value: 655 },
+];
+const RANKS = [['SS', 1150], ['S', 1050], ['A', 900], ['B', 750], ['C', 600], ['D', 450], ['E', 300], ['F', 150], ['G', 0]];
+const rankOf = (v) => RANKS.find(([, e]) => v >= e)[0];
+const COLORS = { SS: '--r-ss', S: '--r-s', A: '--r-a', B: '--r-b', C: '--r-c', D: '--r-d', E: '--r-e', F: '--r-f', G: '--r-g' };
+const FRIENDS = { yuzu: { name: '柚', color: '#d77a9b', bond: 80 }, ken: { name: '健', color: '#4f7fc4', bond: 100 }, sora: { name: '空', color: '#3fa38f', bond: 40 } };
+const TRAININGS = [
+  { id: 'tsume', icon: '詰', label: '詰将棋', lv: 3, note: '主に「詰み」、少し「読み」', gains: { mate: 46, reading: 15 }, cost: 20, friends: ['yuzu', 'ken'] },
+  { id: 'kifu', icon: '譜', label: '棋譜並べ', lv: 2, note: '「作戦」（ねらいの能力）', gains: { plan: 38 }, cost: 15, friends: [] },
+  { id: 'jissen', icon: '戦', label: '実戦', lv: 1, note: '主に「読み」、少し「安定」', gains: { reading: 31, steady: 11 }, cost: 22, friends: ['sora'] },
+  { id: 'fast', icon: '速', label: '早指し', lv: 1, note: '「安定」と、早指しの適性', gains: { steady: 34 }, cost: 25, friends: [] },
+  { id: 'shisho', icon: '師', label: '師匠と指す', lv: 2, note: '選んだ能力と、戦い方', gains: { plan: 20, reading: 8 }, cost: 12, friends: [] },
+];
+const failOf = (hp) => hp >= 50 ? Math.max(0, Math.round((60 - hp) * 0.4)) : Math.round(4 + (50 - hp) * 1.2);
+let picked = 'tsume';
+
+function renderStats(gains = null) {
+  const cells = STATS.map((s) => {
+    const r = rankOf(s.value);
+    const g = gains?.[s.key];
+    return `<div class="stat${s.aim ? ' aim' : ''}">${g ? `<span class="plus${g < 20 ? ' small' : ''}">+${g}</span>` : ''}<small>${s.label}</small>`
+      + `<div class="row"><span class="rank" style="background:var(${COLORS[r]})">${r}</span><span class="val">${s.value}</span></div><span class="max">/1200</span></div>`;
+  });
+  const lvUp = gains ? '<span class="plus small">+0.4</span>' : '';
+  cells.push(`<div class="stat lv">${lvUp}<small>棋力</small><b>5級</b><span class="max">相当 Lv17</span></div>`);
+  document.getElementById('stats').innerHTML = cells.join('');
+}
+
+function renderTrain() {
+  const t = TRAININGS.find((x) => x.id === picked);
+  renderStats(t.gains);
+  document.getElementById('tname').innerHTML = `${t.label}<em>Lv${t.lv}</em>`;
+  document.getElementById('tnote').textContent = t.note;
+  const fail = failOf(62 - 0);
+  const failEl = document.getElementById('fail');
+  failEl.textContent = `${fail}%`;
+  failEl.className = fail >= 10 ? 'warn' : '';
+  document.getElementById('tcost').textContent = `−${t.cost}`;
+  const cost = document.getElementById('cost');
+  cost.style.left = `${62 - t.cost}%`; cost.style.width = `${t.cost}%`;
+  document.getElementById('hp').textContent = `62→${62 - t.cost}`;
+  document.getElementById('friends').innerHTML = (t.friends.length ? '<small>一門の仲間</small>' : '') + t.friends.map((id) => {
+    const f = FRIENDS[id];
+    return `<div class="friend" style="background:${f.color}">${f.name}${f.bond >= 80 ? '<span class="hot">絆</span>' : ''}<span class="bond"><i class="${f.bond >= 100 ? 'full' : ''}" style="width:${f.bond}%"></i></span></div>`;
+  }).join('');
+  document.getElementById('tbtns').innerHTML = TRAININGS.map((x) => `<button type="button" class="tbtn" data-t="${x.id}" aria-pressed="${x.id === picked}">`
+    + `${x.friends.length ? `<span class="cnt">${x.friends.length}</span>` : ''}<span>${x.icon}</span>${x.label}<span class="lvl">Lv${x.lv}</span></button>`).join('');
+}
+
+function show(s) {
+  const game = document.querySelector('.game');
+  game.dataset.s = s === 'event' ? 'home' : s;
+  document.querySelectorAll('.mockbar button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.go === s)));
+  const event = s === 'event';
+  document.getElementById('left').innerHTML = event ? '今日<span></span>' : '3<span>回</span>';
+  document.querySelector('.turn small').textContent = event ? '研修会の' : '次の例会まで';
+  document.querySelector('.turn em').textContent = event ? '例会の日' : '研修会 D2';
+  // 例会の日は、まんなかの大きなボタンが「例会へ」になり、ほかのコマンドは押せない(その日は例会だけ。UD:3-2)。
+  const main = document.querySelector('.cmd.main');
+  main.classList.toggle('event', event);
+  main.innerHTML = event ? '<span>⚑</span>例会へ<small>4局・観戦できる</small>' : '<span>♟</span>稽古<small>能力を伸ばす</small>';
+  main.dataset.open = event ? '' : 'train';
+  document.querySelectorAll('.cmd:not(.main)').forEach((b) => { b.disabled = event; });
+  document.getElementById('say').innerHTML = event ? '今日は<b>例会</b>だよ。1局目は柚月さんと平手。観戦して、崩れたところを見抜こう。' : '今日は<b>詰将棋</b>に仲間が2人いるよ。伸びが大きいみたい。';
+  document.getElementById('foot').style.display = s === 'train' ? 'none' : '';
+  const cost = document.getElementById('cost');
+  if (s === 'train') renderTrain();
+  else { renderStats(); cost.style.width = '0'; document.getElementById('hp').textContent = '62/100'; }
+  history.replaceState(null, '', `?s=${s}`);
+}
+
+document.addEventListener('click', (e) => {
+  const go = e.target.closest('[data-go]'); if (go) return show(go.dataset.go);
+  const open = e.target.closest('[data-open]'); if (open?.dataset.open) return show(open.dataset.open);
+  const t = e.target.closest('[data-t]');
+  if (t) {
+    if (t.dataset.t === picked) { document.querySelector('.tfoot .go').animate([{ transform: 'scale(1.15)' }, { transform: 'scale(1)' }], 250); return; }
+    picked = t.dataset.t; renderTrain();
+  }
+});
+show(new URLSearchParams(location.search).get('s') || 'home');
+</script>
+</body>
+</html>
