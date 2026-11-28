@@ -673,7 +673,9 @@ function onKey(event: KeyboardEvent) {
 }
 
 // ---- 駒音(再生中の手だけ。効果音のオン・オフに従う)
-const sounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+// 中継は盤を触らずに進むので、Web Audioで鳴らす(押してからしばらくしか鳴らせないHTMLの音声だと、途中で止まる。
+// docs/tournament-relay-design.mdの53章)。開いた瞬間(中継を開いた押す操作のすぐあと)に音の出口を開く。
+const sounds = createMoveSoundPlayer(() => props.assetBaseUrl, { webAudio: true });
 function playSound(ply: number) {
   const entry = entries.value[ply - 1];
   if (!entry) return;
@@ -1605,7 +1607,12 @@ onMounted(() => {
     playing.value = false;
   });
 });
+onMounted(() => {
+  sounds.preload();
+  sounds.unlock();
+});
 onBeforeUnmount(() => {
+  sounds.dispose();
   clearTimeout(probeTimer);
   if (probeFrame && typeof cancelAnimationFrame === "function") cancelAnimationFrame(probeFrame);
   clearTimers();
