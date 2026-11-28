@@ -1394,6 +1394,7 @@
         :player-countdown="playerCountdown"
         :clocks="matchClocks"
         :fast-clock="matchClocks?.fast ?? ''"
+        :opponent-thought="opponentThought"
         :candidates="boardCandidates"
         :attack-marks="boardAttackMarks"
         :float-labels="captureFloatLabels"
@@ -4120,6 +4121,10 @@ const ryuoOpponent = computed(() => (ryuoGame.value ? tournamentSeasonOf(ryuoGam
  */
 const PRESENCE_LINE_MS = { speech: 2500, trait: 3500, news: 6000, room: 4000 } as const;
 const presenceScore = ref<EngineEvaluation | null>(null);
+// 将棋AI(論理)の心の声(43章。下のnoteReasonThought)。resetPresenceより前に置く(対局を戻すときに先に呼ばれるため)。
+const REASON_THOUGHT_MIN_BOARD_PX = 660;
+const reasonThought = ref<{ id: number; lines: string[]; text: string; ply: number } | null>(null);
+let reasonExpects = "";
 const presenceLine = ref<{ id: number; kind: "speech" | "trait" | "news" | "room"; tone: string; text: string } | null>(null);
 /**
  * 団体戦の仲間の速報の札(docs/team-battle-design.mdの19章の2)。盤の上の端に重ねて6秒出す(盤の大きさを変えない)。
@@ -4211,6 +4216,8 @@ function sayOpponent(moment: "start" | "ahead" | "behind" | "win" | "loss") {
   showPresence("speech", `${opponent.name}「${opponentLine(moment, opponent)}」`);
 }
 function resetPresence() {
+  reasonThought.value = null;
+  reasonExpects = "";
   clearTimeout(presenceTimer);
   presenceLine.value = null;
   clearTimeout(teamNewsTimer);
@@ -4850,6 +4857,7 @@ const {
   uiFontPx,
   uiNarrow,
   uiShort,
+  uiBoardSize,
 } = useResponsiveLayout({ analysisVisible });
 const assistActions = ref<HTMLElement | null>(null);
 const primaryAssistCount = computed(() => {
@@ -5135,11 +5143,14 @@ const cpuDisplayName = computed(() => {
   if (ryuoCounterOpponent.value) {
     return `${ryuoCounterOpponent.value.name} ${ryuoCounterOpponent.value.dan}（対策） Lv.${ryuoCounterOpponent.value.level}`;
   }
+  // 自由対局の将棋AI(論理)は、CPUの強さの表ではなく将棋AI(論理)の名前を出す(強さは名札の下の能力Lv)。
+  if (usesReasonAi.value) return REASON_OPPONENT_TEXT.name;
   const name = props.cpuPlayerName.trim() || "CPU";
   return cpuStrengthPreset.value ? `${name} Lv.${cpuStrengthPreset.value.level}` : name;
 });
 const cpuStrengthLabel = computed(() => (
-  (matchKind.value === "tournament" && ryuoOpponent.value) || ryuoCounterOpponent.value ? "" : cpuStrengthPreset.value?.label ?? ""
+  (matchKind.value === "tournament" && ryuoOpponent.value) || ryuoCounterOpponent.value ? ""
+    : usesReasonAi.value ? `能力Lv.${reasonLevel.value}` : cpuStrengthPreset.value?.label ?? ""
 ));
 // CPUとの対局では、プレイヤーの側の名札に、タイトル画面で入れたプレイヤー名を出す(入れていなければ先手・後手の表示名)。
 // タイトル戦の防衛戦では、プレイヤーの名札にも肩書を付ける(「やこび 竜王」)。
@@ -13773,17 +13784,47 @@ async function reasonCpuMove(planMove: string | null, legalMoves: string[]) {
       return chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10, planMove });
     }
   }
+  const sfen = record.value.position.sfen;
+  const lastMove = moveHistory.at(-1) ?? null;
+  const plyAfter = moveCount.value + 1;
   const thought = await reasonThinker.think({
-    sfen: record.value.position.sfen,
+    sfen,
     levels: reasonLevels(reasonLevel.value),
     planMove,
     seed: (Math.random() * 0x7fffffff) | 0,
-    lastMove: moveHistory.at(-1) ?? null,
+    lastMove,
     era: "reiwa",
   });
   const move = typeof thought?.move === "string" && legalMoves.includes(thought.move) ? thought.move : "";
+  if (move) void noteReasonThought(sfen, thought, lastMove, plyAfter);
   return move ? { move } : chooseLogicMove({ sfen: record.value.position.sfen, legalMoves, moveHistory, level: 10, planMove });
 }
+
+// 将棋AI(論理)の心の声(docs/disciple-mode-design.mdの43章)。盤の枠が十分に大きい画面(タブレット・PC)だけ、上側の名札の横に出す。
+// 選んだ理由(考えたときの記録)を言葉にするだけで、新しく読まない。言葉の部品は将棋AI(論理)と一緒に遅れて読む。
+let reasonVoiceModule: typeof import("./core/reason-voice.mjs") | null = null;
+async function noteReasonThought(sfen: string, thought: any, lastMove: string | null, ply: number) {
+  const generation = matchGeneration;
+  try {
+    reasonVoiceModule ??= await import("./core/reason-voice.mjs");
+  } catch (error) {
+    onLazyLoadError(error);
+    return;
+  }
+  if (generation !== matchGeneration) return;
+  const voice = reasonVoiceModule.reasonVoice({ sfen, thought, lastMove, expected: reasonExpects || null });
+  reasonExpects = voice?.expects ?? "";
+  if (!voice) return;
+  // plyは指したあとの手数。待ったで戻ったら(手数が減ったら)出さない。
+  reasonThought.value = { id: Date.now(), lines: voice.lines, text: voice.text, ply };
+}
+const opponentThought = computed(() => {
+  const thought = reasonThought.value;
+  if (!thought || !usesReasonAi.value || reviewMode.value || !active.value) return null;
+  if (uiBoardSize.value.width < REASON_THOUGHT_MIN_BOARD_PX || boardLayout.value === "portrait") return null;
+  if (moveCount.value < thought.ply) return null;
+  return thought;
+});
 
 async function scheduleCpuMove() {
   if (

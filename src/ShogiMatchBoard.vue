@@ -59,6 +59,7 @@
       :black-player-byoyomi="clocks?.blackByoyomi"
       :white-player-byoyomi="clocks?.whiteByoyomi"
       :fast-clock="fastClock"
+      :opponent-thought="opponentThought"
       :arrow-image-url="`${normalizedAssetBase}/arrow/arrow.svg`"
       @move="onMove"
       @edit="(change: PositionChange) => emit('edit', change)"
@@ -158,6 +159,8 @@ const props = defineProps({
   },
   // 早送りで減っている時計(大会の対局で、相手が考えているあいだ)。
   fastClock: { type: String as PropType<"black" | "white" | "">, default: "" },
+  // 相手の心の声(自由対局の将棋AI(論理)。docs/disciple-mode-design.mdの43章)。
+  opponentThought: { type: Object as PropType<{ id: number; lines: string[]; text: string } | null>, default: null },
 });
 const emit = defineEmits(["usi-move", "invalid-sfen", "resize", "edit", "square-click", "hand-click"]);
 const root = ref<HTMLElement | null>(null);

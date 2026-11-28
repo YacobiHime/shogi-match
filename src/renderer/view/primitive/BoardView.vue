@@ -339,6 +339,22 @@
         <span class="clock-text">{{ whitePlayerTimeText }}</span>
       </div>
 
+      <!-- 相手の心の声(43章)。押さずに読むだけ。新しい手のたびにふわっと替わる。 -->
+      <div
+        v-if="opponentThoughtView"
+        :key="'thought-' + opponentThoughtView.thought.id"
+        class="opponent-thought"
+        :class="{ 'opponent-thought--column': opponentThoughtView.wide }"
+        :style="opponentThoughtView.style"
+        role="status"
+        aria-live="polite"
+        :aria-label="`相手の心の声 ${opponentThoughtView.thought.text}`"
+        :title="opponentThoughtView.thought.text"
+        data-opponent-thought
+      >
+        <span v-for="(line, index) in opponentThoughtView.thought.lines" :key="index" class="opponent-thought__line">{{ line }}</span>
+      </div>
+
       <!-- 手番 -->
       <div v-if="main.turn" class="turn" :style="main.turn.style">{{ t.nextTurn }}</div>
 
@@ -621,6 +637,13 @@ const props = defineProps({
     default: null,
   },
   // 早送りで減っている時計(大会の対局で、相手が考えているあいだ。docs/tournament-match-presence-design.mdの15章)。
+  // 相手の心の声(自由対局の将棋AI(論理)。docs/disciple-mode-design.mdの43章)。上側の名札の右(compact)か下(standard)の空いた所に出す。
+  // 縦の駒台の配置(portrait。スマホ)では出さない。
+  opponentThought: {
+    type: Object as PropType<{ id: number; lines: string[]; text: string } | null>,
+    required: false,
+    default: null,
+  },
   fastClock: {
     type: String as PropType<"black" | "white" | "">,
     required: false,
@@ -1169,6 +1192,36 @@ const main = computed(() => {
     lastFrameSize = main.frame.size;
   }
   return main;
+});
+
+// 心の声の吹き出しの置き場所(盤の枠の単位。上側の名札・時計・手番の右か下の、ほかの部品と重ならない所)。
+const opponentThoughtView = computed(() => {
+  const thought = props.opponentThought;
+  if (!thought?.lines?.length) return null;
+  const ratio = main.value.ratio;
+  const box = (left: number, top: number, width: number, height: number, font: number) => ({
+    left: left * ratio + "px",
+    top: top * ratio + "px",
+    width: width * ratio + "px",
+    "max-height": height * ratio + "px",
+    "font-size": font * ratio + "px",
+  });
+  switch (props.layoutType) {
+    case BoardLayoutType.COMPACT: {
+      // 上の行: 名札(0〜300)の右から枠の右端まで。時計があるときは時計(300〜514)の右から。
+      // 手番の札(304〜518)は相手の手番だけ上に出るので、そのあいだは吹き出しを出さない(出すのは相手が指したあと)。
+      if (props.position.color === (props.flip ? Color.BLACK : Color.WHITE)) return null;
+      const left = props.hideClock ? 312 : 526;
+      return { thought, wide: false, style: box(left, 1, 1082 - left, 54, 22) };
+    }
+    case BoardLayoutType.PORTRAIT:
+      return null;
+    default: {
+      // 左の列: 名札・時計・手番の下。
+      const top = props.hideClock ? 490 : 555;
+      return { thought, wide: true, style: box(0, top, 288, 959 - top - 8, 24) };
+    }
+  }
 });
 
 const boardLayoutBuilder = computed(() => {
@@ -2161,6 +2214,47 @@ const whitePlayerTimeSeverity = computed(() => {
 .player-name--detail .player-name-text {
   max-width: calc(100% - 5px);
   font-size: 0.8em;
+}
+/* 相手の心の声。白地に濃い縁の吹き出し(黄色は使わない)。 */
+.opponent-thought {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.2em 0.6em;
+  overflow: hidden;
+  border: 1.5px dashed #5d6b78;
+  border-radius: 0.9em;
+  background: rgba(255, 252, 244, 0.94);
+  color: #1d303f;
+  line-height: 1.18;
+  pointer-events: none;
+  animation: opponent-thought-in 0.3s ease-out both;
+}
+.opponent-thought__line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opponent-thought__line:first-child { font-weight: 700; }
+.opponent-thought__line + .opponent-thought__line { color: #4a5a68; font-size: 0.92em; }
+.opponent-thought--column {
+  justify-content: flex-start;
+  padding: 0.4em 0.6em;
+  line-height: 1.3;
+}
+.opponent-thought--column .opponent-thought__line {
+  white-space: normal;
+}
+.opponent-thought--column .opponent-thought__line + .opponent-thought__line { margin-top: 0.2em; }
+@keyframes opponent-thought-in {
+  from { opacity: 0; transform: translateY(-0.3em); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .opponent-thought { animation: none; }
 }
 .player-name--countdown {
   padding-right: 2.1em;
