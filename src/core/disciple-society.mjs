@@ -8,6 +8,8 @@ import { AGE_LIMIT, SANDAN, describeShoreikai, nameboard as shoreikaiBoard, rank
 import { opponentLevel, shoreikaiOpponentLevel, discipleAgeMonths, pendingTeaiText } from './disciple-run.mjs';
 import { HANKO_LABEL, TEAI_LABELS } from './teai.mjs';
 import { USER_ID } from './ryuo.mjs';
+import { repertoireText } from './ryuo-repertoire.mjs';
+import { staticShare, usageRows } from './opening-usage.mjs';
 
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 
@@ -46,6 +48,37 @@ export function memberAbilities(id, level) {
     stats = Object.fromEntries(STAT_KEYS.map((key) => [key, clamp(stats[key] + shift, 0, STAT_MAX)]));
   }
   return STAT_KEYS.map((key) => ({ key, label: STAT_LABELS[key], value: Math.round(stats[key]), rank: statRank(stats[key]) }));
+}
+
+/** 4つの能力の説明(会員の札のレーダーチャートのランクに添える。41章の局面ごとの効き)。 */
+export const STAT_HINTS = Object.freeze({
+  reading: '中盤に数手先まで読む力',
+  plan: '序盤の組み立てと、定跡を知っているか',
+  steady: 'うっかりの少なさ',
+  mate: '終盤に詰みを読み切る力',
+});
+/** 型の一言を出す、いちばん高い能力といちばん低い能力の差。 */
+const TYPE_GAP = 150;
+
+/**
+ * 会員の札の能力の形(やこびノートの棋士名鑑と同じ部品PlayerAbilityPanelに渡す。docs/disciple-mode-design.mdの44章)。
+ * 師匠の1年の対局に効く4つの能力と、得意戦法の使用率だけを出す(特殊能力・棋風は師匠の1年の対局に効かないので出さない)。
+ * @param {{ repertoire?: any } | null | undefined} member
+ * @param {ReturnType<typeof memberAbilities>} abilities
+ */
+export function memberAbilityPanel(member, abilities) {
+  const sorted = [...abilities].sort((a, b) => b.value - a.value);
+  const top = sorted[0];
+  const bottom = sorted.at(-1);
+  const type = top && bottom && top.value - bottom.value >= TYPE_GAP ? `${top.label}が得意・${bottom.label}が苦手` : 'バランス型';
+  const usage = member?.repertoire?.usage ?? null;
+  return {
+    abilities: abilities.map((stat) => ({ ...stat, hint: STAT_HINTS[stat.key] ?? '' })),
+    type,
+    specials: [],
+    staticShare: usage ? staticShare(usage) : null,
+    openings: usageRows(usage).slice(0, 6).map((row) => ({ ...row, record: '' })),
+  };
 }
 
 /** いまの所属の会(研修会・奨励会・三段リーグ)。会の画面がないときはnull。 */
@@ -168,7 +201,9 @@ function membersView(state, kind, run) {
       peer: Boolean(member.peer),
       rival: Boolean(member.rival),
       style: member.style?.label ?? '',
+      repertoire: member.repertoire ? repertoireText(member.repertoire) : member.style?.label ?? '',
       abilities: memberAbilities(member.id, level),
+      ability: memberAbilityPanel(member, memberAbilities(member.id, level)),
       near: Math.abs(rank - myRank),
     });
   }

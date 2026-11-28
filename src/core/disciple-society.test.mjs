@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STAT_KEYS, overallLevel } from './disciple-strength.mjs';
 import { createDiscipleRun, chooseAction, playEvent, turnKind, chooseWords, pendingOpponentLevel, opponentLevel, eventOpponent, watchSpec } from './disciple-run.mjs';
-import { memberAbilities, societyView } from './disciple-society.mjs';
+import { STAT_HINTS, memberAbilities, memberAbilityPanel, societyView } from './disciple-society.mjs';
 import { nextTeai, teaiRule, teaiRatingBonus, TEAI_RATING } from './teai.mjs';
 
 /** 弟子を進める(研修会の例会を結果だけで)。untilが真になるまで。 */
@@ -101,8 +101,22 @@ describe('会の画面(36-5)', () => {
     expect(view.last.mine.every((game) => game.result === 'win' || game.result === 'loss')).toBe(true);
     expect(view.members.length).toBeGreaterThan(10);
     expect(view.members[0].abilities).toHaveLength(4);
+    // 会員の札は棋士名鑑と同じ部品の形(44章): 4つの能力・型・得意戦法の使用率。
+    const card = view.members[0];
+    expect(card.ability.abilities.map((row) => row.key)).toEqual([...STAT_KEYS]);
+    expect(card.ability.openings.length).toBeGreaterThan(0);
+    expect(card.ability.openings.reduce((sum, row) => sum + row.share, 0)).toBeGreaterThan(90);
+    expect(card.repertoire).toBeTruthy();
     expect(view.rules.rule).toMatch(/連勝/);
     expect(view.rules.teai).toHaveLength(3);
+  });
+
+  it('会員の札の型の一言と説明(44章)', () => {
+    const flat = [{ key: 'reading', label: '読み', value: 700, rank: 'C' }, { key: 'plan', label: '作戦', value: 720, rank: 'C' }, { key: 'steady', label: '安定', value: 690, rank: 'C' }, { key: 'mate', label: '詰み', value: 710, rank: 'C' }];
+    expect(memberAbilityPanel(null, flat)).toMatchObject({ type: 'バランス型', staticShare: null, openings: [], specials: [] });
+    const spiky = flat.map((row) => (row.key === 'mate' ? { ...row, value: 950 } : row.key === 'plan' ? { ...row, value: 500 } : row));
+    expect(memberAbilityPanel(null, spiky).type).toBe('詰みが得意・作戦が苦手');
+    expect(memberAbilityPanel(null, flat).abilities.every((row) => row.hint === STAT_HINTS[row.key])).toBe(true);
   });
 
   it('奨励会: 段級の名札掛けと年齢制限', () => {

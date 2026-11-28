@@ -25,7 +25,7 @@
         {{ axis.label }}
       </text>
       <text v-if="!bare" class="shogi-radar__value" :x="labelPoint(index).x" :y="labelPoint(index).y + valueOffset" :text-anchor="anchor(index)" dominant-baseline="middle">
-        {{ axis.value === null ? "—" : axis.value }}
+        {{ axis.value === null ? "—" : axis.text ?? axis.value }}
       </text>
     </g>
   </svg>
@@ -34,7 +34,8 @@
 <script setup lang="ts">
 import { computed, type PropType } from "vue";
 
-type Axis = { key: string; label: string; value: number | null };
+/** valueは0〜100(図の位置)。textは値の文字(物差しが0〜100でないとき。なければvalue)。 */
+type Axis = { key: string; label: string; value: number | null; text?: string | number };
 
 const props = defineProps({
   axes: { type: Array as PropType<Axis[]>, required: true },

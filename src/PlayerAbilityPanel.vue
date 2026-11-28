@@ -95,12 +95,19 @@ const props = defineProps({
   part: { type: String as PropType<"all" | "chart" | "details">, default: "all" },
   /** 戦法の使用率を出すか(やこびノートの自分の能力では「戦型」の項目に出すので出さない)。 */
   openings: { type: Boolean, default: true },
+  /** 能力値の上限(図の外周)。名鑑の8つの能力は100、師匠の1年の4つの能力は1200(docs/disciple-mode-design.mdの44章)。 */
+  chartMax: { type: Number, default: 100 },
 });
 
 /** 札の頭の印(色だけに頼らず、形でも区別する)。 */
 const TIER_MARK: Record<string, string> = Object.freeze({ gold: "★", blue: "＋", red: "−" });
-const radarAxes = computed(() => props.view.abilities.map(({ key, label, value }) => ({ key, label, value })));
-const compareValues = computed(() => (props.compare ? props.view.abilities.map(({ key }) => props.compare?.abilities.find((item) => item.key === key)?.value ?? null) : null));
+const radarAxes = computed(() => props.view.abilities.map(({ key, label, value }) => (props.chartMax === 100
+  ? { key, label, value }
+  : { key, label, value: Math.max(0, Math.min(100, (value / props.chartMax) * 100)), text: value })));
+const compareValues = computed(() => (props.compare ? props.view.abilities.map(({ key }) => {
+  const value = props.compare?.abilities.find((item) => item.key === key)?.value;
+  return typeof value === "number" ? Math.max(0, Math.min(100, (value / props.chartMax) * 100)) : null;
+}) : null));
 const shownOpenings = computed(() => props.view.openings.slice(0, props.compact ? 3 : 6));
 </script>
 
@@ -125,6 +132,7 @@ const shownOpenings = computed(() => props.view.openings.slice(0, props.compact 
   font-weight: 900;
 }
 /* 高いランクほど濃く、明るく。文字でも読めるので、色だけに頼らない。 */
+.shogi-game .player-ability__rank--SS,
 .shogi-game .player-ability__rank--S { background: #f1a54c; box-shadow: 0 0 0 2px #fff3d6 inset; }
 .shogi-game .player-ability__rank--A { background: #f1a54c; }
 .shogi-game .player-ability__rank--B { background: #e6c88c; }

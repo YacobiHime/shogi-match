@@ -553,14 +553,16 @@
           </ul>
           <div v-else-if="selectedMember" class="disciple__member-card" data-disciple-member-card>
             <button type="button" class="disciple__link" @click="memberSel = ''">← 会員の一覧</button>
-            <h5>{{ selectedMember.name }}<small>{{ selectedMember.place }}・{{ selectedMember.age }}歳</small></h5>
-            <div v-for="stat in selectedMember.abilities" :key="stat.key" class="disciple__stat">
-              <span class="disciple__stat-name">{{ stat.label }}</span>
-              <span class="disciple__rank" :class="`disciple__rank--${stat.rank}`">{{ stat.rank }}</span>
-              <span class="disciple__bar"><i :style="{ width: `${Math.min(100, stat.value / 12)}%` }"></i></span>
-              <span class="disciple__num">{{ stat.value }}</span>
-            </div>
-            <p class="disciple__muted">得意 {{ selectedMember.style || '—' }}　この会での成績 {{ selectedMember.record.w }}勝{{ selectedMember.record.l }}敗　{{ view?.name }}と {{ selectedMember.vs.w }}勝{{ selectedMember.vs.l }}敗（{{ view?.name }}から見て）</p>
+            <h5>{{ selectedMember.name }}<small>{{ selectedMember.place }}・{{ selectedMember.age }}歳{{ selectedMember.rival ? '・羽音の弟子' : selectedMember.peer ? '・同期' : '' }}</small></h5>
+            <!-- やこびノートの棋士名鑑と同じ部品(レーダーチャートとランク・型・得意戦法の使用率)。44章。 -->
+            <PlayerAbilityPanel class="disciple__member-ability" :view="selectedMember.ability" :chart-max="STAT_MAX"
+              :compare="memberCompare" :own-label="selectedMember.name" />
+            <dl class="disciple__member-profile">
+              <div><dt>得意戦法</dt><dd>{{ selectedMember.repertoire || '—' }}</dd></div>
+              <div v-if="selectedMember.style"><dt>最近の作戦</dt><dd>{{ selectedMember.style }}</dd></div>
+              <div><dt>この会で</dt><dd>{{ selectedMember.record.w }}勝{{ selectedMember.record.l }}敗</dd></div>
+              <div data-disciple-member-vs><dt>{{ view?.name }}と</dt><dd>{{ selectedMember.vs.w + selectedMember.vs.l ? `${selectedMember.vs.w}勝${selectedMember.vs.l}敗（${view?.name}から見て）` : 'まだ当たっていない' }}</dd></div>
+            </dl>
           </div>
         </template>
         <template v-else>
@@ -625,9 +627,10 @@ import { TEAM_SIZE, defaultTeam, friendPool, joinIchimon, loadIchimon, pickTeam,
 import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards, switchDiscipleSlot } from "./core/disciple-slots.mjs";
 import { STANDARD_SFEN } from "./game-state";
 import ShoreikaiNameboard from "./ShoreikaiNameboard.vue";
+import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
 import { memberAbilities, societyView, systemCardsOf } from "./core/disciple-society.mjs";
 import {
-  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, moverOfPly, skillById, statRank,
+  APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, STAT_MAX, moverOfPly, skillById, statRank,
 } from "./core/disciple-strength.mjs";
 import {
   FRIENDS, PLANS, WORDS, applyFindings, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
@@ -836,6 +839,11 @@ const societyShown = computed(() => {
 });
 const systemCards = computed(() => systemCardsOf(state.value));
 const selectedMember = computed(() => society.value?.members.find((member) => member.id === memberSel.value) ?? null);
+/** 会員の札のレーダーチャートに点線で重ねる、弟子の4つの能力(44章)。 */
+const memberCompare = computed(() => (state.value?.stats ? {
+  label: view.value?.name ?? "弟子",
+  abilities: STAT_KEYS.map((key) => ({ key, value: Math.round(state.value.stats[key] ?? 0), rank: String(statRank(state.value.stats[key] ?? 0)) })),
+} : null));
 /** 例会の札の、相手の4つの能力(弟子と並べる)。 */
 const opponentStats = computed(() => {
   const opponent = view.value?.opponent;
@@ -1728,6 +1736,30 @@ defineExpose({ goBack });
 .shogi-game .disciple__member-ranks { display: flex; gap: 0.2rem; }
 .shogi-game .disciple__member-ranks i { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 0.35rem; color: #fff; font-style: normal; font-weight: 800; font-size: 0.75rem; }
 .shogi-game .disciple__member-card { display: grid; gap: 0.35rem; }
+/* 会員の札の能力(棋士名鑑と同じ部品PlayerAbilityPanel。44章)。部品は暗い地の色なので、師匠の1年の明るい地の色に直す。 */
+.shogi-game .disciple__member-ability { color: var(--ink, #1d303f); }
+.shogi-game .disciple__member-ability .player-ability__radar { max-width: 17rem; }
+@container (min-width: 34rem) {
+  .shogi-game .disciple__member-ability .player-ability__main { grid-template-columns: minmax(0, 17rem) auto; justify-content: center; }
+}
+.shogi-game .disciple__member-ability .shogi-radar__grid polygon,
+.shogi-game .disciple__member-ability .shogi-radar__grid line { stroke: rgba(29, 48, 63, 0.2); }
+.shogi-game .disciple__member-ability .shogi-radar__label { fill: #1d303f; }
+.shogi-game .disciple__member-ability .shogi-radar__value { fill: #b8641c; }
+.shogi-game .disciple__member-ability .shogi-radar__dot { stroke: #fffcf4; }
+.shogi-game .disciple__member-ability .shogi-radar__area { fill: rgba(241, 165, 76, 0.45); stroke: #d9822b; }
+.shogi-game .disciple__member-ability .shogi-radar__compare { fill: rgba(47, 111, 168, 0.1); stroke: #2f6fa8; }
+.shogi-game .disciple__member-ability .player-ability__value { color: #4a5a68; }
+.shogi-game .disciple__member-ability .player-ability__compare-rank { color: #2f6fa8; }
+.shogi-game .disciple__member-ability .player-ability__legend span::before { border-top-color: #d9822b; }
+.shogi-game .disciple__member-ability .player-ability__legend-compare::before { border-top-color: #2f6fa8 !important; }
+.shogi-game .disciple__member-ability .player-ability__type { color: #b8641c; }
+.shogi-game .disciple__member-ability .player-ability__usage-bar { background: rgba(29, 48, 63, 0.12); }
+.shogi-game .disciple__member-ability .player-ability__usage-note { color: #5d6b78; }
+.shogi-game .disciple__member-profile { display: grid; gap: 0.2rem; margin: 0; font-size: 0.85rem; }
+.shogi-game .disciple__member-profile div { display: grid; grid-template-columns: 6em minmax(0, 1fr); gap: 0.5rem; }
+.shogi-game .disciple__member-profile dt { color: #5d6b78; font-weight: 700; }
+.shogi-game .disciple__member-profile dd { margin: 0; }
 .shogi-game .disciple__rules { display: grid; gap: 0.35rem; margin: 0; }
 .shogi-game .disciple__rules > div { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.5rem; }
 .shogi-game .disciple__rules dt { color: var(--muted); font-weight: 800; }
