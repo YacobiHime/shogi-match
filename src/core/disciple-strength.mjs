@@ -350,6 +350,23 @@ export function effectiveLevel(strength) {
 }
 
 /**
+ * 観戦しない局で、その日の作戦の熟練度が強さに足す分(Lv。docs/disciple-mode-design.mdの49-15)。
+ * 観戦する本局では熟練度がエンジンの読みで指す手数として効くので(34-10)、観戦しない局にも同じくらい効かせる。
+ * 自己対局で熟練度40どうしに比べ、70で勝率+13点・100で+14点(49-12)。1Lv=ELO_PER_LEVEL(45)なので、70で+2Lv、
+ * 100はそこから+0.5Lvまで。40より下は足さない(能力値で測った強さの物差しは熟練度40前後の対局で合わせたため)。
+ * @param {number} mastery 0〜100
+ */
+export function masteryLevelBonus(mastery) {
+  const m = Math.max(0, Math.min(100, Number(mastery) || 0));
+  if (m <= MASTERY_LEVEL.base) return 0;
+  const first = Math.min(1, (m - MASTERY_LEVEL.base) / (MASTERY_LEVEL.full - MASTERY_LEVEL.base)) * MASTERY_LEVEL.plus;
+  const rest = Math.max(0, (m - MASTERY_LEVEL.full) / (100 - MASTERY_LEVEL.full)) * MASTERY_LEVEL.tail;
+  return round1(first + rest);
+}
+/** 熟練度の強さの足し方(49-15): baseから上で足しはじめ、fullでplus(Lv)、100でplus+tail。 */
+export const MASTERY_LEVEL = Object.freeze({ base: 40, full: 70, plus: 2, tail: 0.5 });
+
+/**
  * 観戦しない局で、弟子が勝つ割合。
  * @param {number} discipleLevel effectiveLevelの値
  * @param {number} opponentLevel 相手のLv

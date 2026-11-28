@@ -360,7 +360,7 @@ describe('研究メモ(35-13)', () => {
     expect(discipleView(after).book.rows.find((row) => row.id === made.card).memo).toBe(1);
   });
 
-  it('研究(49章): 作戦帳の1枚の熟練度を上げ、能力値は変えず、体力を使ってターンを進める', () => {
+  it('研究(49章): 作戦帳の1枚の熟練度と作戦の能力値を上げ、体力を使ってターンを進める', () => {
     const state = createDiscipleRun({ seed: 7, discipleId: 'minato' });
     expect(turnKind(state)).toBe('free');
     const cardId = Object.keys(state.planBook.cards)[0];
@@ -369,8 +369,22 @@ describe('研究メモ(35-13)', () => {
     expect(result.kind).toBe('research');
     expect(result.gain).toBeGreaterThan(0);
     expect(after.planBook.cards[cardId].mastery - before.planBook.cards[cardId].mastery).toBe(result.gain);
-    expect(after.stats).toEqual(before.stats);
+    expect(after.stats.plan).toBeGreaterThan(before.stats.plan);
+    expect({ ...after.stats, plan: 0 }).toEqual({ ...before.stats, plan: 0 });
     expect(after.stamina).toBe(Math.max(0, before.stamina - RESEARCH.stamina));
     expect(after.turn).toBe(before.turn + 1);
+  });
+
+  it('観戦しない局(49-15): その日の作戦の熟練度が高いほど勝つ見込みが上がる', () => {
+    let state = createDiscipleRun({ seed: 9, discipleId: 'minato' });
+    for (let guard = 0; guard < 40 && turnKind(state) !== 'exam'; guard += 1) state = chooseAction(state, { kind: 'rest' }).state;
+    expect(turnKind(state)).toBe('exam');
+    const withMastery = (value) => {
+      const copy = structuredClone(state);
+      for (const card of Object.values(copy.planBook.cards)) card.mastery = value;
+      return playEvent(copy).result.games[0].chance;
+    };
+    expect(withMastery(100)).toBeGreaterThan(withMastery(40));
+    expect(withMastery(40)).toBe(withMastery(10));
   });
 });

@@ -5,7 +5,7 @@
 
 import { createRng } from './ryuo-random.mjs';
 import {
-  APTITUDE_KEYS, DISCIPLES, ELO_PER_LEVEL, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
+  APTITUDE_KEYS, DISCIPLES, ELO_PER_LEVEL, masteryLevelBonus, MOOD_SCALE, REVEAL_AFTER, STAT_KEYS, STAT_LABELS, TRAININGS, addGains, diminish, discipleById, discipleStrength, effectiveLevel,
   failChance, judgeGuess, raiseAptitude, skillById, statRank, trainingById, trainingGains, winChance,
 } from './disciple-strength.mjs';
 import { MAX_SKILLS, cardById, lessonDeck, lessonHands, newSkills, scoreLesson, skillProgress } from './disciple-lesson.mjs';
@@ -375,13 +375,16 @@ export function chooseAction(state, action) {
     if (!card) return { state, result: { kind: 'none', text: '' } };
     const scale = MOOD_SCALE[clamp(Math.round(next.mood), -2, 2)] ?? 1;
     const gain = notePlanGames(next.planBook, card.id, { gain: Math.round(RESEARCH.mastery * scale) });
+    // 作戦の勉強なので、作戦の能力値も少し伸びる(稽古の主な伸びの半分ほど。49-15)。
+    const gains = { plan: Math.round(RESEARCH.plan * scale * diminish(next.stats.plan) * (next.aims.plan?.boost ?? 1)) };
+    next.stats = addGains(next.stats, gains);
     next.stamina = clamp(next.stamina - RESEARCH.stamina, 0, 100);
     next.researchCount = (next.researchCount ?? 0) + 1;
     const now = next.planBook.cards[card.id].mastery;
     // 師匠(あなた)の棋譜を並べる(49-9のF5)。同じ作戦・飛車の向きの対局から研究ノートに写す。
     const copied = action.master?.length ? masterNotes(next.planBook, card.id, action.master) : { added: 0, games: 0 };
     const master = copied.added ? `。師匠の棋譜${copied.games}局から${copied.added}局面を研究ノートに写した` : '';
-    result = { kind: 'research', card: card.id, gain, copied: copied.added, text: `${card.label}を研究した。熟練度＋${gain}（${now}）${master}` };
+    result = { kind: 'research', card: card.id, gain, gains, copied: copied.added, text: `${card.label}を研究した。熟練度＋${gain}（${now}）・作戦＋${gains.plan}${master}` };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
     const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));
@@ -595,7 +598,7 @@ export const MASTERY_GAIN = Object.freeze({ game: 1, study: 5 });
  * 自己対局では、熟練度40どうしに比べ、熟練度70で勝率+13点(64局)・100で+14点(32局)。誤差は大きい(49-12)。
  * 局面の定跡ファイル(研究ノート)は強さにほとんど効かなかった(49-11)。
  */
-export const RESEARCH = Object.freeze({ mastery: 8, stamina: 12 });
+export const RESEARCH = Object.freeze({ mastery: 12, plan: 14, stamina: 10 });
 /** 棋譜並べを何回するごとに新しい作戦を覚えられるか、研究会で奇襲を教わる見込み(35-12。初期値)。 */
 export const PLAN_STUDY_EVERY = 2;
 export const STUDY_SURPRISE_CHANCE = 0.25;
@@ -675,7 +678,9 @@ function dayPlan(next, plan) {
 export function playEvent(state, options = {}) {
   const kind = turnKind(state);
   const today = kind === 'exam' || kind === 'reikai' ? dayPlan(prepareDay(state), options.plan ?? null) : null;
-  const played = playEventInner(withRivalStyle(state, today), options);
+  // その日の作戦の熟練度(研究で上がる)を、観戦しない局の強さに足す(49-15)。
+  const masteryPlus = today?.card ? masteryLevelBonus(today.book.cards[today.card.id]?.mastery ?? 0) : 0;
+  const played = playEventInner(withRivalStyle(state, today), { ...options, masteryPlus });
   const games = played.result?.games?.length ?? 0;
   if (!games) return played;
   const next = structuredClone(played.state);
@@ -739,8 +744,8 @@ function noteRivalDay(next, games, today, { entries = null } = {}) {
   return news;
 }
 
-function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null } = {}) {
-  if (state.shoreikai) return playShoreikaiEvent(state, { plan, forced, watchedMin, charm });
+function playEventInner(state, { plan = null, forced = [], watchedMin = null, charm = null, masteryPlus = 0 } = {}) {
+  if (state.shoreikai) return playShoreikaiEvent(state, { plan, forced, watchedMin, charm, masteryPlus });
   const kind = turnKind(state);
   if (kind !== 'exam' && kind !== 'reikai') return { state, result: { kind: 'reikai', games: [], wins: 0, losses: 0, text: '', events: [] } };
   const next = ensureKenshukai(structuredClone(state));
@@ -770,7 +775,8 @@ function playEventInner(state, { plan = null, forced = [], watchedMin = null, ch
     const charmed = withCharm(next, charmUsed);
     const strength = currentStrength(charmed, { battle, time: 'fast' });
     const fit = big && plan ? planFit(charmed, plan, { level }).bonus : 0;
-    const chance = clamp(winChance(effectiveLevel(strength), level) + fit, 0.03, 0.97);
+    // その日の作戦の熟練度の分も足す(観戦しない局。49-15)。
+    const chance = clamp(winChance(effectiveLevel(strength) + masteryPlus, level) + fit, 0.03, 0.97);
     // 観戦した局は、エンジンが盤の上で決めた勝ち負け(19-6)。乱数は同じだけ進める(観戦してもしなくても、あとの局は同じ)。
     const roll = rng.next();
     const watched = games.length < forced.length;
@@ -904,7 +910,7 @@ const SHOREIKAI_MILESTONES = Object.freeze({ shodan: SHODAN, sandan: SANDAN });
  * @param {any} state
  * @param {{ plan?: { opening?: string, ending?: string } | null, forced?: boolean[], watchedMin?: number | null, charm?: string | null }} options
  */
-function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null, charm = null }) {
+function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null, charm = null, masteryPlus = 0 }) {
   const next = structuredClone(state);
   const rng = createRng(next.rng);
   const big = isBigEvent(state);
@@ -933,7 +939,8 @@ function playShoreikaiEvent(state, { plan = null, forced = [], watchedMin = null
     // 三段リーグは長い持ち時間ではないが、1局の重みが大きい(大一番の作戦が効く)。
     const strength = currentStrength(charmed, { battle, time: 'fast' });
     const fit = big && plan ? planFit(charmed, plan, { level }).bonus : 0;
-    const chance = clamp(winChance(effectiveLevel(strength), level) + fit, 0.03, 0.97);
+    // その日の作戦の熟練度の分も足す(観戦しない局。49-15)。
+    const chance = clamp(winChance(effectiveLevel(strength) + masteryPlus, level) + fit, 0.03, 0.97);
     const roll = rng.next();
     const watched = games.length < forced.length;
     const win = watched ? Boolean(forced[games.length]) : roll < chance;

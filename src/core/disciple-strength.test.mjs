@@ -252,3 +252,14 @@ describe('対局の1手ごとの設定(22章)', () => {
     expect(discipleSelfplaySettings('L30')).toBeNull();
   });
 });
+
+describe('熟練度の強さ(49-15)', () => {
+  it('熟練度40までは足さず、70で+2Lv、100で+2.5Lv', async () => {
+    const { masteryLevelBonus, MASTERY_LEVEL } = await import('./disciple-strength.mjs');
+    expect(masteryLevelBonus(0)).toBe(0);
+    expect(masteryLevelBonus(MASTERY_LEVEL.base)).toBe(0);
+    expect(masteryLevelBonus(55)).toBe(1);
+    expect(masteryLevelBonus(70)).toBe(2);
+    expect(masteryLevelBonus(100)).toBe(2.5);
+  });
+});

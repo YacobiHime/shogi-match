@@ -333,7 +333,8 @@
         <!-- 研究(49章): 作戦帳の1枚を選び、その作戦の熟練度を上げる。能力値は伸びない。 -->
         <section v-if="researching" class="disciple__panel disciple__picked" data-disciple-preview data-disciple-research-preview>
           <b>研究<em>作戦の熟練度</em></b>
-          <small>定跡のあと、研究してきた手で指せる手数が増える</small>
+          <small>定跡のあと、研究してきた手で指せる手数が増える。作戦の能力も少し伸びる</small>
+          <span v-if="(researchRow?.mastery ?? 0) >= 80" class="disciple__extra" data-disciple-research-enough>この作戦はもう十分に研究している。熟練度は対局でも上がる</span>
           <span class="disciple__risk">{{ researchRow?.label }}　熟練度 {{ researchRow?.mastery }}→<i>{{ Math.min(100, (researchRow?.mastery ?? 0) + researchGain) }}</i>・体力 <b>−{{ RESEARCH.stamina }}</b></span>
           <span v-if="masterCount" class="disciple__extra" data-disciple-research-master>師匠の棋譜 {{ masterCount }}局も並べる（研究ノートに写す）</span>
           <div class="disciple__research-cards">
@@ -882,7 +883,12 @@ const training = ref(false);
 const selectedId = ref("tsume");
 const choice = ref("steady");
 const selected = computed(() => view.value?.trainings.find((item) => item.id === selectedId.value) ?? null);
-const previewGains = computed<Record<string, number>>(() => (training.value && selected.value && !researching.value ? selected.value.gains : {}));
+const previewGains = computed<Record<string, number>>(() => {
+  if (!training.value) return {};
+  // 研究は作戦の能力が少し伸びる(見込み。やる気だけ掛ける。49-15)。
+  if (researching.value) return { plan: Math.round(RESEARCH.plan * ((MOOD_SCALE as Record<string, number>)[String(Math.round(view.value?.mood ?? 0))] ?? 1)) };
+  return selected.value ? selected.value.gains : {};
+});
 const friendName = (id: string) => view.value?.friends.find((friend: { id: string }) => friend.id === id)?.name ?? "";
 function openTraining() {
   training.value = true;
