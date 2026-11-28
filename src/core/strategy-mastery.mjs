@@ -77,6 +77,28 @@ export function masteryForLevel(level) {
   return clamp(Math.round(((Number(level) || 12) - 12) / 37 * 80), 0, 80);
 }
 
+/** 得意戦法の順で熟練度に掛ける割合のいちばん低いところ(いちばんよく指す戦法は1倍。docs/disciple-mode-design.mdの45章)。 */
+export const STYLE_MASTERY_FLOOR = 0.55;
+
+/**
+ * 相手の、その戦法の熟練度。Lvの熟練度(masteryForLevel)に、その戦法をどれだけ指すか(使用率の、いちばん多い戦法との比)を掛ける。
+ * よく指す戦法ほど研究が深い。使用率がない・その戦法がないときはLvの熟練度のまま。
+ * @param {number} level
+ * @param {{ black?: Record<string, number>, white?: Record<string, number> } | null | undefined} usage 得意戦法の使用率(repertoire.usage)
+ * @param {string | null | undefined} openingId
+ */
+export function styleMastery(level, usage, openingId) {
+  const base = masteryForLevel(level);
+  if (!usage || !openingId) return base;
+  const merged = {};
+  for (const table of [usage.black ?? {}, usage.white ?? {}]) {
+    for (const [id, value] of Object.entries(table)) merged[id] = (merged[id] ?? 0) + (Number(value) || 0);
+  }
+  const top = Math.max(0, ...Object.values(merged));
+  if (!(top > 0) || !(openingId in merged)) return base;
+  return Math.round(base * (STYLE_MASTERY_FLOOR + (1 - STYLE_MASTERY_FLOOR) * (merged[openingId] / top)));
+}
+
 /** 弟子のはじめの熟練度(戦法の適性の段から。A=40・B=30・C=20…G=0)。 */
 export function startingMastery(rank) {
   return { A: 40, B: 30, C: 20, D: 15, E: 10, F: 5, G: 0 }[rank] ?? 20;

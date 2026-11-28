@@ -86,8 +86,8 @@
           <b>{{ view.calendar.label }}</b><small>{{ view.calendar.sub }}</small>
         </div>
         <div class="disciple__goal">
-          <div><small>次の目標</small><b>{{ view.goal.text }}</b></div>
-          <div v-if="view.goal.left" class="disciple__left">あと<b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
+          <div :title="`次の目標 ${view.goal.text}`"><small>次の目標</small><b>{{ view.goal.text }}</b></div>
+          <div v-if="view.goal.left" class="disciple__left"><span class="disciple__left-pre">あと</span><b>{{ view.goal.left }}</b>{{ view.goal.unit ?? 'ターン' }}</div>
         </div>
         <!-- 会の画面(36-5)。はじめての例会の朝の場面を見るまでは出さない(36-6)。 -->
         <button v-if="society && societyShown" type="button" class="disciple__menu-btn disciple__menu-btn--text disciple__menu-btn--society" data-disciple-society-open @click="openSociety()">{{ society.title }}</button>
@@ -557,6 +557,27 @@
             <!-- やこびノートの棋士名鑑と同じ部品(レーダーチャートとランク・型・得意戦法の使用率)。44章。 -->
             <PlayerAbilityPanel class="disciple__member-ability" :view="selectedMember.ability" :chart-max="STAT_MAX"
               :compare="memberCompare" :own-label="selectedMember.name" />
+            <!-- スキルと戦法熟練度(45章)。熟練度は得意戦法ごとの横棒(羽音の弟子は作戦帳の熟練度)。 -->
+            <div class="disciple__member-extra" data-disciple-member-skills>
+              <h6>スキル</h6>
+              <ul v-if="selectedMember.skills.length" class="disciple__member-skills">
+                <li v-for="id in selectedMember.skills" :key="id">
+                  <b>{{ skillById(id)?.name }}<span class="disciple__member-star">{{ '★'.repeat(skillById(id)?.star ?? 0) }}</span></b>
+                  <small>{{ skillById(id)?.when }}：{{ skillById(id)?.text }}</small>
+                </li>
+              </ul>
+              <p v-else class="disciple__muted">まだない</p>
+            </div>
+            <div v-if="selectedMember.mastery.length" class="disciple__member-extra" data-disciple-member-mastery>
+              <h6>戦法熟練度</h6>
+              <ul class="disciple__member-mastery">
+                <li v-for="row in selectedMember.mastery" :key="row.id">
+                  <span class="disciple__member-mastery-label">{{ row.label }}</span>
+                  <span class="disciple__member-mastery-bar" aria-hidden="true"><i :style="{ width: `${Math.max(2, (row.value / MEMBER_MASTERY_MAX) * 100)}%` }"></i></span>
+                  <span class="disciple__member-mastery-num">{{ row.value }}</span>
+                </li>
+              </ul>
+            </div>
             <dl class="disciple__member-profile">
               <div><dt>得意戦法</dt><dd>{{ selectedMember.repertoire || '—' }}</dd></div>
               <div v-if="selectedMember.style"><dt>最近の作戦</dt><dd>{{ selectedMember.style }}</dd></div>
@@ -628,7 +649,7 @@ import { DISCIPLE_SLOT_TEXT as SLOT_TEXT, deleteDiscipleSlot, discipleSlotCards,
 import { STANDARD_SFEN } from "./game-state";
 import ShoreikaiNameboard from "./ShoreikaiNameboard.vue";
 import PlayerAbilityPanel from "./PlayerAbilityPanel.vue";
-import { memberAbilities, societyView, systemCardsOf } from "./core/disciple-society.mjs";
+import { MEMBER_MASTERY_MAX, memberMakeup, societyView, systemCardsOf } from "./core/disciple-society.mjs";
 import {
   APTITUDE_KEYS, APTITUDE_LABELS, CAUSES, DISCIPLES, PLAY_STYLES, STAT_KEYS, STAT_LABELS, STAT_MAX, moverOfPly, skillById, statRank,
 } from "./core/disciple-strength.mjs";
@@ -847,7 +868,7 @@ const memberCompare = computed(() => (state.value?.stats ? {
 /** 例会の札の、相手の4つの能力(弟子と並べる)。 */
 const opponentStats = computed(() => {
   const opponent = view.value?.opponent;
-  return opponent?.id && Number.isFinite(opponent.level) ? memberAbilities(opponent.id, opponent.level) : [];
+  return opponent?.id && Number.isFinite(opponent.level) ? memberMakeup(opponent.id, opponent.level).abilities : [];
 });
 function openSociety(tab: SocietyTab = "board") {
   societyTab.value = tab;
@@ -1528,7 +1549,7 @@ defineExpose({ goBack });
 
 <style>
 .shogi-game .disciple {
-  --ink: #1d2a36; --accent: #f1a54c; --accent-ink: #5a3410; --muted: #6b7a88; --panel: rgba(255, 252, 244, 0.93); --line: rgba(29, 42, 54, 0.14);
+  --ink: #1d2a36; --accent: #f1a54c; --accent-ink: #5a3410; --muted: #6b7a88; --panel: rgba(255, 252, 244, 0.93); --panel-solid: #fffcf4; --line: rgba(29, 42, 54, 0.14);
   position: absolute; inset: 0; z-index: 6; overflow: hidden; color: var(--ink);
   background: linear-gradient(180deg, #f6e7c9, #dcebf2 70%, #c9dccf);
 }
@@ -1549,17 +1570,20 @@ defineExpose({ goBack });
 .shogi-game .disciple__figure--bounce { animation: disciple-bounce 0.5s ease; }
 @keyframes disciple-bounce { 30% { transform: translateX(-50%) translateY(-10px); } 60% { transform: translateX(-50%) translateY(0); } }
 
-.shogi-game .disciple__top { position: absolute; z-index: 5; top: 0.6rem; left: 0.6rem; right: 0.6rem; display: flex; gap: 0.5rem; align-items: stretch; }
+.shogi-game .disciple__top { position: absolute; z-index: 5; top: 0.6rem; left: 0.6rem; right: 0.6rem; display: flex; gap: 0.5rem; align-items: stretch; height: 3.6rem; }
+/* 上の帯は高さを決めておく(左右の札は決まった位置にあり、帯が文字の折り返しで伸びると重なるため。46章)。 */
+.shogi-game .disciple__top--pick { height: auto; }
 .shogi-game .disciple__top--pick { right: auto; align-items: center; }
 .shogi-game .disciple__title { padding: 0.35rem 0.9rem; border-radius: 0.6rem; background: var(--panel); }
 .shogi-game .disciple .disciple__back { min-height: 2.75rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: var(--ink); color: #fff; font-weight: 900; }
-.shogi-game .disciple__turn { display: grid; place-items: center; min-width: 6rem; padding: 0.3rem 0.6rem; border-radius: 0.8rem; background: var(--ink); color: #fff; line-height: 1.15; text-align: center; }
+.shogi-game .disciple__turn { flex: none; overflow: hidden; display: grid; place-items: center; min-width: 6rem; padding: 0.3rem 0.6rem; border-radius: 0.8rem; background: var(--ink); color: #fff; line-height: 1.15; text-align: center; }
 .shogi-game .disciple__turn--big { background: #d8655b; }
 .shogi-game .disciple__turn b { font-size: 1rem; }
 .shogi-game .disciple__turn small { color: #c6d2dc; font-size: 0.66rem; }
-.shogi-game .disciple__goal { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.8rem; border: 2px solid var(--accent); border-radius: 0.8rem; background: var(--panel); }
+.shogi-game .disciple__goal { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.8rem; border: 2px solid var(--accent); border-radius: 0.8rem; background: var(--panel); }
 .shogi-game .disciple__goal small { display: block; color: var(--accent-ink); font-size: 0.68rem; font-weight: 900; }
-.shogi-game .disciple__goal b { font-size: 0.92rem; }
+.shogi-game .disciple__goal > div:first-child { min-width: 0; }
+.shogi-game .disciple__goal b { display: -webkit-box; overflow: hidden; font-size: 0.92rem; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .shogi-game .disciple__left { font-size: 0.72rem; color: var(--muted); text-align: right; }
 .shogi-game .disciple__left b { display: inline-block; margin: 0 0.1rem; color: #d8655b; font-size: 1.25rem; }
 .shogi-game .disciple .disciple__menu-btn { width: 2.8rem; border: 0; border-radius: 0.8rem; background: var(--panel); color: var(--ink); font-size: 1.1rem; font-weight: 900; }
@@ -1591,7 +1615,7 @@ defineExpose({ goBack });
 .shogi-game .disciple__apt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.2rem; }
 .shogi-game .disciple__apt span { display: flex; justify-content: space-between; padding: 0.1rem 0.3rem; border-radius: 0.35rem; background: #f3eee2; font-size: 0.66rem; font-weight: 800; }
 .shogi-game .disciple__apt b { color: var(--accent-ink); }
-.shogi-game .disciple__say { position: absolute; z-index: 6; left: 50%; top: 30%; transform: translateX(-125%); max-width: 14rem; margin: 0; padding: 0.55rem 0.8rem; border-radius: 1rem 1rem 0.2rem 1rem; background: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); font-size: 0.86rem; font-weight: 700; }
+.shogi-game .disciple__say { position: absolute; z-index: 4; left: 50%; top: 30%; transform: translateX(-125%); max-width: 14rem; margin: 0; padding: 0.55rem 0.8rem; border-radius: 1rem 1rem 0.2rem 1rem; background: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); font-size: 0.86rem; font-weight: 700; }
 
 .shogi-game .disciple__dock { position: absolute; z-index: 5; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; }
 .shogi-game .disciple__dock--train { grid-template-columns: repeat(5, minmax(0, 1fr)); }
@@ -1623,7 +1647,7 @@ defineExpose({ goBack });
 .shogi-game .disciple .disciple__btn { flex: 1; min-height: 2.9rem; border: 0; border-radius: 0.8rem; background: #e9e2d2; color: var(--ink); font-weight: 900; }
 .shogi-game .disciple .disciple__btn--main { background: var(--accent); color: #fff; box-shadow: 0 3px 0 #b86f22; }
 
-.shogi-game .disciple__sheet { left: 50%; bottom: 0.6rem; transform: translateX(-50%); width: min(34rem, calc(100% - 1.2rem)); max-height: calc(100% - 6rem); overflow-y: auto; }
+.shogi-game .disciple__sheet { z-index: 7; background: var(--panel-solid); left: 50%; bottom: 0.6rem; transform: translateX(-50%); width: min(34rem, calc(100% - 1.2rem)); max-height: calc(100% - 6rem); overflow-y: auto; }
 .shogi-game .disciple__sheet h3 { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.3rem; font-size: 1rem; }
 .shogi-game .disciple__bigtag { padding: 0.05rem 0.5rem; border-radius: 999px; background: #d8655b; color: #fff; font-size: 0.7rem; }
 .shogi-game .disciple__choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
@@ -1756,6 +1780,19 @@ defineExpose({ goBack });
 .shogi-game .disciple__member-ability .player-ability__type { color: #b8641c; }
 .shogi-game .disciple__member-ability .player-ability__usage-bar { background: rgba(29, 48, 63, 0.12); }
 .shogi-game .disciple__member-ability .player-ability__usage-note { color: #5d6b78; }
+.shogi-game .disciple__member-extra { display: grid; gap: 0.25rem; }
+.shogi-game .disciple__member-extra h6 { margin: 0.2rem 0 0; color: #5d6b78; font-size: 0.8rem; }
+.shogi-game .disciple__member-skills { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .disciple__member-skills li { display: grid; gap: 0.05rem; padding: 0.3rem 0.5rem; border-radius: 0.5rem; background: rgba(241, 165, 76, 0.12); }
+.shogi-game .disciple__member-skills b { font-size: 0.85rem; }
+.shogi-game .disciple__member-star { margin-left: 0.25em; color: #d9822b; font-size: 0.75rem; }
+.shogi-game .disciple__member-skills small { color: #5d6b78; font-size: 0.72rem; line-height: 1.4; }
+.shogi-game .disciple__member-mastery { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.shogi-game .disciple__member-mastery li { display: grid; grid-template-columns: minmax(0, 9.5em) minmax(3rem, 1fr) 2.2em; align-items: center; gap: 0.5rem; }
+.shogi-game .disciple__member-mastery-label { overflow: hidden; font-size: 0.82rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.shogi-game .disciple__member-mastery-bar { display: block; height: 0.55rem; overflow: hidden; border-radius: 999px; background: rgba(29, 48, 63, 0.12); }
+.shogi-game .disciple__member-mastery-bar i { display: block; height: 100%; border-radius: 999px; background: #d9822b; }
+.shogi-game .disciple__member-mastery-num { font-size: 0.8rem; font-variant-numeric: tabular-nums; text-align: right; }
 .shogi-game .disciple__member-profile { display: grid; gap: 0.2rem; margin: 0; font-size: 0.85rem; }
 .shogi-game .disciple__member-profile div { display: grid; grid-template-columns: 6em minmax(0, 1fr); gap: 0.5rem; }
 .shogi-game .disciple__member-profile dt { color: #5d6b78; font-weight: 700; }
@@ -1785,7 +1822,7 @@ defineExpose({ goBack });
 .shogi-game .disciple__versus-them { display: flex; align-items: center; gap: 0.3rem; }
 .shogi-game .disciple__versus-name { text-align: center; color: var(--muted); font-weight: 800; }
 .shogi-game .disciple__versus b { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 0.3rem; color: #fff; font-size: 0.7rem; }
-.shogi-game .disciple__skills { left: 50%; top: 4.4rem; z-index: 7; transform: translateX(-50%); width: min(24rem, calc(100% - 1.2rem)); max-height: calc(100% - 12rem); overflow-y: auto; }
+.shogi-game .disciple__skills { background: var(--panel-solid); left: 50%; top: 4.4rem; z-index: 7; transform: translateX(-50%); width: min(24rem, calc(100% - 1.2rem)); max-height: calc(100% - 12rem); overflow-y: auto; }
 .shogi-game .disciple__skills h4 { display: flex; align-items: center; justify-content: space-between; margin: 0 0 0.3rem; font-size: 0.9rem; }
 /* 札を閉じる丸いボタン。全体のボタンの書式(最低の高さ44px・余白)に負けて縦長の楕円になっていたので、
    大きさと余白をここで決め直す(押せる大きさは44px。U:7-4 操作しやすさ)。 */
@@ -1929,11 +1966,13 @@ defineExpose({ goBack });
 /* スマホ縦: 立ち絵は真ん中のまま、UIを上下に寄せる(18章) */
 @media (max-width: 640px) {
   .shogi-game .disciple__figure { top: 9%; height: 118%; }
-  .shogi-game .disciple__top { top: 0.4rem; left: 0.4rem; right: 0.4rem; }
+  .shogi-game .disciple__top { top: 0.4rem; left: 0.4rem; right: 0.4rem; height: 3.2rem; }
   .shogi-game .disciple__turn { min-width: 4.6rem; }
   .shogi-game .disciple__turn b { font-size: 0.86rem; }
   .shogi-game .disciple__goal { gap: 0.3rem; padding: 0.25rem 0.45rem; }
-  .shogi-game .disciple__goal b { font-size: 0.74rem; }
+  .shogi-game .disciple__goal b { font-size: 0.72rem; line-height: 1.15; }
+  .shogi-game .disciple__goal small { font-size: 0.6rem; }
+  .shogi-game .disciple__turn small { font-size: 0.6rem; }
   .shogi-game .disciple__left { flex: none; white-space: nowrap; font-size: 0.64rem; }
   .shogi-game .disciple__left b { font-size: 1.05rem; }
   .shogi-game .disciple .disciple__menu-btn { width: 2.3rem; }
@@ -1972,5 +2011,14 @@ defineExpose({ goBack });
   .shogi-game .disciple__watch-head small { display: none; }
   .shogi-game .disciple__watch-board { height: min(64vh, calc((100vw - 0.8rem) * 1.285)); }
   .shogi-game .disciple__graph { height: 5.5rem; }
+}
+/* 狭いスマホ(ボタンが4つ並ぶと目標の欄が細くなる): 見出しの「次の目標」と「あと」を省き、ボタンを詰める(46章)。 */
+@media (max-width: 420px) {
+  .shogi-game .disciple__goal small, .shogi-game .disciple__left-pre { display: none; }
+  .shogi-game .disciple__goal { padding: 0.2rem 0.35rem; }
+  .shogi-game .disciple__turn { min-width: 3.9rem; padding: 0.2rem 0.3rem; }
+  .shogi-game .disciple__top { gap: 0.3rem; }
+  .shogi-game .disciple .disciple__menu-btn { width: 2rem; }
+  .shogi-game .disciple .disciple__menu-btn--text { padding: 0 0.25rem; font-size: 0.64rem; letter-spacing: -0.04em; }
 }
 </style>

@@ -2,7 +2,10 @@
 // 名札掛け・対戦表(次の例会と前回の例会)・会員(弟子と同じ4つの能力)・規定(昇級の規定と進み・降級点・手合い・年齢制限・三段リーグ)。
 // 画面と保存の仕組みに依存しない。会員の能力は保存せず、会員のidとLvから毎回同じものを作る。
 
-import { STAT_KEYS, STAT_LABELS, STAT_MAX, STAT_LEVEL_MAX, STAT_LEVEL_MIN, overallLevel, statRank } from './disciple-strength.mjs';
+import { SKILLS, SKILL_LEVEL_PLUS, STAT_KEYS, STAT_LABELS, STAT_MAX, STAT_LEVEL_MAX, STAT_LEVEL_MIN, overallLevel, statRank } from './disciple-strength.mjs';
+import { MASTERY_MAX, styleMastery } from './strategy-mastery.mjs';
+import { rivalBook } from './disciple-rival.mjs';
+import { planCard } from './disciple-plans.mjs';
 import { HANDICAP_LABELS, TOP, classLabel, describeKenshukai, nameboard as kenshukaiBoard, shidoHandicap } from './kenshukai.mjs';
 import { AGE_LIMIT, SANDAN, describeShoreikai, nameboard as shoreikaiBoard, rankLabel } from './shoreikai.mjs';
 import { opponentLevel, shoreikaiOpponentLevel, discipleAgeMonths, pendingTeaiText } from './disciple-run.mjs';
@@ -80,6 +83,62 @@ export function memberAbilityPanel(member, abilities) {
     openings: usageRows(usage).slice(0, 6).map((row) => ({ ...row, record: '' })),
   };
 }
+
+/** 会員が持つスキルの候補(育成・大一番・藤井曲線は弟子だけのもの。45章)。 */
+const MEMBER_SKILL_POOL = Object.freeze(SKILLS.filter(({ id }) => !['fujii-curve', 'unbroken', 'big-stage'].includes(id)));
+/** スキルの数が増えるLv(この上で1つ、その上で2つ)。 */
+export const MEMBER_SKILL_LEVELS = Object.freeze({ one: 22, two: 34 });
+
+/**
+ * 会員のスキル(45章)。idとLvから毎回同じものを作る。Lvが高いほど多く、★の多いものも持つ。
+ * @param {string} id
+ * @param {number} level
+ * @returns {string[]}
+ */
+export function memberSkills(id, level) {
+  const hash = hashOf(`${id}:skill`);
+  const count = level >= MEMBER_SKILL_LEVELS.two ? 2 : level >= MEMBER_SKILL_LEVELS.one ? 1 : hash % 3 === 0 ? 1 : 0;
+  const maxStar = level >= MEMBER_SKILL_LEVELS.two ? 3 : 2;
+  // 会員ごとに決まった順に並べ、先頭から取る。
+  return MEMBER_SKILL_POOL.filter(({ star }) => star <= maxStar)
+    .map(({ id: skill }) => ({ skill, key: hashOf(`${id}:${skill}`) }))
+    .sort((a, b) => a.key - b.key)
+    .slice(0, count)
+    .map(({ skill }) => skill);
+}
+
+/**
+ * 会員の強さの中身(45章): スキルと4つの能力。全体の強さ(観戦しない局のLv)は今までのLvのまま変えず、
+ * いつも効くスキル(SKILL_LEVEL_PLUS)のぶんだけ能力を下げて作る(強さ＝能力＋スキル。弟子のeffectiveLevelと同じ数え方)。
+ * @param {string} id
+ * @param {number} level
+ */
+export function memberMakeup(id, level) {
+  const skills = memberSkills(id, level);
+  const plus = skills.reduce((sum, skill) => sum + (SKILL_LEVEL_PLUS[skill] ?? 0), 0);
+  return { skills, abilities: memberAbilities(id, Math.max(STAT_LEVEL_MIN, level - plus)) };
+}
+
+/**
+ * 会員の得意戦法ごとの熟練度(45章。観戦の対局で、その戦法を指すときの熟練度と同じ値)。羽音の弟子は作戦帳の熟練度。
+ * @param {any} member
+ * @param {number} level
+ * @param {any} [rival] 弟子の記録のrival(羽音の弟子の作戦帳)
+ * @returns {{ id: string, label: string, value: number }[]}
+ */
+export function memberMasteryRows(member, level, rival = null) {
+  if (member?.rival) {
+    return Object.entries(rivalBook(rival).cards ?? {})
+      .map(([id, card]) => ({ id, label: planCard(id)?.label ?? id, value: Math.round(card?.mastery ?? 0) }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3);
+  }
+  const usage = member?.repertoire?.usage ?? null;
+  return usageRows(usage).slice(0, 3).map((row) => ({ id: row.id, label: row.label, value: styleMastery(level, usage, row.id) }));
+}
+
+/** 熟練度の上限(横棒の長さ)。 */
+export const MEMBER_MASTERY_MAX = MASTERY_MAX;
 
 /** いまの所属の会(研修会・奨励会・三段リーグ)。会の画面がないときはnull。 */
 export function societyRun(state) {
@@ -202,8 +261,15 @@ function membersView(state, kind, run) {
       rival: Boolean(member.rival),
       style: member.style?.label ?? '',
       repertoire: member.repertoire ? repertoireText(member.repertoire) : member.style?.label ?? '',
-      abilities: memberAbilities(member.id, level),
-      ability: memberAbilityPanel(member, memberAbilities(member.id, level)),
+      ...(() => {
+        const makeup = memberMakeup(member.id, level);
+        return {
+          abilities: makeup.abilities,
+          ability: memberAbilityPanel(member, makeup.abilities),
+          skills: makeup.skills,
+          mastery: memberMasteryRows(member, level, state.rival),
+        };
+      })(),
       near: Math.abs(rank - myRank),
     });
   }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { STAT_KEYS, overallLevel } from './disciple-strength.mjs';
 import { createDiscipleRun, chooseAction, playEvent, turnKind, chooseWords, pendingOpponentLevel, opponentLevel, eventOpponent, watchSpec } from './disciple-run.mjs';
-import { STAT_HINTS, memberAbilities, memberAbilityPanel, societyView } from './disciple-society.mjs';
+import { MEMBER_SKILL_LEVELS, STAT_HINTS, memberAbilities, memberAbilityPanel, memberMakeup, memberMasteryRows, memberSkills, societyView } from './disciple-society.mjs';
+import { SKILL_LEVEL_PLUS } from './disciple-strength.mjs';
+import { masteryForLevel, styleMastery } from './strategy-mastery.mjs';
 import { nextTeai, teaiRule, teaiRatingBonus, TEAI_RATING } from './teai.mjs';
 
 /** 弟子を進める(研修会の例会を結果だけで)。untilが真になるまで。 */
@@ -107,6 +109,9 @@ describe('会の画面(36-5)', () => {
     expect(card.ability.openings.length).toBeGreaterThan(0);
     expect(card.ability.openings.reduce((sum, row) => sum + row.share, 0)).toBeGreaterThan(90);
     expect(card.repertoire).toBeTruthy();
+    expect(Array.isArray(card.skills)).toBe(true);
+    expect(card.mastery.length).toBeGreaterThan(0);
+    expect(card.mastery.every((row) => row.value >= 0 && row.value <= 100)).toBe(true);
     expect(view.rules.rule).toMatch(/連勝/);
     expect(view.rules.teai).toHaveLength(3);
   });
@@ -117,6 +122,33 @@ describe('会の画面(36-5)', () => {
     const spiky = flat.map((row) => (row.key === 'mate' ? { ...row, value: 950 } : row.key === 'plan' ? { ...row, value: 500 } : row));
     expect(memberAbilityPanel(null, spiky).type).toBe('詰みが得意・作戦が苦手');
     expect(memberAbilityPanel(null, flat).abilities.every((row) => row.hint === STAT_HINTS[row.key])).toBe(true);
+  });
+
+  it('会員のスキル: Lvで数が増え、毎回同じ。強さ(能力＋いつも効くスキル)はLvのまま(45章)', () => {
+    expect(memberSkills('k3', MEMBER_SKILL_LEVELS.two)).toHaveLength(2);
+    expect(memberSkills('k3', MEMBER_SKILL_LEVELS.one)).toHaveLength(1);
+    expect(memberSkills('k3', 40)).toEqual(memberSkills('k3', 40));
+    expect(memberSkills('k3', 40)).not.toContain('fujii-curve');
+    for (const id of ['k1', 'k7', 's4', 'rival-x']) {
+      for (const level of [24, 36, 44]) {
+        const { skills, abilities } = memberMakeup(id, level);
+        const plus = skills.reduce((sum, skill) => sum + (SKILL_LEVEL_PLUS[skill] ?? 0), 0);
+        const stats = Object.fromEntries(abilities.map((row) => [row.key, row.value]));
+        expect(Math.abs(overallLevel(stats) + plus - level)).toBeLessThan(0.7);
+      }
+    }
+  });
+
+  it('戦法熟練度: よく指す戦法ほど高く、いちばんよく指す戦法はLvの熟練度(45章)', () => {
+    const usage = { black: { a: 60, b: 30 }, white: { a: 60, b: 10 } };
+    expect(styleMastery(40, usage, 'a')).toBe(masteryForLevel(40));
+    expect(styleMastery(40, usage, 'b')).toBeLessThan(masteryForLevel(40));
+    expect(styleMastery(40, usage, 'b')).toBeGreaterThanOrEqual(Math.round(masteryForLevel(40) * 0.55));
+    expect(styleMastery(40, usage, 'zzz')).toBe(masteryForLevel(40));
+    expect(styleMastery(40, null, 'a')).toBe(masteryForLevel(40));
+    const rows = memberMasteryRows({ repertoire: { usage: { black: { ibisha: 50, shikenbisha: 50 }, white: { ibisha: 80, shikenbisha: 20 } } } }, 30);
+    expect(rows.length).toBe(2);
+    expect(rows[0].value).toBeGreaterThanOrEqual(rows[1].value);
   });
 
   it('奨励会: 段級の名札掛けと年齢制限', () => {

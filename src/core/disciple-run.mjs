@@ -15,7 +15,7 @@ import {
   rivalPlanSpec, rivalStyle, syncRival,
 } from './disciple-rival.mjs';
 import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-causes.mjs';
-import { masteryForLevel, startingMastery } from './strategy-mastery.mjs';
+import { startingMastery, styleMastery } from './strategy-mastery.mjs';
 import {
   battleKey, bookChainSteps, bookChoices, bookHeadline, bookRows, chooseBookCard, createPlanBook, learnCard, noteSeen, notePlanGames, offerLearn,
   noteResearch, opponentPlanSpec, planCard, planSpec, researchNotes, surpriseToLearn, unlockChain,
@@ -1018,7 +1018,8 @@ export function watchSpec(state, { plan = null, charm = null } = {}) {
     // 羽音の弟子は作戦帳の熟練度と研究メモで指す(35-14)。
     reason: rivalPick
       ? { levels: opponentLevels, mastery: rivalBook(next.rival).cards[rivalPick.id]?.mastery ?? 0, notes: researchNotes(rivalBook(next.rival), rivalPick.id), era: 'reiwa' }
-      : { levels: opponentLevels, mastery: masteryForLevel(level), era: member.repertoire?.era ?? null },
+      // 研修会員・奨励会員は、その局の戦法をよく指すほど研究が深い(45章。会の画面の会員の札の戦法熟練度と同じ値)。
+      : { levels: opponentLevels, mastery: styleMastery(level, member.repertoire?.usage, opponentStyle?.opening ?? null), era: member.repertoire?.era ?? null },
   };
   const timeRule = /** @type {NonNullable<ReturnType<typeof discipleTimeRule>>} */ (discipleTimeRule({ event: eventKind, ranks: next.shoreikai ? [next.shoreikai.rank, member.rank] : [] }));
   const spec = {
