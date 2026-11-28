@@ -134,9 +134,82 @@ function defaultSoundEnabled() {
 export type MoveSoundPlayer = {
   /** 音声を先に読み込んでおく。 */
   preload: () => void;
-  /** 鳴らした音声を返す(途中で止めるため)。鳴らさなかったときはnull。 */
+  /** 鳴らした音声を返す(途中で止めるため)。鳴らさなかったとき・Web Audioで鳴らしたときはnull。 */
   play: (kind: SoundKind) => HTMLAudioElement | null;
+  /** Web Audioの音の出口を、人が画面を押した瞬間に開く(webAudioのときだけ意味がある)。 */
+  unlock: () => void;
+  /** 画面を押したときに開く見張りを外す。 */
+  dispose: () => void;
 };
+
+/** 人の操作として数える出来事(Web Audioの出口を開く)。 */
+const UNLOCK_EVENTS = ["pointerdown", "touchend", "keydown"] as const;
+
+/**
+ * Web Audioで駒音を鳴らす部分(docs/disciple-mode-design.mdの47章)。
+ * HTMLの音声は、人が画面を押してからしばらく(数秒)しか鳴らせないブラウザがあり、観戦のように手を触らずに進む画面では
+ * 途中から鳴らなくなる。Web Audioの出口(AudioContext)は、一度押したときに開けば、そのあとは押さなくても鳴らせる。
+ * 音のファイルは最初に読み込んで音の形(AudioBuffer)にしておく。読み終わる前の音はHTMLの音声で鳴らす。
+ */
+function createWebAudioOut(url: (fileName: string) => string) {
+  let context: AudioContext | null = null;
+  const buffers: Partial<Record<SoundKind, AudioBuffer>> = {};
+  let loading = false;
+  const ensure = () => {
+    if (context) return context;
+    const Ctor = typeof window !== "undefined"
+      ? (window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)
+      : undefined;
+    if (!Ctor) return null;
+    try {
+      context = new Ctor();
+    } catch {
+      return null;
+    }
+    return context;
+  };
+  const load = () => {
+    if (loading || typeof fetch === "undefined") return;
+    const ctx = ensure();
+    if (!ctx) return;
+    loading = true;
+    for (const kind of AVAILABLE_SOUNDS) {
+      void fetch(url(SOUND_FILES[kind]))
+        .then((response) => (response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)))))
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buffer) => { buffers[kind] = buffer; })
+        .catch(() => undefined);
+    }
+  };
+  const unlock = () => {
+    const ctx = ensure();
+    if (ctx?.state === "suspended") void ctx.resume().catch(() => undefined);
+    load();
+  };
+  /** 鳴らせたら真。出口が閉じている・音の形がまだないときは偽(HTMLの音声で鳴らす)。 */
+  const play = (kind: SoundKind, volume: number) => {
+    const buffer = buffers[kind];
+    if (!context || !buffer || context.state !== "running") return false;
+    try {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      const gain = context.createGain();
+      gain.gain.value = volume;
+      source.connect(gain);
+      gain.connect(context.destination);
+      source.start();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const listen = () => {
+    if (typeof window === "undefined") return () => undefined;
+    for (const type of UNLOCK_EVENTS) window.addEventListener(type, unlock, { capture: true, passive: true });
+    return () => { for (const type of UNLOCK_EVENTS) window.removeEventListener(type, unlock, { capture: true }); };
+  };
+  return { unlock, play, load, listen };
+}
 
 /**
  * 効果音の再生。連続して指しても重ねて鳴らせるよう、読み込んだ音声を複製して再生する。
@@ -144,10 +217,13 @@ export type MoveSoundPlayer = {
  */
 export function createMoveSoundPlayer(
   assetBaseUrl: () => string,
-  { enabled = defaultSoundEnabled }: { enabled?: () => boolean } = {},
+  { enabled = defaultSoundEnabled, webAudio = false }: { enabled?: () => boolean; webAudio?: boolean } = {},
 ): MoveSoundPlayer {
   let templates: Partial<Record<SoundKind, HTMLAudioElement>> | null = null;
   const url = (fileName: string) => `${assetBaseUrl().replace(/\/$/, "")}/audio/${fileName}`;
+  // webAudio: 手を触らずに進む画面(観戦)で、押してから時間がたっても鳴らせるよう、Web Audioで鳴らす。
+  const out = webAudio ? createWebAudioOut(url) : null;
+  const stopListening = out ? out.listen() : () => undefined;
   const preload = () => {
     if (templates || typeof Audio === "undefined") return;
     templates = {};
@@ -162,6 +238,7 @@ export function createMoveSoundPlayer(
     if (!enabled()) return null;
     const resolved = resolveSound(kind);
     if (!resolved) return null;
+    if (out?.play(resolved, SOUND_VOLUME[kind])) return null;
     preload();
     const template = templates?.[resolved];
     if (!template) return null;
@@ -170,5 +247,13 @@ export function createMoveSoundPlayer(
     void audio.play().catch(() => undefined);
     return audio;
   };
-  return { preload, play };
+  return {
+    preload: () => {
+      preload();
+      out?.load();
+    },
+    play,
+    unlock: () => out?.unlock(),
+    dispose: stopListening,
+  };
 }

@@ -1044,9 +1044,20 @@ function stopPace() {
   paceProgress.value = 0;
 }
 // ---- 技の演出・駒音・終局の判子(42章)。対局と同じ判定と帯(watch-waza.mjs)を、見せた1手ずつに当てる。
-const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl);
+// 観戦は盤を触らずに進むので、駒音はWeb Audioで鳴らす(押してから時間がたっても鳴る。47章)。
+const moveSounds = createMoveSoundPlayer(() => props.assetBaseUrl, { webAudio: true });
 onMounted(() => moveSounds.preload());
 const wazaAudio = createWazaAudio();
+/** 画面を押したときに、駒音と技の音の出口を開く。 */
+function unlockSounds() {
+  moveSounds.unlock();
+  wazaAudio.unlock();
+}
+onMounted(() => window.addEventListener("pointerdown", unlockSounds, { capture: true, passive: true }));
+onBeforeUnmount(() => {
+  window.removeEventListener("pointerdown", unlockSounds, { capture: true });
+  moveSounds.dispose();
+});
 let wazaTracker = createWatchWaza();
 /** 演出を当てた手の数(保存から戻ったときにまとめて並べた手は、形の追跡だけ進める)。 */
 let wazaSeen = 0;

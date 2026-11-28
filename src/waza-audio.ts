@@ -5,7 +5,7 @@
 import { loadSoundEnabled } from "./core/move-sound";
 
 export type WazaNote = { freq: number; at: number; ms: number; gain: number; wave: "sine" | "triangle" };
-export type WazaAudio = { play: (plan: WazaNote[], delayMs?: number) => void; close: () => void };
+export type WazaAudio = { play: (plan: WazaNote[], delayMs?: number) => void; close: () => void; unlock: () => void };
 
 function soundOn() {
   try {
@@ -33,6 +33,10 @@ export function createWazaAudio(): WazaAudio {
     }
   };
   return {
+    /** 人が画面を押した瞬間に音の出口を開く(手を触らずに進む観戦で、あとから鳴らせるように。47章)。 */
+    unlock() {
+      ready();
+    },
     play(plan, delayMs = 0) {
       const ctx = ready();
       if (!ctx) return;
