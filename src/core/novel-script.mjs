@@ -21,7 +21,7 @@ import {
 import { SFX } from './novel-sound.mjs';
 
 /** 頭に書ける項目。 */
-export const SCRIPT_META_KEYS = Object.freeze(['id', 'bg', 'cast', 'summary', 'voices', 'vars', 'start']);
+export const SCRIPT_META_KEYS = Object.freeze(['id', 'bg', 'cast', 'summary', 'voices', 'vars', 'start', 'exclaim']);
 
 /** @typedef {import('./novel-direction.mjs').NovelProblem} NovelProblem */
 
@@ -89,6 +89,8 @@ export function parseNovelScript(source) {
   const scene = { id: '', title: '', summary: '', background: 'classroom', cast: /** @type {string[]} */ ([]), lines: /** @type {any[]} */ ([]) };
   /** @type {string[]} */
   let vars = [];
+  /** @type {string[]} */
+  let exclaim = [];
   /** @type {Set<string>} */
   const voices = new Set();
   let inHeader = true;
@@ -134,6 +136,14 @@ export function parseNovelScript(source) {
         else /** @type {any} */ (scene).start = ids;
       } else if (meta[1] === 'voices') for (const name of words(value)) voices.add(name);
       else if (meta[1] === 'vars') vars = words(value);
+      // 口調のきまりで「！」を使わない人に、この場面だけ「！」を許す(羽音は物語でごく稀に使う。docs/text-polish-design.mdの2章)。
+      else if (meta[1] === 'exclaim') {
+        exclaim = words(value).map((name) => {
+          const id = PERSON_ALIAS.get(name) ?? PERSON_ALIAS.get(name.toLowerCase());
+          if (!id) error(row, `「exclaim:」の「${name}」は知りません。「！」を許す人の名前(例: 羽音)を書きます。`);
+          return id ?? name;
+        });
+      }
       return;
     }
     inHeader = false;
@@ -180,7 +190,8 @@ export function parseNovelScript(source) {
   });
   if (pending.length) error(pending[0].row, '演出だけの行のあとに、本文の行がありません(演出は次の行に付きます)。');
   if (vars.length) /** @type {any} */ (scene).vars = vars;
-  const checked = checkScene(scene, { vars });
+  if (exclaim.length) /** @type {any} */ (scene).exclaim = exclaim;
+  const checked = checkScene(scene, { vars, exclaim });
   return { scene, problems: [...problems, ...checked].sort((a, b) => (a.line ?? 0) - (b.line ?? 0)) };
 
   /** 地の文・台詞の1行を読む。 */

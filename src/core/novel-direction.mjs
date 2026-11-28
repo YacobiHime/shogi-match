@@ -304,6 +304,9 @@ export function fillScene(scene, { playerName = '', momokaCall = '', playerProfi
 
 // ===== 検査 =====
 
+/** 許した「！」も、1つの場面でこの数から知らせる(docs/text-polish-design.mdの2章)。 */
+export const EXCLAIM_SCENE_MAX = 2;
+
 /** 羽音の敬語(使わない言葉)。 */
 const KEIGO = /(です|ます[。、？…）」\s]|ます$|ません|ました|ましょう|ください|ございます|お願いします|ありがとうございま)/;
 const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -316,10 +319,10 @@ const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
  * 場面を検査する。まちがい(error)は直さないと正しく見えないもの、気をつけたいこと(warn)はきまりから外れるもの。
  * lineは台本のファイルの行の番号(行のsrc)、なければ場面の何行目か。
  * @param {any} scene
- * @param {{ vars?: string[] }} [options]
+ * @param {{ vars?: string[], exclaim?: string[] }} [options] exclaimは、この場面だけ「！」を許す人(台本の`exclaim:`。羽音は物語でごく稀に使う)
  * @returns {NovelProblem[]}
  */
-export function checkScene(scene, { vars = [] } = {}) {
+export function checkScene(scene, { vars = [], exclaim = [] } = {}) {
   /** @type {NovelProblem[]} */
   const problems = [];
   const add = (level, line, message) => problems.push({ level, line, message });
@@ -336,11 +339,12 @@ export function checkScene(scene, { vars = [] } = {}) {
   if (!lines.length) add('error', null, '本文の行がありません。');
   if (lines.length > SCENE_LINE_LIMIT) add('warn', null, `本文が${lines.length}行あります。遊びを止めないよう、1つの場面は${SCENE_LINE_LIMIT}行までを目安に、場面を分けます(D:8-2)。`);
   const allowed = new Set(['name', 'you', ...vars]);
+  const exclaims = { allow: new Set(exclaim), count: {} };
   const checkLines = (seq, prefix) => {
     seq.forEach((line, at) => {
       const where = line?.src ?? at + 1;
       const context = prefix.concat(seq.slice(0, at), [line]);
-      checkLine(line, where, stageAt(scene, context, context.length - 1), add, allowed);
+      checkLine(line, where, stageAt(scene, context, context.length - 1), add, allowed, exclaims);
       for (const choice of line?.choices ?? []) {
         if (!String(choice?.label ?? '').trim()) add('error', where, '選択肢の答えの文が空です。');
         if (!(choice?.reply ?? []).length) add('error', where, `選択肢「${choice?.label ?? ''}」の返しの台詞がありません。答えの下に、2つ下げて返しの台詞を書きます。`);
@@ -349,13 +353,17 @@ export function checkScene(scene, { vars = [] } = {}) {
     });
   };
   checkLines(lines, []);
+  // 許した「！」も、1つの場面で2つ以上はごく稀とは言えない。
+  for (const [who, count] of Object.entries(exclaims.count)) {
+    if (count >= EXCLAIM_SCENE_MAX) add('warn', null, `${label(who)}の「！」が${count}か所あります。許していても、1つの場面で1か所までを目安にします。`);
+  }
   return problems;
 }
 
 /**
  * 1行の検査。nowはこの行を見せるときの舞台(この行の登場は済み、この行の退場はまだ)。
  */
-function checkLine(line, where, now, add, allowed) {
+function checkLine(line, where, now, add, allowed, exclaims = { allow: new Set(), count: {} }) {
   const who = line?.who;
   const person = NOVEL_CHARACTERS[/** @type {keyof typeof NOVEL_CHARACTERS} */ (who)];
   if (who === EXTRA_WHO) {
@@ -378,7 +386,13 @@ function checkLine(line, where, now, add, allowed) {
     const keigo = text.match(KEIGO);
     if (keigo) add('error', where, `${person.label}は敬語を使いません:「${keigo[1].trim()}」。「〜だよ」「〜でしょ」「よろしく」のように書きます(docs/hanane-character.md)。`);
   }
-  if (person?.rules?.noExclaim && /[！!]/.test(text)) add('error', where, `${person.label}は「！」を使いません。「。」か「……」にします。`);
+  if (person?.rules?.noExclaim && /[！!]/.test(text)) {
+    // 物語でごく稀に使う「！」は、台本の頭の`exclaim:`で許す。許しても、知らせは残す(気をつけたいこと)。
+    if (exclaims.allow.has(who)) {
+      exclaims.count[who] = (exclaims.count[who] ?? 0) + 1;
+      add('warn', where, `${person.label}の「！」(この場面で許しています)。ごく稀にだけ使う決まりなので、ここで本当に要るかを確かめます。`);
+    } else add('error', where, `${person.label}は「！」を使いません。「。」か「……」にします。物語でごく稀に使うときは、台本の頭に「exclaim: ${person.label}」と書きます。`);
+  }
 
   const dir = lineDirection(line);
   const on = new Set(now.onStage);

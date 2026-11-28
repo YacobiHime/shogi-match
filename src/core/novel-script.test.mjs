@@ -16,6 +16,18 @@ describe('台本のテキストを読む(docs/novel-scene-design.mdの12-3)', ()
     expect(scene.lines[1].name).toBe('天鷺羽音');
   });
 
+  it('羽音の「！」は、頭の「exclaim: 羽音」でその場面だけ許す(止めずに知らせる。2つ以上は数で知らせる)', () => {
+    expect(errorsOf(read('羽音: やった！')).length).toBe(1);
+    const once = read('羽音: やった！', head.replace('summary:', 'exclaim: 羽音\nsummary:'));
+    expect(errorsOf(once)).toEqual([]);
+    expect(once.scene.exclaim).toEqual(['hanane']);
+    expect(once.problems.filter((p) => p.level === 'warn').map((p) => p.message).join()).toContain('ごく稀');
+    const twice = read('羽音: やった！\n羽音: 本当に！', head.replace('summary:', 'exclaim: 羽音\nsummary:'));
+    expect(twice.problems.some((p) => p.level === 'warn' && p.message.includes('2か所'))).toBe(true);
+    // 敬語は許さない。
+    expect(errorsOf(read('羽音: ありがとうございます！', head.replace('summary:', 'exclaim: 羽音\nsummary:'))).length).toBe(1);
+  });
+
   it('演出: 話す人の動き・漫符、ほかの人の動き・表情、画面・背景・色・音・間・文', () => {
     const { scene, problems } = read('羽音: x [ぴょん] [！] [百花:うなずく 百花:worried] [揺れる] [bg:夜] [回想] [音:きらり] [間:300] [大きく] [ゆっくり]\n百花: y');
     expect(errorsOf({ problems })).toEqual([]);
