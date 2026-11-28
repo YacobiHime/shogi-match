@@ -276,8 +276,8 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     const lost = [entries[0], entries[1], { move: '6g6f', loss: 400, d: { s: 'memo' } }];
     expect(plans.noteResearch(book, 'shiken+mino', lost, { side: 'black', win: false })).toMatchObject({ used: 1, forgot: 1 });
     expect(plans.researchNotes(book, 'shiken+mino')).toEqual({});
-    expect(plans.memoLimit(0)).toBe(10);
-    expect(plans.memoLimit(100)).toBe(40);
+    expect(plans.memoLimit(0)).toBe(20);
+    expect(plans.memoLimit(100)).toBe(80);
     expect(plans.noteResearch(book, 'ibisha+yagura', entries, { side: 'black', win: true })).toMatchObject({ added: 0 });
   });
 
@@ -303,5 +303,26 @@ describe('師匠の1年の作戦の目録(35章)', () => {
     expect(plans.noteResearch(book, 'shiken+mino', [...opening, { move: '6g6f', loss: 0, d: { s: 'follow' } }], { side: 'black', win: true }).added).toBe(0);
     expect(plans.noteResearch(book, 'shiken+mino', [...opening, { move: '5g5f', loss: 0, d: { s: 'follow' } }], { side: 'black', win: true }).added).toBe(1);
     expect(plans.researchNotes(book, 'shiken+mino')).toEqual({ [key]: '5g5f' });
+  });
+
+  it('研究ノートの出どころ(49-14): 先輩のノートを受け継ぎ、師匠の棋譜から同じ飛車の向きの対局だけ写す', () => {
+    const senior = plans.createPlanBook({ style: 'counter', aptitudes: {}, startingMastery: () => 0 });
+    senior.cards['shiken+mino'].games = 5;
+    senior.notes = { 'shiken+mino': { a: { m: '2g2f', n: 3, w: 2, s: 'exp' }, b: { m: '5g5f', n: 1, w: 0, s: 'exp' }, c: { x: '8c8d', n: 2, w: 0, s: 'exp' } } };
+    const best = plans.bestNotes(senior);
+    expect(best.card).toBe('shiken+mino');
+    expect(Object.keys(best.notes)).toEqual(['a', 'b']);
+    const book = plans.createPlanBook({ style: 'counter', aptitudes: {}, startingMastery: () => 0 });
+    book.notes = { 'shiken+mino': { a: { m: '7g7f', n: 1, w: 1, s: 'exp' } } };
+    expect(plans.inheritNotes(book, best)).toBe(1);
+    expect(plans.noteRows(book, 'shiken+mino').map((row) => [row.key, row.move, row.source])).toEqual([['b', '5g5f', 'senpai'], ['a', '7g7f', 'exp']]);
+    // 師匠の棋譜: 四間飛車(振り飛車)の作戦には、あなたが先手で飛車を振った対局だけを写す。
+    const ranging = { userColor: 'black', moves: ['7g7f', '3c3d', '6g6f', '8c8d', '2h6h', '8d8e', '5i4h', '5a4b', '4h3h', '4b3b', '3h2h', '6a5b', '3i3h', '7a6b', '1g1f', '1c1d', '9g9f', '9c9d', '5g5f', '5c5d', '4g4f', '6c6d', '6i5h', '6b6c'] };
+    const stat = { userColor: 'black', moves: ['2g2f', '8c8d', '2f2e', '8d8e', '6i7h', '4a3b', '2e2d', '2c2d', '2h2d', '8e8f', '8g8f', '8b8f', '2d3d', '3c3d', '7g7f', '8f8b', '3i3h', '3a2b', '3g3f', '2b2c', '3h3g', '7a7b', '3g4f', '1c1d', '1g1f', '9c9d'] };
+    expect(plans.masterGameCount('shiken+mino', [ranging, stat])).toBe(1);
+    const copied = plans.masterNotes(book, 'shiken+mino', [stat, ranging]);
+    expect(copied.games).toBe(1);
+    expect(copied.added).toBe(plans.MASTER_NOTES);
+    expect(plans.noteRows(book, 'shiken+mino').filter((row) => row.source === 'master')).toHaveLength(plans.MASTER_NOTES);
   });
 });

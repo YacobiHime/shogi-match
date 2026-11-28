@@ -5,6 +5,7 @@
 
 import { STAT_KEYS } from './disciple-strength.mjs';
 import { rivalFate } from './disciple-rival.mjs';
+import { bestNotes } from './disciple-plans.mjs';
 
 export const DISCIPLE_ICHIMON_KEY = 'yacobihime:shogi-match:disciple-ichimon:v1';
 const ICHIMON_VERSION = 1;
@@ -53,6 +54,8 @@ export function ichimonEntry(state) {
     rivalName: String(state.rival?.name ?? ''),
     // 終わったときの年齢(四段になった弟子が名簿に入るときの歳。31章)。
     age: Math.floor(((Number(state.startAge) || 12) * 12 + Math.floor((Number(state.end?.turn ?? state.turn) || 0) / 2)) / 12),
+    // いちばん多く指した作戦の研究ノート(後輩が受け継ぐ。49-9のF5)。
+    notes: bestNotes(state.planBook),
   };
 }
 
@@ -111,6 +114,8 @@ export function senpaiFriend(entry) {
     senpai: true,
     title: entry.kind === 'pro' ? '一門の先輩（四段）' : `一門の先輩（${entry.best || '研修会'}）`,
     card: INHERIT_CARDS[entry.top] ?? null,
+    // 先輩の研究ノート(連れていくと受け継ぐ。49-9のF5)。
+    notes: entry.notes?.card ? entry.notes : null,
   };
 }
 

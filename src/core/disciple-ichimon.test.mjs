@@ -81,4 +81,17 @@ describe('連れていく仲間(29-2)', () => {
     const old = { ...s, team: undefined };
     expect(discipleView(old).friends.map((f) => f.id)).toEqual(BASE_FRIENDS.map((f) => f.id));
   });
+
+  it('先輩の研究ノート(49-14): 一門に入るとき残し、連れていった後輩がはじめに受け継ぐ', () => {
+    const done = ended(11);
+    done.planBook.cards['shiken+mino'].games = 4;
+    done.planBook.notes = { 'shiken+mino': { k1: { m: '2g2f', n: 2, w: 2, s: 'exp' } } };
+    const entry = ichimonEntry(done);
+    expect(entry.notes).toEqual({ card: 'shiken+mino', notes: { k1: { m: '2g2f', n: 2, w: 2 } } });
+    const friend = senpaiFriend(entry);
+    expect(friend.notes?.card).toBe('shiken+mino');
+    const run = createDiscipleRun({ seed: 12, discipleId: 'ao', team: [...BASE_FRIENDS.slice(0, 3), friend] });
+    expect(run.planBook.notes['shiken+mino'].k1).toEqual({ m: '2g2f', n: 0, w: 0, s: 'senpai' });
+    expect(run.log.some((line) => line.text.includes('研究ノートを受け継いだ'))).toBe(true);
+  });
 });

@@ -183,7 +183,7 @@
       <!-- 研究ノート(49章)。観戦した局で研究の続きに指して形勢を保った手を、局面ごとに残したもの。盤は対局と同じ部品。 -->
       <section v-if="notesCard && !view.end" class="disciple__panel disciple__notes" data-disciple-notes>
         <h4>研究ノート　{{ notesLabel }}<button type="button" class="disciple__x" aria-label="閉じる" @click="notesCard = ''">×</button></h4>
-        <p class="disciple__muted">観戦した対局で、定跡のあとに指して形勢を保った手。同じ局面になったら、考えずにこの手を指す。負けた局で大きく損をした手は×（次は避ける）。</p>
+        <p class="disciple__muted">観戦した対局で定跡のあとに指して形勢を保った手と、一門の先輩・師匠の棋譜から写した手。同じ局面になったら、考えずにこの手を指す。負けた局で大きく損をした手は×（次は避ける）。</p>
         <div class="disciple__notes-body">
           <div ref="noteStageEl" class="disciple__notes-board">
             <div class="disciple__board-box" :style="noteBoxStyle">
@@ -206,7 +206,7 @@
             <li v-for="(row, index) in noteList" :key="row.key">
               <button type="button" class="disciple__opt" :aria-pressed="noteRow?.key === row.key" :data-disciple-note="index" @click="noteIndex = index">
                 {{ index + 1 }}. {{ row.move ? noteMoveLabel(row) : '×' + noteMoveLabel(row, true) }}
-                <small>{{ row.games }}局で指して{{ row.wins }}勝<template v-if="row.avoid">・避ける</template></small>
+                <small>{{ row.games ? `${row.games}局で指して${row.wins}勝` : 'まだ指していない' }}<template v-if="row.avoid">・避ける</template><template v-if="sourceLabel(row.source)">・{{ sourceLabel(row.source) }}</template></small>
               </button>
             </li>
           </ol>
@@ -335,6 +335,7 @@
           <b>研究<em>作戦の熟練度</em></b>
           <small>定跡のあと、研究してきた手で指せる手数が増える</small>
           <span class="disciple__risk">{{ researchRow?.label }}　熟練度 {{ researchRow?.mastery }}→<i>{{ Math.min(100, (researchRow?.mastery ?? 0) + researchGain) }}</i>・体力 <b>−{{ RESEARCH.stamina }}</b></span>
+          <span v-if="masterCount" class="disciple__extra" data-disciple-research-master>師匠の棋譜 {{ masterCount }}局も並べる（研究ノートに写す）</span>
           <div class="disciple__research-cards">
             <button v-for="row in view.book.rows" :key="row.id" type="button" class="disciple__opt" :aria-pressed="researchRow?.id === row.id"
               :data-disciple-research-card="row.id" @click="researchCardId = row.id">{{ row.label }}<small>熟練度 {{ row.mastery }}・{{ row.games }}局{{ row.wins }}勝</small></button>
@@ -742,7 +743,8 @@ import {
   FRIENDS, PLANS, RESEARCH, WORDS, applyFindings, planBookOf, praiseLine, chooseAction, chooseWords, createDiscipleRun, dayResultView, discipleView, endCardText, eyeDan, learnPlan, loadDiscipleRun, playEvent, saveDiscipleRun, skipLearn, watchSpec,
 } from "./core/disciple-run.mjs";
 import { sfenAfter } from "./core/pro-cut.mjs";
-import { noteRows, planCard } from "./core/disciple-plans.mjs";
+import { NOTE_SOURCE_LABELS, masterGameCount, noteRows, planCard } from "./core/disciple-plans.mjs";
+import { loadMyGames } from "./core/my-games.mjs";
 import { moveLabel } from "./core/research-record.mjs";
 import { LESSON_ROUNDS, autoPick, cardById, cardFits, lessonHands, scoreLesson } from "./core/disciple-lesson.mjs";
 import { useEngineGame } from "./composables/match/useEngineGame";
@@ -903,10 +905,16 @@ const researchRow = computed(() => {
   return rows.find((row: { id: string }) => row.id === researchCardId.value) ?? rows.find((row: { id: string }) => row.id === view.value?.mastery?.card) ?? rows[0] ?? null;
 });
 const researchGain = computed(() => Math.round(RESEARCH.mastery * ((MOOD_SCALE as Record<string, number>)[String(Math.round(view.value?.mood ?? 0))] ?? 1)));
+/** 師匠(あなた)の対局の棋譜(新しい順)。研究のときに、同じ作戦の向きの対局を研究ノートに写す(49-14)。 */
+const masterGames = shallowRef<{ moves: string[]; userColor: "black" | "white" }[]>([]);
+const masterCount = computed(() => (researchRow.value ? masterGameCount(researchRow.value.id, masterGames.value) : 0));
+vueWatch(researching, (now) => {
+  if (now) masterGames.value = loadMyGames(storage()).map((game: { moves: string[]; userColor: "black" | "white" }) => ({ moves: game.moves, userColor: game.userColor }));
+});
 function research() {
   const card = researchRow.value?.id;
   if (!card) return;
-  const { state: next, result } = chooseAction(state.value, { kind: "research", card });
+  const { state: next, result } = chooseAction(state.value, { kind: "research", card, master: masterGames.value });
   training.value = false;
   selectedId.value = "tsume";
   commit(next);
@@ -1008,6 +1016,7 @@ const noteArrows = computed(() => {
   // 避ける手は矢印を出さない(盤の点線の矢印は「相手の狙い」の印なので)。一覧の「×」で見せる。
   return row.move ? [{ usi: row.move, guideKind: "plan" as const }] : [];
 });
+const sourceLabel = (source: string) => (NOTE_SOURCE_LABELS as Record<string, string>)[source] ?? "";
 function openNotes(cardId: string) {
   notesCard.value = cardId;
   noteIndex.value = 0;

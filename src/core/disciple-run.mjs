@@ -18,7 +18,7 @@ import { REVIEW_CAUSES, judgeReviewGuess, spottedCounts } from './disciple-cause
 import { startingMastery, styleMastery } from './strategy-mastery.mjs';
 import {
   battleKey, bookChainSteps, bookChoices, bookHeadline, bookRows, chooseBookCard, createPlanBook, learnCard, noteSeen, notePlanGames, offerLearn,
-  noteResearch, opponentPlanSpec, planCard, planSpec, researchNotes, surpriseToLearn, unlockChain,
+  inheritNotes, masterNotes, noteResearch, opponentPlanSpec, planCard, planSpec, researchNotes, surpriseToLearn, unlockChain,
 } from './disciple-plans.mjs';
 import { charmList, checkAgeLimit, checkClash, checkScenes, overcomeSlump, pendingScene, queueScene, receiveCharms, useCharm, withCharm } from './disciple-events.mjs';
 import { A2, CLASS_RATINGS, SHIDO_BONUS, TOP, classLabel, createKenshukaiRun, describeKenshukai, recordKenshukaiGame } from './kenshukai.mjs';
@@ -158,6 +158,11 @@ export function createDiscipleRun({ seed, discipleId, team = null }) {
   state.friends = assignFriends(rng, members);
   // 作戦帳(35章のO2)。はじめは2つの作戦だけを知っている。
   state.planBook = planBookOf(state);
+  // 連れていく一門の先輩の研究ノートを受け継ぐ(49-9のF5)。
+  for (const friend of members) {
+    const added = inheritNotes(state.planBook, friend.notes);
+    if (added) state.log.push({ turn: 0, text: `${friend.name}の研究ノートを受け継いだ（${planCard(friend.notes.card)?.label ?? ''} ${added}局面）` });
+  }
   state.rng = rng.state;
   return state;
 }
@@ -294,7 +299,7 @@ const EXIT_SCENE_CLASS = 9;
 /**
  * 予定を1つ選んでターンを進める(このターンが予定を選ぶターンのときだけ)。
  * @param {any} state
- * @param {{ kind: 'train' | 'rest' | 'outing' | 'study' | 'master' | 'research', id?: string, choice?: string, cards?: string[], card?: string }} action cardsは指導の引き出しで選んだカード(25-1)、cardは研究する作戦帳のカード(49章)
+ * @param {{ kind: 'train' | 'rest' | 'outing' | 'study' | 'master' | 'research', id?: string, choice?: string, cards?: string[], card?: string, master?: readonly { moves: readonly string[], userColor: 'black' | 'white' }[] }} action cardsは指導の引き出しで選んだカード(25-1)、cardは研究する作戦帳のカード、masterは並べる師匠の棋譜(新しい順。49章)
  * @returns {{ state: any, result: { kind: string, gains?: Record<string, number>, failed?: boolean, text: string, newSkills?: string[], newCards?: string[], [key: string]: any } }}
  */
 export function chooseAction(state, action) {
@@ -373,7 +378,10 @@ export function chooseAction(state, action) {
     next.stamina = clamp(next.stamina - RESEARCH.stamina, 0, 100);
     next.researchCount = (next.researchCount ?? 0) + 1;
     const now = next.planBook.cards[card.id].mastery;
-    result = { kind: 'research', card: card.id, gain, text: `${card.label}を研究した。熟練度＋${gain}（${now}）` };
+    // 師匠(あなた)の棋譜を並べる(49-9のF5)。同じ作戦・飛車の向きの対局から研究ノートに写す。
+    const copied = action.master?.length ? masterNotes(next.planBook, card.id, action.master) : { added: 0, games: 0 };
+    const master = copied.added ? `。師匠の棋譜${copied.games}局から${copied.added}局面を研究ノートに写した` : '';
+    result = { kind: 'research', card: card.id, gain, copied: copied.added, text: `${card.label}を研究した。熟練度＋${gain}（${now}）${master}` };
   } else if (action.kind === 'master') {
     const event = MASTER_EVENTS[(next.turn + Math.floor(rng.next() * 3)) % MASTER_EVENTS.length];
     const gains = Object.fromEntries(Object.entries(event.gains).map(([key, value]) => [key, Math.round(value * diminish(next.stats[key]))]));

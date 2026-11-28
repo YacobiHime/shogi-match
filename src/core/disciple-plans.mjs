@@ -9,6 +9,7 @@ import {
 } from './opening-guide.mjs';
 import { CPU_ADAPTIVE_CASTLES, castleStartedForPlan, opponentOpeningStance } from './cpu-opening-repertoire.mjs';
 import { appendUsiMove, createGameRecord, STANDARD_SFEN } from '../game-state';
+import { parseSfenBoard } from './sfen-board.mjs';
 
 /** 段(覚える順番)。 */
 export const PLAN_TIERS = Object.freeze(['start', 'basic', 'advanced', 'special', 'surprise']);
@@ -465,8 +466,8 @@ export function bookChainSteps(book, cardId, planLevel) {
 /** 研究メモに残す手の損の上限(形勢を保った手だけ覚える)と、忘れる手の損(負けた局で大きく損をした研究の手)。 */
 export const MEMO_KEEP_LOSS = 120;
 export const MEMO_FORGET_LOSS = 250;
-/** 作戦ごとに覚えておける局面の数(熟練度0で10、100で40)。 */
-export const memoLimit = (mastery) => 10 + Math.round((Math.max(0, Math.min(100, Number(mastery) || 0)) / 100) * 30);
+/** 作戦ごとに覚えておける局面の数(熟練度0で20、100で80。先輩・師匠の棋譜から写した局面も数える。49-14)。 */
+export const memoLimit = (mastery) => 20 + Math.round((Math.max(0, Math.min(100, Number(mastery) || 0)) / 100) * 60);
 
 /** 局面の見分け(盤・手番・持ち駒。手数は見ない。engine-game.mjsの千日手の見分けと同じ形)。 */
 const memoKey = (sfen) => String(sfen).split(' ').slice(0, 3).join(' ');
@@ -561,4 +562,117 @@ export function noteRows(book, cardId) {
     const item = noteEntry(value);
     return item ? { key, sfen: `${key} 1`, move: item.m ?? '', avoid: item.x ?? '', games: item.n, wins: item.w, source: item.s } : null;
   }).filter(Boolean).reverse();
+}
+
+// ---- 研究ノートの出どころ(49-9のF5): 一門の先輩と、師匠(あなた)の棋譜。
+
+/** 出どころの呼び名(研究ノートの一覧)。 */
+export const NOTE_SOURCE_LABELS = Object.freeze({ exp: '', senpai: '先輩から', master: '師匠の棋譜' });
+/** 一門に残す研究ノートの局面の数と、師匠の棋譜を1回で写す局面の数。 */
+export const INHERIT_NOTES = 20;
+export const MASTER_NOTES = 8;
+/** 師匠の棋譜を写す手数の範囲(はじめの数手は作戦の手順どおりに指すので写さない)。 */
+export const MASTER_NOTE_PLIES = Object.freeze({ from: 8, to: 40 });
+
+/**
+ * 一門に残す研究ノート(49-9のF5)。いちばん多く指した作戦の、手のある局面を、指して勝った順に20局面まで。
+ * @returns {{ card: string, notes: Record<string, { m: string, n: number, w: number }> } | null}
+ */
+export function bestNotes(book, limit = INHERIT_NOTES) {
+  const cards = Object.entries(book?.cards ?? {})
+    .filter(([id]) => Object.keys(book?.notes?.[id] ?? {}).length)
+    .sort((a, b) => (b[1].games ?? 0) - (a[1].games ?? 0));
+  const card = cards[0]?.[0];
+  if (!card) return null;
+  const rows = Object.entries(book.notes[card]).map(([key, value]) => [key, noteEntry(value)])
+    .filter(([, item]) => item?.m)
+    .sort((a, b) => (b[1].w - a[1].w) || (b[1].n - a[1].n))
+    .slice(0, limit);
+  return rows.length ? { card, notes: Object.fromEntries(rows.map(([key, item]) => [key, { m: item.m, n: item.n, w: item.w }])) } : null;
+}
+
+/**
+ * 先輩の研究ノートを受け継ぐ(書き換えてよい写しを渡す)。弟子のノートにない局面だけ、出どころ「先輩から」で足す。
+ * 弟子がまだその作戦を知らなくても残しておき、覚えたときに使う。
+ * @returns {number} 足した局面の数
+ */
+export function inheritNotes(book, inherited, source = 'senpai') {
+  if (!book || !inherited?.card || !inherited.notes) return 0;
+  book.notes ??= {};
+  const notes = { ...(book.notes[inherited.card] ?? {}) };
+  let added = 0;
+  for (const [key, value] of Object.entries(inherited.notes)) {
+    const item = noteEntry(value);
+    if (!item?.m || notes[key]) continue;
+    notes[key] = { m: item.m, n: 0, w: 0, s: source };
+    added += 1;
+  }
+  book.notes[inherited.card] = notes;
+  return added;
+}
+
+/** 棋譜の手番の側の飛車の向き(その手数の盤で、飛車がもとの筋から左へ動いていれば振り飛車)。 */
+function rookStyleAt(sfen, color) {
+  const board = parseSfenBoard(sfen);
+  for (const [square, piece] of board) {
+    if (piece.color !== color || (piece.kind !== 'R' && piece.kind !== '+R')) continue;
+    const file = Number(square[0]);
+    return color === 'black' ? (file >= 5 ? 'ranging' : 'static') : (file <= 5 ? 'ranging' : 'static');
+  }
+  return null;
+}
+
+/** 師匠の棋譜が、その作戦と同じ先後に入れて、飛車の向き(24手目の盤。短い対局は最後)が同じか。 */
+function masterGameFits(card, game) {
+  if (!card.colors.includes(game.userColor)) return false;
+  const probe = createGameRecord(STANDARD_SFEN);
+  const plies = Math.min(game.moves.length, 24);
+  for (let index = 0; index < plies; index += 1) {
+    if (!appendUsiMove(probe, game.moves[index])) return false;
+  }
+  return rookStyleAt(probe.position.sfen, game.userColor) === card.rook;
+}
+
+/** 研究で並べられる師匠の棋譜の数(作戦と飛車の向きが同じ対局)。 */
+export function masterGameCount(cardId, games) {
+  const card = planCard(cardId);
+  return card ? (games ?? []).filter((game) => masterGameFits(card, game)).length : 0;
+}
+
+/**
+ * 師匠(あなた)の棋譜を並べて、その作戦の研究ノートに写す(書き換えてよい写しを渡す。49-9のF5)。
+ * 作戦と飛車の向きが同じ対局だけを使い、あなたの手番の局面(8〜40手目)のうち、ノートにない局面を新しい対局から順に写す。
+ * @param {any} book
+ * @param {string} cardId
+ * @param {readonly { moves: readonly string[], userColor: 'black' | 'white' }[]} games 新しい順
+ * @returns {{ added: number, games: number }}
+ */
+export function masterNotes(book, cardId, games, limit = MASTER_NOTES) {
+  const card = planCard(cardId);
+  if (!card || !book?.cards?.[cardId] || !games?.length) return { added: 0, games: 0 };
+  book.notes ??= {};
+  const notes = { ...(book.notes[cardId] ?? {}) };
+  let added = 0;
+  let used = 0;
+  for (const game of games) {
+    if (added >= limit) break;
+    const color = game.userColor;
+    if (!masterGameFits(card, game)) continue;
+    const record = createGameRecord(STANDARD_SFEN);
+    let took = 0;
+    for (let index = 0; index < Math.min(game.moves.length, MASTER_NOTE_PLIES.to) && added < limit; index += 1) {
+      const mover = index % 2 === 0 ? 'black' : 'white';
+      const key = memoKey(record.position.sfen);
+      const usi = game.moves[index];
+      if (mover === color && index >= MASTER_NOTE_PLIES.from && !notes[key]) {
+        notes[key] = { m: usi, n: 0, w: 0, s: 'master' };
+        added += 1;
+        took += 1;
+      }
+      if (!appendUsiMove(record, usi)) break;
+    }
+    if (took) used += 1;
+  }
+  book.notes[cardId] = notes;
+  return { added, games: used };
 }
